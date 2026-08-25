@@ -1,0 +1,224 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  PARENT
+  TUTOR
+  ADMIN
+}
+
+enum UserStatus {
+  UNVERIFIED
+  ACTIVE
+  PENDING_VETTING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum VettingStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum SubjectCategory {
+  CORE
+  ENRICHMENT
+}
+
+enum EnrollmentFrequency {
+  WEEKLY
+  BI_WEEKLY
+  MONTHLY
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum SessionStatus {
+  SCHEDULED
+  COMPLETED
+  MISSED
+  CANCELLED
+}
+
+enum PaymentProvider {
+  PAYSTACK
+  STRIPE
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+model User {
+  id           String       @id @default(uuid())
+  fullName     String
+  email        String       @unique
+  phone        String?
+  passwordHash String
+  role         UserRole
+  status       UserStatus   @default(UNVERIFIED)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  tutorProfile      TutorProfile?
+  students          Student[]
+  enrollmentsAsTutor Enrollment[] @relation("TutorEnrollments")
+  payments          Payment[]
+  progressReports   ProgressReport[]
+  refreshTokens     RefreshToken[]
+
+  @@index([email])
+  @@index([role])
+  @@index([status])
+}
+
+model TutorProfile {
+  id             String        @id @default(uuid())
+  userId         String        @unique
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjects       String[]
+  bio            String?
+  credentialsUrl String?
+  vettingStatus  VettingStatus @default(PENDING)
+  hourlyRate     Decimal       @db.Decimal(10, 2)
+  availability   Json
+  createdAt      DateTime      @default(now())
+
+  @@index([vettingStatus])
+}
+
+model Student {
+  id          String   @id @default(uuid())
+  parentId    String
+  parent      User     @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  fullName    String
+  dateOfBirth DateTime
+  gradeLevel  String
+  school      String?
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  enrollments Enrollment[]
+
+  @@index([parentId])
+}
+
+model Subject {
+  id         String          @id @default(uuid())
+  name       String          @unique
+  gradeBand  String
+  category   SubjectCategory
+  createdAt  DateTime        @default(now())
+
+  enrollments Enrollment[]
+
+  @@index([category])
+}
+
+model Enrollment {
+  id          String             @id @default(uuid())
+  studentId   String
+  student     Student            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subjectId   String
+  subject     Subject            @relation(fields: [subjectId], references: [id])
+  tutorId     String?
+  tutor       User?              @relation("TutorEnrollments", fields: [tutorId], references: [id])
+  frequency   EnrollmentFrequency
+  status      EnrollmentStatus   @default(ACTIVE)
+  startDate   DateTime
+  endDate     DateTime?
+  createdAt   DateTime           @default(now())
+
+  sessions       Session[]
+  payments       Payment[]
+  progressReports ProgressReport[]
+
+  @@index([studentId])
+  @@index([subjectId])
+  @@index([tutorId])
+  @@index([status])
+}
+
+model Session {
+  id              String       @id @default(uuid())
+  enrollmentId    String
+  enrollment      Enrollment   @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  scheduledAt     DateTime
+  durationMinutes Int
+  zoomLink        String?
+  status          SessionStatus @default(SCHEDULED)
+  tutorNotes      String?
+  homeworkAssigned String?
+  createdAt       DateTime     @default(now())
+
+  @@index([enrollmentId])
+  @@index([scheduledAt])
+  @@index([status])
+}
+
+model Payment {
+  id               String        @id @default(uuid())
+  parentId         String
+  parent           User          @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  enrollmentId     String
+  enrollment       Enrollment    @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  amount           Decimal       @db.Decimal(10, 2)
+  currency         String        @default("USD")
+  provider         PaymentProvider
+  providerReference String?
+  status           PaymentStatus @default(PENDING)
+  paidAt           DateTime?
+  createdAt        DateTime      @default(now())
+
+  @@index([parentId])
+  @@index([enrollmentId])
+  @@index([status])
+  @@index([provider])
+}
+
+model ProgressReport {
+  id             String   @id @default(uuid())
+  enrollmentId   String
+  enrollment     Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  period         String
+  summary        String
+  strengths      String
+  areasToImprove String
+  createdBy      String
+  creator        User     @relation(fields: [createdBy], references: [id])
+  createdAt      DateTime @default(now())
+
+  @@index([enrollmentId])
+  @@index([createdBy])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([tokenHash])
+}
