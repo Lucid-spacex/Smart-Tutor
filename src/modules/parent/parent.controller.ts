@@ -4,7 +4,7 @@ import prisma from '../../config/database';
 export class ParentController {
   getProfile = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const userId = req.user?.userId;
+      const userId = (req as any).user?.userId;
       if (!userId) {
         res.status(401).json({ error: 'Not authenticated' });
         return;

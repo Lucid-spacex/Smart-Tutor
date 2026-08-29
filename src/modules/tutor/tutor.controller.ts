@@ -11,7 +11,7 @@ export class TutorController {
 
   createTutorProfile = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const tutorId = req.user?.userId;
+      const tutorId = (req as any).user?.userId;
       if (!tutorId) {
         res.status(401).json({ error: 'Not authenticated' });
         return;
@@ -27,7 +27,7 @@ export class TutorController {
 
   updateAvailability = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const tutorId = req.user?.userId;
+      const tutorId = (req as any).user?.userId;
       if (!tutorId) {
         res.status(401).json({ error: 'Not authenticated' });
         return;
@@ -43,7 +43,7 @@ export class TutorController {
 
   getAssignedStudents = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const tutorId = req.user?.userId;
+      const tutorId = (req as any).user?.userId;
       if (!tutorId) {
         res.status(401).json({ error: 'Not authenticated' });
         return;
@@ -58,7 +58,7 @@ export class TutorController {
 
   getTutorSessions = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const tutorId = req.user?.userId;
+      const tutorId = (req as any).user?.userId;
       if (!tutorId) {
         res.status(401).json({ error: 'Not authenticated' });
         return;
@@ -73,7 +73,7 @@ export class TutorController {
 
   getTutorProfile = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const tutorId = req.user?.userId;
+      const tutorId = (req as any).user?.userId;
       if (!tutorId) {
         res.status(401).json({ error: 'Not authenticated' });
         return;

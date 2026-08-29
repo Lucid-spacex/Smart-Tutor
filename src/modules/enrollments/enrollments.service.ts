@@ -77,7 +77,41 @@ export class EnrollmentsService {
     });
   }
 
-  async getEnrollmentById(id: string, parentId: string) {
+  async getEnrollmentsByTutor(tutorId: string, query: GetEnrollmentsQuery) {
+    const where: any = {
+      tutorId,
+    };
+
+    if (query.status) {
+      where.status = query.status;
+    }
+
+    return prisma.enrollment.findMany({
+      where,
+      include: {
+        student: true,
+        subject: true,
+        tutor: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+          },
+        },
+        sessions: {
+          orderBy: { scheduledAt: 'desc' },
+          take: 5,
+        },
+        payments: {
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async getEnrollmentById(id: string, userId: string, userRole: string) {
     const enrollment = await prisma.enrollment.findUnique({
       where: { id },
       include: {
@@ -107,7 +141,16 @@ export class EnrollmentsService {
       throw new Error('Enrollment not found');
     }
 
-    if (enrollment.student.parentId !== parentId) {
+    // Check authorization based on role
+    if (userRole === 'PARENT') {
+      if (enrollment.student.parentId !== userId) {
+        throw new Error('Not authorized to access this enrollment');
+      }
+    } else if (userRole === 'TUTOR') {
+      if (enrollment.tutorId !== userId) {
+        throw new Error('Not authorized to access this enrollment');
+      }
+    } else {
       throw new Error('Not authorized to access this enrollment');
     }
 

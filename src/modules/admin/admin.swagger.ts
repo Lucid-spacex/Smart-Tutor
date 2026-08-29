@@ -28,6 +28,70 @@
 
 /**
  * @swagger
+ * /admin/tutors:
+ *   get:
+ *     summary: Get all tutors with full info (admin-facing)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [APPROVED, PENDING_VETTING, REJECTED, SUSPENDED]
+ *         description: Filter by user status (defaults to APPROVED for assign-tutor use case)
+ *     responses:
+ *       200:
+ *         description: List of tutors with user and profile info
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   user:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         format: uuid
+ *                       fullName:
+ *                         type: string
+ *                       email:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *                         enum: [UNVERIFIED, ACTIVE, PENDING_VETTING, APPROVED, REJECTED, SUSPENDED]
+ *                   tutorProfile:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         format: uuid
+ *                       subjects:
+ *                         type: array
+ *                         items:
+ *                           type: string
+ *                       bio:
+ *                         type: string
+ *                       hourlyRate:
+ *                         type: number
+ *                         format: decimal
+ *                       vettingStatus:
+ *                         type: string
+ *                         enum: [PENDING, APPROVED, REJECTED]
+ *                       availability:
+ *                         type: object
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized
+ */
+
+/**
+ * @swagger
  * /admin/tutors/{id}/vetting:
  *   patch:
  *     summary: Approve or reject tutor vetting
@@ -187,6 +251,69 @@
  *                   type: integer
  *                 pendingVetting:
  *                   type: integer
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized
+ */
+
+/**
+ * @swagger
+ * /admin/students:
+ *   get:
+ *     summary: Get all students with info (admin-facing)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: parentId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filter to one parent's children
+ *     responses:
+ *       200:
+ *         description: List of students with parent info
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: string
+ *                     format: uuid
+ *                   parentId:
+ *                     type: string
+ *                     format: uuid
+ *                   parentName:
+ *                     type: string
+ *                   fullName:
+ *                     type: string
+ *                   dateOfBirth:
+ *                     type: string
+ *                     format: date
+ *                   gradeLevel:
+ *                     type: string
+ *                   school:
+ *                     type: string
+ *                   notes:
+ *                     type: string
+ *                   createdAt:
+ *                     type: string
+ *                     format: date-time
+ *                   parent:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         format: uuid
+ *                       fullName:
+ *                         type: string
+ *                       email:
+ *                         type: string
  *       401:
  *         description: Not authenticated
  *       403:

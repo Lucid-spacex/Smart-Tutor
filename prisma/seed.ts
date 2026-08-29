@@ -112,6 +112,106 @@ async function main() {
   });
   console.log('✅ Subject created:', codingSubject.name);
 
+  // Additional subjects
+  const englishSubject = await prisma.subject.upsert({
+    where: { name: 'English Language Arts' },
+    update: {},
+    create: {
+      name: 'English Language Arts',
+      gradeBand: 'K-12',
+      category: 'CORE',
+    },
+  });
+  console.log('✅ Subject created:', englishSubject.name);
+
+  const scienceSubject = await prisma.subject.upsert({
+    where: { name: 'General Science' },
+    update: {},
+    create: {
+      name: 'General Science',
+      gradeBand: 'K-8',
+      category: 'CORE',
+    },
+  });
+  console.log('✅ Subject created:', scienceSubject.name);
+
+  const chemistrySubject = await prisma.subject.upsert({
+    where: { name: 'Chemistry' },
+    update: {},
+    create: {
+      name: 'Chemistry',
+      gradeBand: '9-12',
+      category: 'CORE',
+    },
+  });
+  console.log('✅ Subject created:', chemistrySubject.name);
+
+  const biologySubject = await prisma.subject.upsert({
+    where: { name: 'Biology' },
+    update: {},
+    create: {
+      name: 'Biology',
+      gradeBand: '9-12',
+      category: 'CORE',
+    },
+  });
+  console.log('✅ Subject created:', biologySubject.name);
+
+  const musicSubject = await prisma.subject.upsert({
+    where: { name: 'Music Theory' },
+    update: {},
+    create: {
+      name: 'Music Theory',
+      gradeBand: '3-12',
+      category: 'ENRICHMENT',
+    },
+  });
+  console.log('✅ Subject created:', musicSubject.name);
+
+  const chessSubject = await prisma.subject.upsert({
+    where: { name: 'Chess' },
+    update: {},
+    create: {
+      name: 'Chess',
+      gradeBand: 'K-12',
+      category: 'ENRICHMENT',
+    },
+  });
+  console.log('✅ Subject created:', chessSubject.name);
+
+  const artSubject = await prisma.subject.upsert({
+    where: { name: 'Visual Arts' },
+    update: {},
+    create: {
+      name: 'Visual Arts',
+      gradeBand: 'K-12',
+      category: 'ENRICHMENT',
+    },
+  });
+  console.log('✅ Subject created:', artSubject.name);
+
+  const spanishSubject = await prisma.subject.upsert({
+    where: { name: 'Spanish' },
+    update: {},
+    create: {
+      name: 'Spanish',
+      gradeBand: '6-12',
+      category: 'ENRICHMENT',
+    },
+  });
+  console.log('✅ Subject created:', spanishSubject.name);
+
+  const writingSubject = await prisma.subject.upsert({
+    where: { name: 'Creative Writing' },
+    update: {},
+    create: {
+      name: 'Creative Writing',
+      gradeBand: '3-12',
+      category: 'ENRICHMENT',
+    },
+  });
+  console.log('✅ Subject created:', writingSubject.name);
+
   // Create Student
   const student = await prisma.student.upsert({
     where: { id: 'demo-student-id' },
@@ -200,3 +300,5 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
+
+  

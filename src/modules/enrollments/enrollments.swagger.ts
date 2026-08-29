@@ -54,7 +54,7 @@
  *       404:
  *         description: Student or subject not found
  *   get:
- *     summary: Get enrollments for the authenticated parent
+ *     summary: Get enrollments for the authenticated user (parents see their children's enrollments, tutors see their assigned enrollments)
  *     tags: [Enrollments]
  *     security:
  *       - bearerAuth: []
@@ -78,6 +78,36 @@
  *         description: Not authenticated
  *       403:
  *         description: Not authorized
+ */
+
+/**
+ * @swagger
+ * /enrollments/{id}:
+ *   get:
+ *     summary: Get a specific enrollment by ID (parents see their children's enrollments, tutors see their assigned enrollments)
+ *     tags: [Enrollments]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Enrollment details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Enrollment'
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized
+ *       404:
+ *         description: Enrollment not found
  */
 
 /**

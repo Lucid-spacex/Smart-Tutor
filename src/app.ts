@@ -12,6 +12,7 @@ import paymentRoutes from './modules/payments/payments.routes';
 import progressReportRoutes from './modules/progress-reports/progress-reports.routes';
 import tutorRoutes from './modules/tutor/tutor.routes';
 import adminRoutes from './modules/admin/admin.routes';
+import subjectsRoutes from './modules/subjects/subjects.routes';
 
 dotenv.config();
 
@@ -52,6 +53,7 @@ app.use('/payments', paymentRoutes);
 app.use('/progress-reports', progressReportRoutes);
 app.use('/tutor', tutorRoutes);
 app.use('/admin', adminRoutes);
+app.use('/subjects', subjectsRoutes);
 
 // Error handling middleware (must be last)
 app.use(errorHandler);

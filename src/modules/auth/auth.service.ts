@@ -196,6 +196,43 @@ export class AuthService {
     return { message: 'Logout successful' };
   }
 
+  async getCurrentUser(userId: string): Promise<any> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    return this.sanitizeUser(user);
+  }
+
+  async resendOtp(email: string): Promise<{ message: string }> {
+    const user = await prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    if (user.status !== 'UNVERIFIED') {
+      throw new Error('Account is already verified');
+    }
+
+    const otp = generateOTP();
+
+    // In production, store OTP securely and send email
+    // For MVP, we'll just log it
+    console.log(`OTP for ${email}: ${otp}`);
+    await sendVerificationEmail(email, otp);
+
+    return {
+      message: 'OTP sent successfully',
+    };
+  }
+
   private sanitizeUser(user: any) {
     const { passwordHash, ...sanitized } = user;
     return sanitized;

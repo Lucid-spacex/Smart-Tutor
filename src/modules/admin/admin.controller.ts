@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AdminService } from './admin.service';
-import { UpdateTutorVettingInput, AssignTutorInput } from './admin.validation';
+import { UpdateTutorVettingInput, AssignTutorInput, GetTutorsQuery, GetStudentsQuery } from './admin.validation';
 
 export class AdminController {
   private adminService: AdminService;
@@ -62,6 +62,26 @@ export class AdminController {
     try {
       const report = await this.adminService.getOverviewReport();
       res.status(200).json(report);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getTutors = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const query: GetTutorsQuery = req.query as any;
+      const tutors = await this.adminService.getTutors(query);
+      res.status(200).json(tutors);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getStudents = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const query: GetStudentsQuery = req.query as any;
+      const students = await this.adminService.getStudents(query);
+      res.status(200).json(students);
     } catch (error) {
       next(error);
     }

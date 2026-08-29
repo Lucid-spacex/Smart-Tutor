@@ -14,6 +14,29 @@ export class AdminService {
     });
   }
 
+  async getTutors(filters?: { status?: string }) {
+    const where: any = {
+      role: 'TUTOR',
+    };
+
+    // Default to APPROVED if no status filter provided (useful for assign-tutor use case)
+    if (filters?.status) {
+      where.status = filters.status;
+    } else {
+      where.status = 'APPROVED';
+    }
+
+    return prisma.user.findMany({
+      where,
+      include: {
+        tutorProfile: true,
+      },
+      orderBy: {
+        fullName: 'asc',
+      },
+    });
+  }
+
   async updateTutorVetting(tutorId: string, data: UpdateTutorVettingInput) {
     const user = await prisma.user.findUnique({
       where: { id: tutorId },
@@ -152,7 +175,7 @@ export class AdminService {
     const activeStudents = await prisma.$queryRaw<Array<{ count: bigint }>>`
       SELECT COUNT(DISTINCT s.id) as count
       FROM "Student" s
-      INNER JOIN "Enrollment" e ON s."parentId" = e."studentId"
+      INNER JOIN "Enrollment" e ON s.id = e."studentId"
       WHERE e.status = 'ACTIVE'
     `;
 
@@ -189,5 +212,43 @@ export class AdminService {
       totalEnrollments,
       pendingVetting,
     };
+  }
+
+  async getStudents(filters?: { parentId?: string }) {
+    const where: any = {};
+
+    if (filters?.parentId) {
+      where.parentId = filters.parentId;
+    }
+
+    const students = await prisma.student.findMany({
+      where,
+      include: {
+        parent: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: {
+        fullName: 'asc',
+      },
+    });
+
+    // Transform to match expected response format with parentName
+    return students.map(student => ({
+      id: student.id,
+      parentId: student.parentId,
+      parentName: student.parent.fullName,
+      fullName: student.fullName,
+      dateOfBirth: student.dateOfBirth,
+      gradeLevel: student.gradeLevel,
+      school: student.school,
+      notes: student.notes,
+      createdAt: student.createdAt,
+      parent: student.parent,
+    }));
   }
 }

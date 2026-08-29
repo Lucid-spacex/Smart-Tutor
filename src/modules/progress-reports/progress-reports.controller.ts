@@ -11,7 +11,7 @@ export class ProgressReportsController {
 
   createProgressReport = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const tutorId = req.user?.userId;
+      const tutorId = (req as any).user?.userId;
       if (!tutorId) {
         res.status(401).json({ error: 'Not authenticated' });
         return;

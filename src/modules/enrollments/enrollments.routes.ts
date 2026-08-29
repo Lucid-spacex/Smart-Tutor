@@ -8,7 +8,7 @@ const router = Router();
 const enrollmentsController = new EnrollmentsController();
 
 router.post('/', authenticate, requireRole('PARENT'), validate(createEnrollmentSchema), enrollmentsController.createEnrollment);
-router.get('/', authenticate, requireRole('PARENT'), validateQuery(getEnrollmentsQuerySchema), enrollmentsController.getEnrollments);
-router.get('/:id', authenticate, requireRole('PARENT'), enrollmentsController.getEnrollmentById);
+router.get('/', authenticate, requireRole('PARENT', 'TUTOR'), validateQuery(getEnrollmentsQuerySchema), enrollmentsController.getEnrollments);
+router.get('/:id', authenticate, requireRole('PARENT', 'TUTOR'), enrollmentsController.getEnrollmentById);
 
 export default router;
