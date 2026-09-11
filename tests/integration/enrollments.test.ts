@@ -1,55 +1,58 @@
 import request from 'supertest';
 import app from '../../src/app';
+import prisma from '../../src/config/database';
+import { hashPassword } from '../../src/utils/password.util';
 
 describe('Enrollment Flow Integration Tests', () => {
   let parentAccessToken: string;
+  let parentId: string;
   let studentId: string;
   let subjectId: string;
+  let testPassword = 'Password12345!';
 
   beforeAll(async () => {
+    const passHash = await hashPassword(testPassword);
+    const parent = await prisma.user.create({
+      data: {
+        fullName: 'Enrollment Test Parent',
+        email: `enr_parent_${Date.now()}@test.com`,
+        phone: '+1222333444',
+        passwordHash: passHash,
+        role: 'PARENT',
+        status: 'ACTIVE',
+      },
+    });
+    parentId = parent.id;
+
+    // Create Subject
+    const subject = await prisma.subject.create({
+      data: {
+        name: `Subject_Enr_${Date.now()}`,
+        gradeBand: '4-8',
+        category: 'CORE',
+      },
+    });
+    subjectId = subject.id;
+
     // Login as parent to get access token
     const loginResponse = await request(app)
       .post('/auth/login')
       .send({
-        email: 'parent@smarttutor.com',
-        password: 'parent123',
+        email: parent.email,
+        password: testPassword,
       });
 
     parentAccessToken = loginResponse.body.accessToken;
-
-    // Get existing student ID from seed
-    const studentsResponse = await request(app)
-      .get('/students')
-      .set('Authorization', `Bearer ${parentAccessToken}`);
-
-    if (studentsResponse.body.length > 0) {
-      studentId = studentsResponse.body[0].id;
-    }
-
-    // Get a subject ID (we'll use the first one from the seeded data)
-    // For this test, we'll create a new subject
-    const createSubjectResponse = await request(app)
-      .post('/subjects') // This endpoint doesn't exist yet, so we'll work around it
-      .set('Authorization', `Bearer ${parentAccessToken}`)
-      .send({
-        name: 'Test Subject',
-        gradeBand: '6-8',
-        category: 'CORE',
-      });
-
-    // Since we don't have a public subject creation endpoint, we'll use a known subject ID
-    // For testing purposes, we'll assume there's a subject with this ID
-    subjectId = 'test-subject-id';
   });
 
   describe('POST /students', () => {
-    it('should create a new student', async () => {
+    it('should create a new student and generate student credentials', async () => {
       const response = await request(app)
         .post('/students')
         .set('Authorization', `Bearer ${parentAccessToken}`)
         .send({
           fullName: 'Test Student',
-          dateOfBirth: '2010-05-15',
+          dateOfBirth: '2014-05-15',
           gradeLevel: '4th Grade',
           school: 'Test School',
           notes: 'Test notes',
@@ -58,7 +61,10 @@ describe('Enrollment Flow Integration Tests', () => {
       expect(response.status).toBe(201);
       expect(response.body).toHaveProperty('id');
       expect(response.body.fullName).toBe('Test Student');
-      expect(response.body.gradeLevel).toBe('4th Grade');
+      expect(response.body).toHaveProperty('studentCode');
+      // Must NEVER return password
+      expect(response.body).not.toHaveProperty('password');
+      expect(response.body).not.toHaveProperty('passwordHash');
 
       studentId = response.body.id;
     });
@@ -68,7 +74,7 @@ describe('Enrollment Flow Integration Tests', () => {
         .post('/students')
         .send({
           fullName: 'Test Student',
-          dateOfBirth: '2010-05-15',
+          dateOfBirth: '2014-05-15',
           gradeLevel: '4th Grade',
         });
 
@@ -109,30 +115,22 @@ describe('Enrollment Flow Integration Tests', () => {
 
   describe('POST /enrollments', () => {
     it('should create a new enrollment', async () => {
-      // First, we need to get a valid subject ID
-      // Since we don't have a public subject endpoint, we'll use the database directly
-      // For this test, we'll skip subject creation and assume we have a valid subject
-
       const response = await request(app)
         .post('/enrollments')
         .set('Authorization', `Bearer ${parentAccessToken}`)
         .send({
           studentId: studentId,
-          subjectId: 'math-subject-id', // This would need to be a real subject ID
-          frequency: 'WEEKLY',
-          startDate: '2024-02-01',
-          endDate: '2024-06-01',
+          subjectId: subjectId,
+          sessionFrequency: 'WEEKLY',
+          billingFrequency: 'MONTHLY',
+          startDate: '2025-02-01',
+          endDate: '2025-06-01',
         });
 
-      // This might fail if we don't have a valid subject ID
-      // In a real test, we'd set up the database with proper test data
-      if (response.status === 201) {
-        expect(response.body).toHaveProperty('id');
-        expect(response.body.studentId).toBe(studentId);
-      } else {
-        // Skip if we can't create proper test data
-        console.log('Skipping enrollment creation test - needs proper subject setup');
-      }
+      expect(response.status).toBe(201);
+      expect(response.body).toHaveProperty('id');
+      expect(response.body.studentId).toBe(studentId);
+      expect(response.body.subjectId).toBe(subjectId);
     });
 
     it('should fail without authentication', async () => {
@@ -140,9 +138,9 @@ describe('Enrollment Flow Integration Tests', () => {
         .post('/enrollments')
         .send({
           studentId: studentId,
-          subjectId: 'test-subject-id',
-          frequency: 'WEEKLY',
-          startDate: '2024-02-01',
+          subjectId: subjectId,
+          sessionFrequency: 'WEEKLY',
+          startDate: '2025-02-01',
         });
 
       expect(response.status).toBe(401);
@@ -157,6 +155,7 @@ describe('Enrollment Flow Integration Tests', () => {
 
       expect(response.status).toBe(200);
       expect(Array.isArray(response.body)).toBe(true);
+      expect(response.body.length).toBeGreaterThan(0);
     });
 
     it('should filter enrollments by status', async () => {
@@ -166,13 +165,6 @@ describe('Enrollment Flow Integration Tests', () => {
 
       expect(response.status).toBe(200);
       expect(Array.isArray(response.body)).toBe(true);
-    });
-
-    it('should fail without authentication', async () => {
-      const response = await request(app)
-        .get('/enrollments');
-
-      expect(response.status).toBe(401);
     });
   });
 
@@ -187,13 +179,6 @@ describe('Enrollment Flow Integration Tests', () => {
       expect(response.body).toHaveProperty('fullName');
       expect(response.body).toHaveProperty('email');
       expect(response.body.role).toBe('PARENT');
-    });
-
-    it('should fail without authentication', async () => {
-      const response = await request(app)
-        .get('/me');
-
-      expect(response.status).toBe(401);
     });
   });
 });

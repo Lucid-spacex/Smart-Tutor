@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { SessionsService } from './sessions.service';
-import { UpdateSessionInput, GetSessionsQuery } from './sessions.validation';
+import { UpdateSessionInput, GetSessionsQuery, CreateSessionInput, RescheduleSessionInput } from './sessions.validation';
+import { AuthRequest } from '../../middleware/auth.middleware';
 
 export class SessionsController {
   private sessionsService: SessionsService;
@@ -9,7 +10,7 @@ export class SessionsController {
     this.sessionsService = new SessionsService();
   }
 
-  getSessions = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  getSessions = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const userId = req.user?.userId;
       const userRole = req.user?.role;
@@ -27,7 +28,22 @@ export class SessionsController {
     }
   };
 
-  updateSession = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  getTutorSessions = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const tutorId = req.user?.userId;
+      if (!tutorId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const sessions = await this.sessionsService.getSessionsByTutor(tutorId);
+      res.status(200).json(sessions);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  updateSession = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const tutorId = req.user?.userId;
       if (!tutorId) {
@@ -38,6 +54,29 @@ export class SessionsController {
       const { id } = req.params;
       const data: UpdateSessionInput = req.body;
       const session = await this.sessionsService.updateSession(id, tutorId, data);
+      res.status(200).json(session);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // Admin-only: Create session with multiple participants
+  createSession = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const data: CreateSessionInput = req.body;
+      const session = await this.sessionsService.createSession(data);
+      res.status(201).json(session);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // Admin-only: Reschedule session
+  rescheduleSession = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const data: RescheduleSessionInput = req.body;
+      const session = await this.sessionsService.rescheduleSession(id, data);
       res.status(200).json(session);
     } catch (error) {
       next(error);

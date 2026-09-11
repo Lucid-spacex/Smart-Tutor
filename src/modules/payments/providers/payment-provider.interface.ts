@@ -1,7 +1,7 @@
 export interface PaymentProvider {
   initiatePayment(data: PaymentInitiationData): Promise<PaymentInitiationResponse>;
   verifyPayment(reference: string): Promise<PaymentVerificationResponse>;
-  processWebhook(data: any): Promise<WebhookProcessingResult>;
+  processWebhook(data: any, signature?: string | string[], rawBody?: string): Promise<WebhookProcessingResult>;
 }
 
 export interface PaymentInitiationData {

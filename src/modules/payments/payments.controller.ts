@@ -27,7 +27,9 @@ export class PaymentsController {
 
   processWebhook = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const result = await this.paymentsService.processWebhook(req.body);
+      const signature = req.headers['x-paystack-signature'];
+      const rawBody = (req as any).rawBody; // Will be set by body parser middleware
+      const result = await this.paymentsService.processWebhook(req.body, signature, rawBody);
       res.status(200).json(result);
     } catch (error) {
       next(error);

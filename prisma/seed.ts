@@ -6,12 +6,13 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Starting database seed...');
 
-  // Hash passwords
-  const adminPassword = await bcrypt.hash('admin123', 10);
-  const parentPassword = await bcrypt.hash('parent123', 10);
-  const tutorPassword = await bcrypt.hash('tutor123', 10);
+  // Hash passwords using bcrypt cost factor 12
+  const adminPassword = await bcrypt.hash('admin123456!', 12);
+  const parentPassword = await bcrypt.hash('parent123456!', 12);
+  const tutorPassword = await bcrypt.hash('tutor123456!', 12);
+  const studentPassword = await bcrypt.hash('student123456!', 12);
 
-  // Create Admin user
+  // 1. Create Admin user
   const admin = await prisma.user.upsert({
     where: { email: 'admin@smarttutor.com' },
     update: {},
@@ -22,11 +23,12 @@ async function main() {
       passwordHash: adminPassword,
       role: 'ADMIN',
       status: 'ACTIVE',
+      timezone: 'UTC',
     },
   });
   console.log('✅ Admin user created:', admin.email);
 
-  // Create Parent user
+  // 2. Create Parent user
   const parent = await prisma.user.upsert({
     where: { email: 'parent@smarttutor.com' },
     update: {},
@@ -37,11 +39,12 @@ async function main() {
       passwordHash: parentPassword,
       role: 'PARENT',
       status: 'ACTIVE',
+      timezone: 'America/New_York',
     },
   });
   console.log('✅ Parent user created:', parent.email);
 
-  // Create Tutor user
+  // 3. Create Tutor user
   const tutor = await prisma.user.upsert({
     where: { email: 'tutor@smarttutor.com' },
     update: {},
@@ -52,11 +55,12 @@ async function main() {
       passwordHash: tutorPassword,
       role: 'TUTOR',
       status: 'APPROVED',
+      timezone: 'Africa/Lagos',
     },
   });
   console.log('✅ Tutor user created:', tutor.email);
 
-  // Create Tutor profile
+  // 4. Create Tutor profile
   await prisma.tutorProfile.upsert({
     where: { userId: tutor.id },
     update: {},
@@ -78,7 +82,7 @@ async function main() {
   });
   console.log('✅ Tutor profile created for:', tutor.email);
 
-  // Create Subjects
+  // 5. Create Subjects
   const mathSubject = await prisma.subject.upsert({
     where: { name: 'Mathematics' },
     update: {},
@@ -88,7 +92,6 @@ async function main() {
       category: 'CORE',
     },
   });
-  console.log('✅ Subject created:', mathSubject.name);
 
   const physicsSubject = await prisma.subject.upsert({
     where: { name: 'Physics' },
@@ -99,7 +102,6 @@ async function main() {
       category: 'CORE',
     },
   });
-  console.log('✅ Subject created:', physicsSubject.name);
 
   const codingSubject = await prisma.subject.upsert({
     where: { name: 'Computer Programming' },
@@ -110,159 +112,85 @@ async function main() {
       category: 'ENRICHMENT',
     },
   });
-  console.log('✅ Subject created:', codingSubject.name);
+  console.log('✅ Subjects created (Math, Physics, Programming)');
 
-  // Additional subjects
-  const englishSubject = await prisma.subject.upsert({
-    where: { name: 'English Language Arts' },
+  // 6. Create Student User and Profile
+  const studentUser = await prisma.user.upsert({
+    where: { studentCode: 'STUDENT01' },
     update: {},
     create: {
-      name: 'English Language Arts',
-      gradeBand: 'K-12',
-      category: 'CORE',
-    },
-  });
-  console.log('✅ Subject created:', englishSubject.name);
-
-  const scienceSubject = await prisma.subject.upsert({
-    where: { name: 'General Science' },
-    update: {},
-    create: {
-      name: 'General Science',
-      gradeBand: 'K-8',
-      category: 'CORE',
-    },
-  });
-  console.log('✅ Subject created:', scienceSubject.name);
-
-  const chemistrySubject = await prisma.subject.upsert({
-    where: { name: 'Chemistry' },
-    update: {},
-    create: {
-      name: 'Chemistry',
-      gradeBand: '9-12',
-      category: 'CORE',
-    },
-  });
-  console.log('✅ Subject created:', chemistrySubject.name);
-
-  const biologySubject = await prisma.subject.upsert({
-    where: { name: 'Biology' },
-    update: {},
-    create: {
-      name: 'Biology',
-      gradeBand: '9-12',
-      category: 'CORE',
-    },
-  });
-  console.log('✅ Subject created:', biologySubject.name);
-
-  const musicSubject = await prisma.subject.upsert({
-    where: { name: 'Music Theory' },
-    update: {},
-    create: {
-      name: 'Music Theory',
-      gradeBand: '3-12',
-      category: 'ENRICHMENT',
-    },
-  });
-  console.log('✅ Subject created:', musicSubject.name);
-
-  const chessSubject = await prisma.subject.upsert({
-    where: { name: 'Chess' },
-    update: {},
-    create: {
-      name: 'Chess',
-      gradeBand: 'K-12',
-      category: 'ENRICHMENT',
-    },
-  });
-  console.log('✅ Subject created:', chessSubject.name);
-
-  const artSubject = await prisma.subject.upsert({
-    where: { name: 'Visual Arts' },
-    update: {},
-    create: {
-      name: 'Visual Arts',
-      gradeBand: 'K-12',
-      category: 'ENRICHMENT',
-    },
-  });
-  console.log('✅ Subject created:', artSubject.name);
-
-  const spanishSubject = await prisma.subject.upsert({
-    where: { name: 'Spanish' },
-    update: {},
-    create: {
-      name: 'Spanish',
-      gradeBand: '6-12',
-      category: 'ENRICHMENT',
-    },
-  });
-  console.log('✅ Subject created:', spanishSubject.name);
-
-  const writingSubject = await prisma.subject.upsert({
-    where: { name: 'Creative Writing' },
-    update: {},
-    create: {
-      name: 'Creative Writing',
-      gradeBand: '3-12',
-      category: 'ENRICHMENT',
-    },
-  });
-  console.log('✅ Subject created:', writingSubject.name);
-
-  // Create Student
-  const student = await prisma.student.upsert({
-    where: { id: 'demo-student-id' },
-    update: {},
-    create: {
-      id: 'demo-student-id',
+      fullName: 'Tommy Student',
+      studentCode: 'STUDENT01',
+      passwordHash: studentPassword,
+      role: 'STUDENT',
+      status: 'ACTIVE',
       parentId: parent.id,
+    },
+  });
+
+  const student = await prisma.student.upsert({
+    where: { userId: studentUser.id },
+    update: {},
+    create: {
+      parentId: parent.id,
+      userId: studentUser.id,
       fullName: 'Tommy Student',
       dateOfBirth: new Date('2012-05-15'),
       gradeLevel: '5th Grade',
       school: 'Lincoln Elementary School',
-      notes: 'Enjoys math, needs help with reading comprehension.',
+      notes: 'Enjoys math, needs help with word problems.',
     },
   });
-  console.log('✅ Student created:', student.fullName);
+  console.log('✅ Student account & profile created:', student.fullName, 'Code:', studentUser.studentCode);
 
-  // Create Enrollment
-  const enrollment = await prisma.enrollment.upsert({
-    where: { id: 'demo-enrollment-id' },
-    update: {},
-    create: {
-      id: 'demo-enrollment-id',
+  // 7. Create Enrollment
+  const existingEnrollment = await prisma.enrollment.findFirst({
+    where: {
       studentId: student.id,
       subjectId: mathSubject.id,
-      tutorId: tutor.id,
-      frequency: 'WEEKLY',
-      status: 'ACTIVE',
-      startDate: new Date('2024-01-15'),
-      endDate: new Date('2024-06-15'),
     },
   });
-  console.log('✅ Enrollment created for student:', student.fullName);
 
-  // Create a sample session
-  await prisma.session.create({
+  let enrollment = existingEnrollment;
+  if (!enrollment) {
+    enrollment = await prisma.enrollment.create({
+      data: {
+        studentId: student.id,
+        subjectId: mathSubject.id,
+        tutorId: tutor.id,
+        sessionFrequency: 'WEEKLY',
+        billingFrequency: 'MONTHLY',
+        yearlyPrice: 1200.00,
+        status: 'ACTIVE',
+        startDate: new Date(),
+      },
+    });
+  }
+  console.log('✅ Enrollment created with yearlyPrice $1200.00');
+
+  // 8. Create Session with SessionParticipant
+  const session = await prisma.session.create({
     data: {
-      enrollmentId: enrollment.id,
+      tutorId: tutor.id,
       scheduledAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // Tomorrow
       durationMinutes: 60,
       zoomLink: 'https://zoom.us/j/123456789',
       status: 'SCHEDULED',
+      participants: {
+        create: {
+          enrollmentId: enrollment.id,
+        },
+      },
     },
   });
-  console.log('✅ Sample session created');
+  console.log('✅ Scheduled session created with participant');
 
-  // Create a sample payment
+  // 9. Create Sample Completed Payment
   await prisma.payment.create({
     data: {
       parentId: parent.id,
       enrollmentId: enrollment.id,
-      amount: 200.00,
+      amount: 100.00, // Monthly payment ($1200 / 12)
       currency: 'USD',
       provider: 'PAYSTACK',
       providerReference: 'pay_demo_reference_123',
@@ -270,26 +198,27 @@ async function main() {
       paidAt: new Date(),
     },
   });
-  console.log('✅ Sample payment created');
+  console.log('✅ Sample payment record created ($100.00)');
 
-  // Create a sample progress report
+  // 10. Create Sample Progress Report
   await prisma.progressReport.create({
     data: {
       enrollmentId: enrollment.id,
-      period: 'January 2024',
-      summary: 'Tommy has shown great improvement in algebra concepts this month.',
-      strengths: 'Strong problem-solving skills, excellent participation in class.',
-      areasToImprove: 'Could benefit from more practice with word problems.',
+      period: 'Initial Assessment',
+      summary: 'Tommy is showing great engagement with foundational concepts.',
+      strengths: 'Analytical problem solving, quick grasp of arithmetic rules.',
+      areasToImprove: 'Multi-step word problems.',
       createdBy: tutor.id,
     },
   });
   console.log('✅ Sample progress report created');
 
-  console.log('🎉 Database seed completed successfully!');
+  console.log('\n🎉 Database seed completed successfully!');
   console.log('\n📋 Demo Credentials:');
-  console.log('   Admin: admin@smarttutor.com / admin123');
-  console.log('   Parent: parent@smarttutor.com / parent123');
-  console.log('   Tutor: tutor@smarttutor.com / tutor123');
+  console.log('   Admin:   admin@smarttutor.com / admin123456!');
+  console.log('   Parent:  parent@smarttutor.com / parent123456!');
+  console.log('   Tutor:   tutor@smarttutor.com / tutor123456!');
+  console.log('   Student: Parent Email: parent@smarttutor.com | Student Code: STUDENT01 | Password: student123456!');
 }
 
 main()
@@ -300,5 +229,3 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
-
-  

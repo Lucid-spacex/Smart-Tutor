@@ -1,5 +1,5 @@
 import prisma from '../../config/database';
-import { CreateEnrollmentInput, GetEnrollmentsQuery } from './enrollments.validation';
+import { CreateEnrollmentInput, GetEnrollmentsQuery, UpdateEnrollmentPricingInput } from './enrollments.validation';
 
 export class EnrollmentsService {
   async createEnrollment(parentId: string, data: CreateEnrollmentInput) {
@@ -25,11 +25,15 @@ export class EnrollmentsService {
       throw new Error('Subject not found');
     }
 
+    // Note: yearlyPrice should be set by admin after enrollment
+    // For now, we'll set a default of 0 and require admin to update it
     return prisma.enrollment.create({
       data: {
         studentId: data.studentId,
         subjectId: data.subjectId,
-        frequency: data.frequency,
+        sessionFrequency: data.sessionFrequency,
+        billingFrequency: data.billingFrequency,
+        yearlyPrice: 0, // Default, admin will set actual price
         startDate: new Date(data.startDate),
         endDate: data.endDate ? new Date(data.endDate) : null,
         status: 'ACTIVE',
@@ -64,9 +68,10 @@ export class EnrollmentsService {
             email: true,
           },
         },
-        sessions: {
-          orderBy: { scheduledAt: 'desc' },
-          take: 5,
+        sessionParticipants: {
+          include: {
+            session: true,
+          },
         },
         payments: {
           orderBy: { createdAt: 'desc' },
@@ -98,9 +103,10 @@ export class EnrollmentsService {
             email: true,
           },
         },
-        sessions: {
-          orderBy: { scheduledAt: 'desc' },
-          take: 5,
+        sessionParticipants: {
+          include: {
+            session: true,
+          },
         },
         payments: {
           orderBy: { createdAt: 'desc' },
@@ -125,8 +131,10 @@ export class EnrollmentsService {
             tutorProfile: true,
           },
         },
-        sessions: {
-          orderBy: { scheduledAt: 'desc' },
+        sessionParticipants: {
+          include: {
+            session: true,
+          },
         },
         payments: {
           orderBy: { createdAt: 'desc' },
@@ -150,10 +158,80 @@ export class EnrollmentsService {
       if (enrollment.tutorId !== userId) {
         throw new Error('Not authorized to access this enrollment');
       }
-    } else {
+    } else if (userRole !== 'ADMIN') {
       throw new Error('Not authorized to access this enrollment');
     }
 
     return enrollment;
+  }
+
+  // Admin-only method to update enrollment pricing
+  async updateEnrollmentPricing(enrollmentId: string, data: UpdateEnrollmentPricingInput) {
+    const enrollment = await prisma.enrollment.findUnique({
+      where: { id: enrollmentId },
+    });
+
+    if (!enrollment) {
+      throw new Error('Enrollment not found');
+    }
+
+    return prisma.enrollment.update({
+      where: { id: enrollmentId },
+      data: {
+        yearlyPrice: data.yearlyPrice !== undefined ? data.yearlyPrice : enrollment.yearlyPrice,
+        billingFrequency: data.billingFrequency !== undefined ? data.billingFrequency : enrollment.billingFrequency,
+      },
+      include: {
+        student: true,
+        subject: true,
+      },
+    });
+  }
+
+  // Admin-only method to get enrollment pricing details
+  async getEnrollmentPricing(enrollmentId: string) {
+    const enrollment = await prisma.enrollment.findUnique({
+      where: { id: enrollmentId },
+      select: {
+        id: true,
+        yearlyPrice: true,
+        billingFrequency: true,
+        sessionFrequency: true,
+        student: {
+          select: {
+            fullName: true,
+          },
+        },
+        subject: {
+          select: {
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (!enrollment) {
+      throw new Error('Enrollment not found');
+    }
+
+    // Calculate current amount based on billing frequency
+    let currentAmount = Number(enrollment.yearlyPrice);
+    switch (enrollment.billingFrequency) {
+      case 'WEEKLY':
+        currentAmount = currentAmount / 52;
+        break;
+      case 'MONTHLY':
+        currentAmount = currentAmount / 12;
+        break;
+      case 'YEARLY':
+        // Already yearly
+        break;
+    }
+
+    return {
+      ...enrollment,
+      currentAmount,
+      currency: 'USD',
+    };
   }
 }

@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import {
   PaymentProvider,
   PaymentInitiationData,
@@ -5,13 +6,37 @@ import {
   PaymentVerificationResponse,
   WebhookProcessingResult,
 } from './payment-provider.interface';
+import { config } from '../../../config/env.config';
+import { logger } from '../../../config/logger';
 
 export class PaystackProvider implements PaymentProvider {
   private secretKey: string;
 
   constructor() {
-    this.secretKey = process.env.PAYSTACK_SECRET_KEY || '';
-    console.log('Paystack provider initialized');
+    this.secretKey = config.PAYSTACK_SECRET_KEY;
+    logger.info('Paystack provider initialized');
+  }
+
+  /**
+   * Verify Paystack webhook signature
+   * Prevents fake webhook calls
+   */
+  private verifyWebhookSignature(signature: string | string[] | undefined, rawBody: string): boolean {
+    if (!signature) {
+      return false;
+    }
+
+    // Paystack sends signature as a string
+    const signatureStr = Array.isArray(signature) ? signature[0] : signature;
+
+    // Compute HMAC-SHA512 hash
+    const expectedSignature = crypto
+      .createHmac('sha512', this.secretKey)
+      .update(rawBody, 'utf8')
+      .digest('hex');
+
+    // Compare signatures using timing-safe comparison
+    return crypto.timingSafeEqual(Buffer.from(signatureStr), Buffer.from(expectedSignature));
   }
 
   async initiatePayment(data: PaymentInitiationData): Promise<PaymentInitiationResponse> {
@@ -42,9 +67,18 @@ export class PaystackProvider implements PaymentProvider {
     };
   }
 
-  async processWebhook(data: any): Promise<WebhookProcessingResult> {
-    // Stub implementation - in production, this would verify webhook signature
-    console.log(`[PAYSTACK STUB] Processing webhook:`, data);
+  async processWebhook(data: any, signature: string | string[] | undefined, rawBody: string): Promise<WebhookProcessingResult> {
+    // Verify webhook signature first
+    if (!this.verifyWebhookSignature(signature, rawBody)) {
+      logger.error({ event: data.event }, 'Invalid webhook signature');
+      return {
+        valid: false,
+        reference: '',
+        status: 'failed',
+      };
+    }
+
+    logger.info({ event: data.event, reference: data.data?.reference }, 'Processing webhook');
 
     const event = data.event;
     const reference = data.data.reference;

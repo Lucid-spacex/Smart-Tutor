@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { AdminService } from './admin.service';
-import { UpdateTutorVettingInput, AssignTutorInput, GetTutorsQuery, GetStudentsQuery } from './admin.validation';
+import { UpdateTutorVettingInput, AssignTutorInput, GetTutorsQuery, GetStudentsQuery, UpdateEnrollmentPricingInput } from './admin.validation';
+import { AuthRequest } from '../../middleware/auth.middleware';
 
 export class AdminController {
   private adminService: AdminService;
@@ -49,6 +50,27 @@ export class AdminController {
     }
   };
 
+  getEnrollmentPricing = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const pricing = await this.adminService.getEnrollmentPricing(id);
+      res.status(200).json(pricing);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  updateEnrollmentPricing = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const data: UpdateEnrollmentPricingInput = req.body;
+      const result = await this.adminService.updateEnrollmentPricing(id, data);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
   getFailedPayments = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const payments = await this.adminService.getFailedPayments();
@@ -82,6 +104,110 @@ export class AdminController {
       const query: GetStudentsQuery = req.query as any;
       const students = await this.adminService.getStudents(query);
       res.status(200).json(students);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  regenerateStudentPassword = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const requestorId = req.user?.userId;
+      if (!requestorId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id } = req.params;
+      const result = await this.adminService.regenerateStudentPassword(id, requestorId);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  createSession = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const data: any = req.body;
+      const session = await this.adminService.createSession(data);
+      res.status(201).json(session);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  rescheduleSession = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const data: any = req.body;
+      const session = await this.adminService.rescheduleSession(id, data);
+      res.status(200).json(session);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getPendingGrades = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const grades = await this.adminService.getPendingGrades();
+      res.status(200).json(grades);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  approveGrade = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const adminId = req.user?.userId;
+      if (!adminId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id } = req.params;
+      const grade = await this.adminService.approveGrade(id, adminId);
+      res.status(200).json(grade);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  rejectGrade = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const adminId = req.user?.userId;
+      if (!adminId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id } = req.params;
+      const { reason } = req.body;
+      const grade = await this.adminService.rejectGrade(id, adminId, reason);
+      res.status(200).json(grade);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getSuspendedUsers = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const users = await this.adminService.getSuspendedUsers();
+      res.status(200).json(users);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  reactivateUser = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const adminId = req.user?.userId;
+      if (!adminId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id } = req.params;
+      const user = await this.adminService.reactivateUser(id, adminId);
+      res.status(200).json(user);
     } catch (error) {
       next(error);
     }

@@ -5,6 +5,7 @@ declare module 'express' {
     user?: {
       userId: string;
       role: string;
+      status: string;
     };
   }
 }

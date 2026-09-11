@@ -1,11 +1,17 @@
+import dotenv from 'dotenv';
+import path from 'path';
+
+// Load environment variables for test environment
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+
+process.env.JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || 'super-secret-access-token-key-min-32-chars-long';
+process.env.JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'super-secret-refresh-token-key-min-32-chars-long';
+process.env.PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || 'sk_test_mock_secret_key';
+process.env.NODE_ENV = 'test';
+
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
-
-beforeAll(async () => {
-  // Setup test database connection if needed
-  // For now, we'll use the same database
-});
 
 afterAll(async () => {
   await prisma.$disconnect();

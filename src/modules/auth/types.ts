@@ -2,9 +2,10 @@ export interface AuthResponse {
   user: {
     id: string;
     fullName: string;
-    email: string;
+    email: string | null;
     role: string;
     status: string;
+    studentCode?: string | null;
   };
   accessToken: string;
   refreshToken: string;
@@ -28,6 +29,17 @@ export interface LoginData {
   password: string;
 }
 
+export interface StudentLoginData {
+  parentEmail: string;
+  studentCode: string;
+  studentPassword: string;
+}
+
 export interface RefreshData {
   refreshToken: string;
+}
+
+export interface ChangePasswordData {
+  currentPassword: string;
+  newPassword: string;
 }

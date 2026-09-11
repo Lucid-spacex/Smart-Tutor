@@ -7,9 +7,13 @@ import { createTutorProfileSchema, updateAvailabilitySchema } from './tutor.vali
 const router = Router();
 const tutorController = new TutorController();
 
+// /tutor-profile endpoints
 router.post('/tutor-profile', authenticate, requireRole('TUTOR'), validate(createTutorProfileSchema), tutorController.createTutorProfile);
+router.patch('/tutor-profile', authenticate, requireRole('TUTOR'), validate(updateAvailabilitySchema), tutorController.updateAvailability);
 router.patch('/tutor-profile/availability', authenticate, requireRole('TUTOR'), validate(updateAvailabilitySchema), tutorController.updateAvailability);
 router.get('/tutor-profile', authenticate, requireRole('TUTOR'), tutorController.getTutorProfile);
+
+// /tutor/students & /tutor/sessions
 router.get('/students', authenticate, requireRole('TUTOR'), tutorController.getAssignedStudents);
 router.get('/sessions', authenticate, requireRole('TUTOR'), tutorController.getTutorSessions);
 

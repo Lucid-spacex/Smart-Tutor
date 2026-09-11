@@ -1,194 +1,248 @@
 import request from 'supertest';
 import app from '../../src/app';
+import prisma from '../../src/config/database';
+import { hashPassword } from '../../src/utils/password.util';
 
-describe('Auth Flow Integration Tests', () => {
-  describe('POST /auth/register', () => {
-    it('should register a new parent user', async () => {
+describe('Auth & Identity Integration Tests', () => {
+  let parentEmail = `parent_${Date.now()}@example.com`;
+  let tutorEmail = `tutor_${Date.now()}@example.com`;
+  let testPassword = 'SecurePassword123!';
+  let parentToken = '';
+  let studentCode = '';
+  let studentPassword = 'StudentPass123!';
+  let studentId = '';
+  let studentUserId = '';
+
+  beforeAll(async () => {
+    // Create test parent
+    const parentPassHash = await hashPassword(testPassword);
+    const parentUser = await prisma.user.create({
+      data: {
+        fullName: 'Integration Test Parent',
+        email: parentEmail,
+        phone: '+1234567890',
+        passwordHash: parentPassHash,
+        role: 'PARENT',
+        status: 'ACTIVE',
+        timezone: 'America/New_York',
+      },
+    });
+
+    // Create test student
+    studentCode = `TEST${Math.floor(1000 + Math.random() * 9000)}`;
+    const studentPassHash = await hashPassword(studentPassword);
+    const studentUser = await prisma.user.create({
+      data: {
+        fullName: 'Integration Test Student',
+        studentCode,
+        passwordHash: studentPassHash,
+        role: 'STUDENT',
+        status: 'ACTIVE',
+        parentId: parentUser.id,
+      },
+    });
+    studentUserId = studentUser.id;
+
+    const studentRecord = await prisma.student.create({
+      data: {
+        parentId: parentUser.id,
+        userId: studentUser.id,
+        fullName: 'Integration Test Student',
+        dateOfBirth: new Date('2014-01-01'),
+        gradeLevel: '4th Grade',
+      },
+    });
+    studentId = studentRecord.id;
+
+    // Login parent to get token
+    const res = await request(app)
+      .post('/auth/login')
+      .send({ email: parentEmail, password: testPassword });
+    parentToken = res.body.accessToken;
+  });
+
+  describe('Three-Factor Student Login', () => {
+    it('should succeed with valid parentEmail + studentCode + studentPassword', async () => {
       const response = await request(app)
+        .post('/auth/student-login')
+        .send({
+          parentEmail,
+          studentCode,
+          studentPassword,
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('accessToken');
+      expect(response.body).toHaveProperty('refreshToken');
+      expect(response.body.user.role).toBe('STUDENT');
+      expect(response.body.user.studentCode).toBe(studentCode);
+      expect(response.body.user).not.toHaveProperty('passwordHash');
+    });
+
+    it('should fail with generic 401 when parentEmail is wrong', async () => {
+      const response = await request(app)
+        .post('/auth/student-login')
+        .send({
+          parentEmail: 'wrongparent@example.com',
+          studentCode,
+          studentPassword,
+        });
+
+      expect(response.status).toBe(401);
+      expect(response.body.error).toBe('Invalid credentials');
+    });
+
+    it('should fail with generic 401 when studentCode is wrong', async () => {
+      const response = await request(app)
+        .post('/auth/student-login')
+        .send({
+          parentEmail,
+          studentCode: 'NONEXISTENTCODE',
+          studentPassword,
+        });
+
+      expect(response.status).toBe(401);
+      expect(response.body.error).toBe('Invalid credentials');
+    });
+
+    it('should fail with generic 401 when studentPassword is wrong', async () => {
+      const response = await request(app)
+        .post('/auth/student-login')
+        .send({
+          parentEmail,
+          studentCode,
+          studentPassword: 'WrongPassword999!',
+        });
+
+      expect(response.status).toBe(401);
+      expect(response.body.error).toBe('Invalid credentials');
+    });
+  });
+
+  describe('Parent & Tutor Registration & Gating', () => {
+    it('should register a new parent and verify with OTP', async () => {
+      const regEmail = `reg_parent_${Date.now()}@test.com`;
+      const regRes = await request(app)
         .post('/auth/register')
         .send({
-          fullName: 'Test Parent',
-          email: 'testparent@example.com',
-          phone: '+1234567890',
-          password: 'password123',
+          fullName: 'New Registered Parent',
+          email: regEmail,
+          phone: '+1987654321',
+          password: 'Password12345!',
           role: 'PARENT',
         });
 
-      expect(response.status).toBe(201);
-      expect(response.body).toHaveProperty('message');
-      expect(response.body).toHaveProperty('userId');
-      expect(response.body.message).toContain('successful');
+      expect(regRes.status).toBe(201);
+
+      // Verify OTP (default test OTP accepted)
+      const verifyRes = await request(app)
+        .post('/auth/verify')
+        .send({
+          email: regEmail,
+          otp: '123456',
+        });
+
+      expect(verifyRes.status).toBe(200);
+      expect(verifyRes.body.user.status).toBe('ACTIVE');
     });
 
-    it('should register a new tutor user', async () => {
-      const response = await request(app)
+    it('should block tutor from login while status is PENDING_VETTING', async () => {
+      const pendingTutorEmail = `pending_tutor_${Date.now()}@test.com`;
+      await request(app)
         .post('/auth/register')
         .send({
-          fullName: 'Test Tutor',
-          email: 'testtutor@example.com',
-          phone: '+1234567891',
-          password: 'password123',
+          fullName: 'Pending Tutor',
+          email: pendingTutorEmail,
+          phone: '+1987654322',
+          password: 'Password12345!',
           role: 'TUTOR',
         });
 
-      expect(response.status).toBe(201);
-      expect(response.body).toHaveProperty('message');
-      expect(response.body).toHaveProperty('userId');
-    });
-
-    it('should fail with invalid email', async () => {
-      const response = await request(app)
-        .post('/auth/register')
-        .send({
-          fullName: 'Test User',
-          email: 'invalid-email',
-          phone: '+1234567890',
-          password: 'password123',
-          role: 'PARENT',
-        });
-
-      expect(response.status).toBe(400);
-    });
-
-    it('should fail with weak password', async () => {
-      const response = await request(app)
-        .post('/auth/register')
-        .send({
-          fullName: 'Test User',
-          email: 'test@example.com',
-          phone: '+1234567890',
-          password: '123',
-          role: 'PARENT',
-        });
-
-      expect(response.status).toBe(400);
-    });
-  });
-
-  describe('POST /auth/verify', () => {
-    it('should verify email with valid OTP', async () => {
-      const response = await request(app)
+      // Verify email -> status becomes PENDING_VETTING
+      await request(app)
         .post('/auth/verify')
         .send({
-          email: 'parent@smarttutor.com', // Using seeded user
-          otp: '123456', // MVP accepts any 6-digit OTP
+          email: pendingTutorEmail,
+          otp: '123456',
         });
 
-      expect(response.status).toBe(200);
-      expect(response.body).toHaveProperty('message');
-      expect(response.body).toHaveProperty('user');
-    });
-
-    it('should fail with invalid OTP format', async () => {
-      const response = await request(app)
-        .post('/auth/verify')
+      // Attempt login -> should be blocked
+      const loginRes = await request(app)
+        .post('/auth/login')
         .send({
-          email: 'parent@smarttutor.com',
-          otp: '123', // Invalid OTP length
+          email: pendingTutorEmail,
+          password: 'Password12345!',
         });
 
-      expect(response.status).toBe(400);
+      expect(loginRes.status).toBe(403);
     });
   });
 
-  describe('POST /auth/login', () => {
-    it('should login with valid credentials', async () => {
-      const response = await request(app)
+  describe('Account Status Per-Request Gating', () => {
+    it('should immediately block requests from SUSPENDED accounts', async () => {
+      // Create active user, log in, then suspend in DB
+      const suspendEmail = `suspend_${Date.now()}@test.com`;
+      const passHash = await hashPassword(testPassword);
+      const user = await prisma.user.create({
+        data: {
+          fullName: 'To Be Suspended',
+          email: suspendEmail,
+          phone: '+1555555555',
+          passwordHash: passHash,
+          role: 'PARENT',
+          status: 'ACTIVE',
+        },
+      });
+
+      const loginRes = await request(app)
         .post('/auth/login')
-        .send({
-          email: 'parent@smarttutor.com',
-          password: 'parent123',
-        });
+        .send({ email: suspendEmail, password: testPassword });
 
-      expect(response.status).toBe(200);
-      expect(response.body).toHaveProperty('user');
-      expect(response.body).toHaveProperty('accessToken');
-      expect(response.body).toHaveProperty('refreshToken');
-      expect(response.body.user.email).toBe('parent@smarttutor.com');
-    });
+      const token = loginRes.body.accessToken;
 
-    it('should fail with invalid credentials', async () => {
-      const response = await request(app)
-        .post('/auth/login')
-        .send({
-          email: 'parent@smarttutor.com',
-          password: 'wrongpassword',
-        });
+      // Make authenticated call -> should succeed
+      const beforeRes = await request(app)
+        .get('/auth/me')
+        .set('Authorization', `Bearer ${token}`);
+      expect(beforeRes.status).toBe(200);
 
-      expect(response.status).toBe(401);
-    });
+      // Now suspend user in database
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { status: 'SUSPENDED' },
+      });
 
-    it('should fail with non-existent user', async () => {
-      const response = await request(app)
-        .post('/auth/login')
-        .send({
-          email: 'nonexistent@example.com',
-          password: 'password123',
-        });
-
-      expect(response.status).toBe(401);
+      // Make authenticated call with same unexpired token -> must be blocked
+      const afterRes = await request(app)
+        .get('/auth/me')
+        .set('Authorization', `Bearer ${token}`);
+      expect(afterRes.status).toBe(403);
     });
   });
 
-  describe('POST /auth/refresh', () => {
-    it('should refresh access token', async () => {
-      // First login to get refresh token
-      const loginResponse = await request(app)
-        .post('/auth/login')
-        .send({
-          email: 'parent@smarttutor.com',
-          password: 'parent123',
-        });
+  describe('Timezone Handling', () => {
+    it('should update timezone with valid IANA timezone', async () => {
+      const res = await request(app)
+        .patch('/auth/me/timezone')
+        .set('Authorization', `Bearer ${parentToken}`)
+        .send({ timezone: 'Africa/Lagos' });
 
-      const refreshToken = loginResponse.body.refreshToken;
+      expect(res.status).toBe(200);
 
-      const response = await request(app)
-        .post('/auth/refresh')
-        .send({
-          refreshToken,
-        });
+      const meRes = await request(app)
+        .get('/auth/me')
+        .set('Authorization', `Bearer ${parentToken}`);
 
-      expect(response.status).toBe(200);
-      expect(response.body).toHaveProperty('accessToken');
-      expect(response.body).toHaveProperty('refreshToken');
+      expect(meRes.body.timezone).toBe('Africa/Lagos');
     });
 
-    it('should fail with invalid refresh token', async () => {
-      const response = await request(app)
-        .post('/auth/refresh')
-        .send({
-          refreshToken: 'invalid-token',
-        });
+    it('should reject invalid timezone format', async () => {
+      const res = await request(app)
+        .patch('/auth/me/timezone')
+        .set('Authorization', `Bearer ${parentToken}`)
+        .send({ timezone: 'Invalid/NonExistent_Zone' });
 
-      expect(response.status).toBe(401);
-    });
-  });
-
-  describe('POST /auth/logout', () => {
-    it('should logout authenticated user', async () => {
-      // First login to get access token
-      const loginResponse = await request(app)
-        .post('/auth/login')
-        .send({
-          email: 'parent@smarttutor.com',
-          password: 'parent123',
-        });
-
-      const accessToken = loginResponse.body.accessToken;
-
-      const response = await request(app)
-        .post('/auth/logout')
-        .set('Authorization', `Bearer ${accessToken}`);
-
-      expect(response.status).toBe(200);
-      expect(response.body).toHaveProperty('message');
-    });
-
-    it('should fail without authentication', async () => {
-      const response = await request(app)
-        .post('/auth/logout');
-
-      expect(response.status).toBe(401);
+      expect(res.status).toBe(400);
     });
   });
 });

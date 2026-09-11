@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { StudentsService } from './students.service';
 import { CreateStudentInput } from './students.validation';
+import { AuthRequest } from '../../middleware/auth.middleware';
 
 export class StudentsController {
   private studentsService: StudentsService;
@@ -9,9 +10,9 @@ export class StudentsController {
     this.studentsService = new StudentsService();
   }
 
-  createStudent = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  createStudent = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const parentId = (req as any).user?.userId;
+      const parentId = req.user?.userId;
       if (!parentId) {
         res.status(401).json({ error: 'Not authenticated' });
         return;
@@ -25,9 +26,9 @@ export class StudentsController {
     }
   };
 
-  getStudents = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  getStudents = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const parentId = (req as any).user?.userId;
+      const parentId = req.user?.userId;
       if (!parentId) {
         res.status(401).json({ error: 'Not authenticated' });
         return;
@@ -40,9 +41,9 @@ export class StudentsController {
     }
   };
 
-  getStudentById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  getStudentById = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const parentId = (req as any).user?.userId;
+      const parentId = req.user?.userId;
       if (!parentId) {
         res.status(401).json({ error: 'Not authenticated' });
         return;
@@ -51,6 +52,40 @@ export class StudentsController {
       const { id } = req.params;
       const student = await this.studentsService.getStudentById(id, parentId);
       res.status(200).json(student);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getStudentActivity = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const requestorId = req.user?.userId;
+      const isAdmin = req.user?.role === 'ADMIN';
+      if (!requestorId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id } = req.params;
+      const activity = await this.studentsService.getStudentActivity(id, requestorId, isAdmin);
+      res.status(200).json(activity);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  regeneratePassword = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const requestorId = req.user?.userId;
+      const isAdmin = req.user?.role === 'ADMIN';
+      if (!requestorId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id } = req.params;
+      const result = await this.studentsService.regenerateStudentPassword(id, requestorId, isAdmin);
+      res.status(200).json(result);
     } catch (error) {
       next(error);
     }

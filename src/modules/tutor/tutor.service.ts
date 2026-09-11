@@ -48,7 +48,18 @@ export class TutorService {
         status: 'ACTIVE',
       },
       include: {
-        student: true,
+        student: {
+          select: {
+            id: true,
+            fullName: true,
+            dateOfBirth: true,
+            gradeLevel: true,
+            school: true,
+            notes: true,
+            createdAt: true,
+            // SECURITY: Parent info is explicitly omitted
+          },
+        },
         subject: true,
       },
     });
@@ -58,7 +69,8 @@ export class TutorService {
       enrollment: {
         id: enrollment.id,
         subject: enrollment.subject,
-        frequency: enrollment.frequency,
+        sessionFrequency: enrollment.sessionFrequency,
+        billingFrequency: enrollment.billingFrequency,
         startDate: enrollment.startDate,
         endDate: enrollment.endDate,
         status: enrollment.status,
@@ -69,15 +81,23 @@ export class TutorService {
   async getTutorSessions(tutorId: string) {
     return prisma.session.findMany({
       where: {
-        enrollment: {
-          tutorId,
-        },
+        tutorId,
       },
       include: {
-        enrollment: {
+        participants: {
           include: {
-            student: true,
-            subject: true,
+            enrollment: {
+              include: {
+                student: {
+                  select: {
+                    id: true,
+                    fullName: true,
+                    gradeLevel: true,
+                  },
+                },
+                subject: true,
+              },
+            },
           },
         },
       },

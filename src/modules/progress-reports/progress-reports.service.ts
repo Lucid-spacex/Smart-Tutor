@@ -57,9 +57,16 @@ export class ProgressReportsService {
           parentId: userId,
         },
       };
+    } else if (userRole === 'STUDENT') {
+      where.enrollment = {
+        student: {
+          userId,
+        },
+      };
     } else if (userRole === 'TUTOR') {
       where.createdBy = userId;
     }
+    // ADMIN has no extra restriction, can view all progress reports (or filtered by enrollmentId)
 
     return prisma.progressReport.findMany({
       where,

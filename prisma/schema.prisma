@@ -14,6 +14,7 @@ enum UserRole {
   PARENT
   TUTOR
   ADMIN
+  STUDENT
 }
 
 enum UserStatus {
@@ -36,10 +37,16 @@ enum SubjectCategory {
   ENRICHMENT
 }
 
-enum EnrollmentFrequency {
+enum SessionFrequency {
   WEEKLY
   BI_WEEKLY
   MONTHLY
+}
+
+enum BillingFrequency {
+  WEEKLY
+  MONTHLY
+  YEARLY
 }
 
 enum EnrollmentStatus {
@@ -71,24 +78,40 @@ enum PaymentStatus {
 model User {
   id           String       @id @default(uuid())
   fullName     String
-  email        String       @unique
+  email        String?      @unique
   phone        String?
   passwordHash String
   role         UserRole
   status       UserStatus   @default(UNVERIFIED)
+  studentCode  String?      @unique
+  parentId     String?
+  parent       User?        @relation("StudentParent", fields: [parentId], references: [id], onDelete: Cascade)
+  students     User[]       @relation("StudentParent")
+  timezone     String?
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
   tutorProfile      TutorProfile?
-  students          Student[]
+  studentProfile    Student?
   enrollmentsAsTutor Enrollment[] @relation("TutorEnrollments")
+  sessions          Session[]      @relation("SessionTutor")
   payments          Payment[]
   progressReports   ProgressReport[]
   refreshTokens     RefreshToken[]
+  sentMessages      Message[]      @relation("MessageSender")
+  receivedMessages  Message[]      @relation("MessageRecipient")
+  filedComplaints   Complaint[]
+  resolvedComplaints Complaint[]   @relation("ComplaintResolver")
+  createdAssignments Assignment[]  @relation("AssignmentCreator")
+  createdGrades     Grade[]       @relation("GradeGrader")
+  approvedGrades    Grade[]       @relation("GradeApprover")
+  notifications     Notification[]
 
   @@index([email])
   @@index([role])
   @@index([status])
+  @@index([studentCode])
+  @@index([parentId])
 }
 
 model TutorProfile {
@@ -109,17 +132,21 @@ model TutorProfile {
 model Student {
   id          String   @id @default(uuid())
   parentId    String
-  parent      User     @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   fullName    String
   dateOfBirth DateTime
   gradeLevel  String
   school      String?
   notes       String?
+  deletedAt   DateTime?
   createdAt   DateTime @default(now())
 
-  enrollments Enrollment[]
+  enrollments        Enrollment[]
 
   @@index([parentId])
+  @@index([userId])
+  @@index([deletedAt])
 }
 
 model Subject {
@@ -135,33 +162,39 @@ model Subject {
 }
 
 model Enrollment {
-  id          String             @id @default(uuid())
-  studentId   String
-  student     Student            @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  subjectId   String
-  subject     Subject            @relation(fields: [subjectId], references: [id])
-  tutorId     String?
-  tutor       User?              @relation("TutorEnrollments", fields: [tutorId], references: [id])
-  frequency   EnrollmentFrequency
-  status      EnrollmentStatus   @default(ACTIVE)
-  startDate   DateTime
-  endDate     DateTime?
-  createdAt   DateTime           @default(now())
+  id                String           @id @default(uuid())
+  studentId         String
+  student           Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subjectId         String
+  subject           Subject          @relation(fields: [subjectId], references: [id])
+  tutorId           String?
+  tutor             User?            @relation("TutorEnrollments", fields: [tutorId], references: [id])
+  sessionFrequency  SessionFrequency
+  billingFrequency BillingFrequency @default(YEARLY)
+  yearlyPrice       Decimal          @db.Decimal(10, 2)
+  status            EnrollmentStatus @default(ACTIVE)
+  startDate         DateTime
+  endDate           DateTime?
+  deletedAt         DateTime?
+  createdAt         DateTime         @default(now())
 
-  sessions       Session[]
-  payments       Payment[]
-  progressReports ProgressReport[]
+  sessionParticipants SessionParticipant[]
+  payments           Payment[]
+  progressReports    ProgressReport[]
+  assignments        Assignment[]
+  grades             Grade[]
 
   @@index([studentId])
   @@index([subjectId])
   @@index([tutorId])
   @@index([status])
+  @@index([deletedAt])
 }
 
 model Session {
   id              String       @id @default(uuid())
-  enrollmentId    String
-  enrollment      Enrollment   @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  tutorId         String
+  tutor           User         @relation("SessionTutor", fields: [tutorId], references: [id], onDelete: Cascade)
   scheduledAt     DateTime
   durationMinutes Int
   zoomLink        String?
@@ -170,9 +203,24 @@ model Session {
   homeworkAssigned String?
   createdAt       DateTime     @default(now())
 
-  @@index([enrollmentId])
+  participants SessionParticipant[]
+
+  @@index([tutorId])
   @@index([scheduledAt])
   @@index([status])
+}
+
+model SessionParticipant {
+  id           String    @id @default(uuid())
+  sessionId    String
+  session      Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  enrollmentId String
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  attended     Boolean?
+  createdAt    DateTime  @default(now())
+
+  @@index([sessionId])
+  @@index([enrollmentId])
 }
 
 model Payment {
@@ -187,12 +235,14 @@ model Payment {
   providerReference String?
   status           PaymentStatus @default(PENDING)
   paidAt           DateTime?
+  deletedAt        DateTime?
   createdAt        DateTime      @default(now())
 
   @@index([parentId])
   @@index([enrollmentId])
   @@index([status])
   @@index([provider])
+  @@index([deletedAt])
 }
 
 model ProgressReport {
@@ -211,14 +261,162 @@ model ProgressReport {
   @@index([createdBy])
 }
 
-model RefreshToken {
-  id        String   @id @default(uuid())
+model Message {
+  id         String   @id @default(uuid())
+  senderId   String
+  sender     User     @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  recipientId String
+  recipient  User     @relation("MessageRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  threadId   String
+  body       String
+  readAt     DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([senderId])
+  @@index([recipientId])
+  @@index([threadId])
+}
+
+model Assignment {
+  id           String        @id @default(uuid())
+  enrollmentId String
+  enrollment   Enrollment    @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  createdBy    String
+  creator      User         @relation("AssignmentCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  title        String
+  description  String
+  type         AssignmentType
+  dueDate      DateTime
+  status       AssignmentStatus @default(PENDING)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  grades Grade[]
+
+  @@index([enrollmentId])
+  @@index([createdBy])
+  @@index([dueDate])
+  @@index([status])
+}
+
+enum AssignmentType {
+  ASSIGNMENT
+  CLASSWORK
+  TEST
+}
+
+enum AssignmentStatus {
+  PENDING
+  COMPLETED
+}
+
+model Grade {
+  id           String       @id @default(uuid())
+  enrollmentId String
+  enrollment   Enrollment   @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  assignmentId String?
+  assignment   Assignment?  @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+  gradedBy     String
+  grader       User         @relation("GradeGrader", fields: [gradedBy], references: [id], onDelete: Cascade)
+  score        Decimal      @db.Decimal(10, 2)
+  comments     String
+  status       GradeStatus  @default(PENDING_APPROVAL)
+  approvedBy   String?
+  approver     User?        @relation("GradeApprover", fields: [approvedBy], references: [id], onDelete: SetNull)
+  approvedAt   DateTime?
+  visibleToStudent Boolean @default(false)
+  createdAt    DateTime     @default(now())
+
+  @@index([enrollmentId])
+  @@index([assignmentId])
+  @@index([gradedBy])
+  @@index([status])
+  @@index([visibleToStudent])
+}
+
+enum GradeStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+}
+
+model Notification {
+  id        String           @id @default(uuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash String   @unique
-  expiresAt DateTime
-  createdAt DateTime @default(now())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  relatedId String?
+  message   String
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([userId])
+  @@index([type])
+  @@index([isRead])
+}
+
+enum NotificationType {
+  ASSIGNMENT_DUE_SOON
+  ASSIGNMENT_OVERDUE
+  GRADE_APPROVED
+  COMPLAINT_RESOLVED
+  GENERAL
+}
+
+model Complaint {
+  id          String       @id @default(uuid())
+  filedBy     String
+  filer       User         @relation(fields: [filedBy], references: [id], onDelete: Cascade)
+  aboutType   ComplaintAboutType
+  aboutId     String?
+  subject     String
+  description String
+  status      ComplaintStatus @default(OPEN)
+  adminReply  String?
+  resolvedBy  String?
+  resolver    User?        @relation("ComplaintResolver", fields: [resolvedBy], references: [id], onDelete: SetNull)
+  resolvedAt  DateTime?
+  createdAt   DateTime     @default(now())
+
+  @@index([filedBy])
+  @@index([status])
+}
+
+enum ComplaintAboutType {
+  STUDENT
+  TUTOR
+  PARENT
+  GENERAL
+}
+
+enum ComplaintStatus {
+  OPEN
+  RESOLVED
+}
+
+model RefreshToken {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash    String   @unique
+  tokenFamily  String   // Track token family for rotation detection (not unique - multiple tokens can share a family)
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  revokedAt    DateTime? // Set when token is revoked due to reuse detection
 
   @@index([userId])
   @@index([tokenHash])
+  @@index([tokenFamily])
+}
+
+model Otp {
+  id        String   @id @default(uuid())
+  email     String
+  otpHash   String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email])
+  @@index([otpHash])
+  @@index([expiresAt])
 }
