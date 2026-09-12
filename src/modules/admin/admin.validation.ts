@@ -13,6 +13,17 @@ export const updateEnrollmentPricingSchema = z.object({
   billingFrequency: z.enum(['WEEKLY', 'MONTHLY', 'YEARLY']).optional(),
 });
 
+export const updatePricingTierSchema = z.object({
+  yearlyPriceNGN: z.number().positive('NGN price must be positive').optional(),
+  yearlyPriceUSD: z.number().positive('USD price must be positive').optional(),
+});
+
+export const updateEnrollmentPricingOverrideSchema = z.object({
+  yearlyPriceNGN: z.number().positive('NGN price must be positive').nullable().optional(),
+  yearlyPriceUSD: z.number().positive('USD price must be positive').nullable().optional(),
+  billingFrequency: z.enum(['WEEKLY', 'MONTHLY', 'YEARLY']).optional(),
+});
+
 export const createSessionSchema = z.object({
   tutorId: z.string().uuid('Invalid tutor ID'),
   scheduledAt: z.string().refine((val) => !isNaN(Date.parse(val)), 'Invalid scheduled date'),
@@ -38,6 +49,8 @@ export const getStudentsQuerySchema = z.object({
 export type UpdateTutorVettingInput = z.infer<typeof updateTutorVettingSchema>;
 export type AssignTutorInput = z.infer<typeof assignTutorSchema>;
 export type UpdateEnrollmentPricingInput = z.infer<typeof updateEnrollmentPricingSchema>;
+export type UpdatePricingTierInput = z.infer<typeof updatePricingTierSchema>;
+export type UpdateEnrollmentPricingOverrideInput = z.infer<typeof updateEnrollmentPricingOverrideSchema>;
 export type CreateSessionInput = z.infer<typeof createSessionSchema>;
 export type RescheduleSessionInput = z.infer<typeof rescheduleSessionSchema>;
 export type GetTutorsQuery = z.infer<typeof getTutorsQuerySchema>;

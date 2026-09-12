@@ -1,12 +1,13 @@
 import prisma from '../../config/database';
-import { UpdateTutorVettingInput, AssignTutorInput, UpdateEnrollmentPricingInput } from './admin.validation';
+import { UpdateTutorVettingInput, AssignTutorInput, UpdateEnrollmentPricingInput, UpdatePricingTierInput, UpdateEnrollmentPricingOverrideInput } from './admin.validation';
 import { hashPassword } from '../../utils/password.util';
-import { sendStudentCredentialsEmail } from '../../utils/email.util';
+import { sendPasswordResetEmail } from '../../utils/email.util';
 import { logger } from '../../config/logger';
 import crypto from 'crypto';
 import { EnrollmentsService } from '../enrollments/enrollments.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { GradesService } from '../grades/grades.service';
+import { GradeBandTier } from '@prisma/client';
 
 export class AdminService {
   private enrollmentsService: EnrollmentsService;
@@ -327,11 +328,9 @@ export class AdminService {
     });
 
     if (parent?.email && parent.fullName) {
-      await sendStudentCredentialsEmail(
+      await sendPasswordResetEmail(
         parent.email,
         parent.fullName,
-        student.fullName,
-        student.user.studentCode!,
         plainPassword
       );
     }
@@ -421,5 +420,195 @@ export class AdminService {
 
   async rejectGrade(gradeId: string, adminId: string, reason?: string) {
     return this.gradesService.rejectGrade(gradeId, adminId, reason);
+  }
+
+  // Pricing Tier Management
+  async getPricingTiers() {
+    const tiers = await prisma.pricingTier.findMany({
+      include: {
+        updater: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: {
+        gradeBandTier: 'asc',
+      },
+    });
+
+    // Get latest exchange rate for drift calculation
+    const latestRate = await prisma.exchangeRate.findFirst({
+      where: {
+        fromCurrency: 'USD',
+        toCurrency: 'NGN',
+      },
+      orderBy: {
+        fetchedAt: 'desc',
+      },
+    });
+
+    const marketRate = latestRate ? Number(latestRate.rate) : null;
+
+    // Calculate drift for each tier
+    return tiers.map(tier => {
+      const impliedRate = Number(tier.yearlyPriceNGN) / Number(tier.yearlyPriceUSD);
+      const driftPercentage = marketRate 
+        ? Math.abs((impliedRate - marketRate) / marketRate) * 100 
+        : null;
+      
+      return {
+        ...tier,
+        impliedRate,
+        currentMarketRate: marketRate,
+        driftPercentage,
+        needsReview: driftPercentage !== null && driftPercentage > 7, // Default threshold
+      };
+    });
+  }
+
+  async updatePricingTier(gradeBandTier: GradeBandTier, data: UpdatePricingTierInput, adminId: string) {
+    const tier = await prisma.pricingTier.findUnique({
+      where: { gradeBandTier },
+    });
+
+    if (!tier) {
+      throw new Error('Pricing tier not found');
+    }
+
+    return prisma.pricingTier.update({
+      where: { gradeBandTier },
+      data: {
+        yearlyPriceNGN: data.yearlyPriceNGN !== undefined ? data.yearlyPriceNGN : tier.yearlyPriceNGN,
+        yearlyPriceUSD: data.yearlyPriceUSD !== undefined ? data.yearlyPriceUSD : tier.yearlyPriceUSD,
+        updatedBy: adminId,
+      },
+      include: {
+        updater: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+          },
+        },
+      },
+    });
+  }
+
+  async updateEnrollmentPricingOverride(enrollmentId: string, data: UpdateEnrollmentPricingOverrideInput, adminId: string) {
+    const enrollment = await prisma.enrollment.findUnique({
+      where: { id: enrollmentId },
+      include: {
+        student: {
+          include: {
+            user: true,
+          },
+        },
+      },
+    });
+
+    if (!enrollment) {
+      throw new Error('Enrollment not found');
+    }
+
+    return prisma.enrollment.update({
+      where: { id: enrollmentId },
+      data: {
+        yearlyPriceNGN: data.yearlyPriceNGN !== undefined ? data.yearlyPriceNGN : enrollment.yearlyPriceNGN,
+        yearlyPriceUSD: data.yearlyPriceUSD !== undefined ? data.yearlyPriceUSD : enrollment.yearlyPriceUSD,
+        billingFrequency: data.billingFrequency !== undefined ? data.billingFrequency : enrollment.billingFrequency,
+      },
+      include: {
+        student: {
+          include: {
+            user: true,
+          },
+        },
+        subject: true,
+      },
+    });
+  }
+
+  async getEnrollmentPricingOverride(enrollmentId: string) {
+    const enrollment = await prisma.enrollment.findUnique({
+      where: { id: enrollmentId },
+      include: {
+        student: {
+          include: {
+            user: true,
+          },
+        },
+        subject: true,
+      },
+    });
+
+    if (!enrollment) {
+      throw new Error('Enrollment not found');
+    }
+
+    // Determine effective price and source
+    let effectivePriceNGN: number | null = null;
+    let effectivePriceUSD: number | null = null;
+    let priceSource: 'override' | 'tier default' | 'error' = 'error';
+
+    // Check for override first
+    if (enrollment.yearlyPriceNGN !== null && enrollment.yearlyPriceUSD !== null) {
+      effectivePriceNGN = Number(enrollment.yearlyPriceNGN);
+      effectivePriceUSD = Number(enrollment.yearlyPriceUSD);
+      priceSource = 'override';
+    } else {
+      // Fall back to tier default
+      const tier = await prisma.pricingTier.findUnique({
+        where: { gradeBandTier: enrollment.student.gradeBandTier },
+      });
+
+      if (tier) {
+        effectivePriceNGN = Number(tier.yearlyPriceNGN);
+        effectivePriceUSD = Number(tier.yearlyPriceUSD);
+        priceSource = 'tier default';
+      } else {
+        // No pricing available
+        throw new Error('No pricing configured for this enrollment');
+      }
+    }
+
+    return {
+      enrollmentId: enrollment.id,
+      studentName: enrollment.student.fullName,
+      studentCode: enrollment.student.user.studentCode,
+      subject: enrollment.subject.name,
+      gradeBandTier: enrollment.student.gradeBandTier,
+      effectivePriceNGN,
+      effectivePriceUSD,
+      priceSource,
+      overrideNGN: enrollment.yearlyPriceNGN,
+      overrideUSD: enrollment.yearlyPriceUSD,
+      billingFrequency: enrollment.billingFrequency,
+    };
+  }
+
+  async getCurrentExchangeRate() {
+    const latestRate = await prisma.exchangeRate.findFirst({
+      where: {
+        fromCurrency: 'USD',
+        toCurrency: 'NGN',
+      },
+      orderBy: {
+        fetchedAt: 'desc',
+      },
+    });
+
+    if (!latestRate) {
+      throw new Error('No exchange rate data available');
+    }
+
+    return {
+      fromCurrency: latestRate.fromCurrency,
+      toCurrency: latestRate.toCurrency,
+      rate: Number(latestRate.rate),
+      fetchedAt: latestRate.fetchedAt,
+    };
   }
 }

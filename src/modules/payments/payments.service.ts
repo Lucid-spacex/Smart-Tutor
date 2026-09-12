@@ -15,7 +15,11 @@ export class PaymentsService {
     const enrollment = await prisma.enrollment.findUnique({
       where: { id: data.enrollmentId },
       include: {
-        student: true,
+        student: {
+          include: {
+            user: true,
+          },
+        },
       },
     });
 
@@ -27,28 +31,52 @@ export class PaymentsService {
       throw new Error('Not authorized to make payment for this enrollment');
     }
 
-    // SECURITY: Compute amount server-side from enrollment pricing
-    // Never accept client-supplied amount to prevent payment fraud
-    const yearlyPrice = Number(enrollment.yearlyPrice);
-    let computedAmount = yearlyPrice;
+    // SECURITY: Compute amount server-side from tiered pricing
+    // Resolution order: override > tier default
+    let yearlyPriceNGN: number;
+    let yearlyPriceUSD: number;
+
+    // Check for override first
+    if (enrollment.yearlyPriceNGN !== null && enrollment.yearlyPriceUSD !== null) {
+      yearlyPriceNGN = Number(enrollment.yearlyPriceNGN);
+      yearlyPriceUSD = Number(enrollment.yearlyPriceUSD);
+    } else {
+      // Fall back to tier default
+      const tier = await prisma.pricingTier.findUnique({
+        where: { gradeBandTier: enrollment.student.gradeBandTier },
+      });
+
+      if (!tier) {
+        throw new Error('No pricing configured for this enrollment. Please contact admin.');
+      }
+
+      yearlyPriceNGN = Number(tier.yearlyPriceNGN);
+      yearlyPriceUSD = Number(tier.yearlyPriceUSD);
+    }
 
     // Calculate amount based on billing frequency
+    let computedAmountNGN = yearlyPriceNGN;
+    let computedAmountUSD = yearlyPriceUSD;
+
     switch (enrollment.billingFrequency) {
       case 'WEEKLY':
-        computedAmount = yearlyPrice / 52;
+        computedAmountNGN = yearlyPriceNGN / 52;
+        computedAmountUSD = yearlyPriceUSD / 52;
         break;
       case 'MONTHLY':
-        computedAmount = yearlyPrice / 12;
+        computedAmountNGN = yearlyPriceNGN / 12;
+        computedAmountUSD = yearlyPriceUSD / 12;
         break;
       case 'YEARLY':
-        computedAmount = yearlyPrice;
+        // Already yearly
         break;
     }
 
     // Round to 2 decimal places
-    computedAmount = Math.round(computedAmount * 100) / 100;
+    computedAmountNGN = Math.round(computedAmountNGN * 100) / 100;
+    computedAmountUSD = Math.round(computedAmountUSD * 100) / 100;
 
-    if (computedAmount <= 0) {
+    if (computedAmountNGN <= 0 || computedAmountUSD <= 0) {
       throw new Error('Invalid payment amount. Please contact admin to set pricing for this enrollment.');
     }
 
@@ -61,29 +89,27 @@ export class PaymentsService {
       throw new Error('Parent not found or missing email');
     }
 
-    // Use provided currency or default to USD
-    const currency = data.currency || 'USD';
-
-    // Initiate payment with provider using computed amount
+    // Initiate payment with provider using NGN amount (Paystack is Nigerian-focused)
     const paymentResult = await this.paymentProvider.initiatePayment({
-      amount: computedAmount,
+      amount: computedAmountNGN,
       email: parent.email,
-      currency,
+      currency: 'NGN',
       metadata: {
         enrollmentId: data.enrollmentId,
         parentId,
         billingFrequency: enrollment.billingFrequency,
-        computedFromYearlyPrice: yearlyPrice,
+        computedFromYearlyPriceNGN: yearlyPriceNGN,
+        computedFromYearlyPriceUSD: yearlyPriceUSD,
       },
     });
 
-    // Create payment record with computed amount
+    // Create payment record with NGN amount
     const payment = await prisma.payment.create({
       data: {
         parentId,
         enrollmentId: data.enrollmentId,
-        amount: computedAmount,
-        currency,
+        amount: computedAmountNGN,
+        currency: 'NGN',
         provider: 'PAYSTACK',
         providerReference: paymentResult.reference,
         status: 'PENDING',
@@ -93,7 +119,8 @@ export class PaymentsService {
     return {
       payment,
       ...paymentResult,
-      computedAmount,
+      displayAmountUSD: computedAmountUSD,
+      chargedAmountNGN: computedAmountNGN,
       billingFrequency: enrollment.billingFrequency,
     };
   }

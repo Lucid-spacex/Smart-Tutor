@@ -1,8 +1,9 @@
 import prisma from '../../config/database';
+import { sendNotificationEmail } from '../../utils/email.util';
 
 export class NotificationsService {
-  async createNotification(userId: string, type: string, message: string, relatedId?: string) {
-    return prisma.notification.create({
+  async createNotification(userId: string, type: string, message: string, relatedId?: string, sendEmailNotification: boolean = false) {
+    const notification = await prisma.notification.create({
       data: {
         userId,
         type,
@@ -11,6 +12,20 @@ export class NotificationsService {
         isRead: false,
       },
     });
+
+    // Send email notification if requested
+    if (sendEmailNotification) {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { email: true, fullName: true },
+      });
+
+      if (user?.email && user.fullName) {
+        await sendNotificationEmail(user.email, user.fullName, type, message);
+      }
+    }
+
+    return notification;
   }
 
   async getNotifications(userId: string) {
@@ -64,17 +79,17 @@ export class NotificationsService {
       ? `Assignment "${assignment.title}" is overdue`
       : `Assignment "${assignment.title}" is due soon`;
 
-    // Create notification for student
-    await this.createNotification(student.userId, type, message, assignmentId);
+    // Create notification for student (with email)
+    await this.createNotification(student.userId, type, message, assignmentId, true);
 
-    // Create notification for parent
+    // Create notification for parent (with email)
     if (student.parentId) {
-      await this.createNotification(student.parentId, type, message, assignmentId);
+      await this.createNotification(student.parentId, type, message, assignmentId, true);
     }
   }
 
   // Helper method to create grade approved notification
-  async createGradeApprovedNotification(gradeId: string) {
+  async createGradeApprovedNotification(gradeId: string, sendEmailNotification: boolean = true) {
     const grade = await prisma.grade.findUnique({
       where: { id: gradeId },
       include: {
@@ -94,17 +109,17 @@ export class NotificationsService {
     const student = grade.enrollment.student;
     const message = `Grade for ${grade.enrollment.subject.name} has been approved`;
 
-    // Create notification for student
-    await this.createNotification(student.userId, 'GRADE_APPROVED', message, gradeId);
+    // Create notification for student (with email)
+    await this.createNotification(student.userId, 'GRADE_APPROVED', message, gradeId, sendEmailNotification);
 
-    // Create notification for parent
+    // Create notification for parent (with email)
     if (student.parentId) {
-      await this.createNotification(student.parentId, 'GRADE_APPROVED', message, gradeId);
+      await this.createNotification(student.parentId, 'GRADE_APPROVED', message, gradeId, sendEmailNotification);
     }
   }
 
   // Helper method to create complaint resolved notification
-  async createComplaintResolvedNotification(complaintId: string, userId: string) {
+  async createComplaintResolvedNotification(complaintId: string, userId: string, sendEmailNotification: boolean = true) {
     const complaint = await prisma.complaint.findUnique({
       where: { id: complaintId },
     });
@@ -114,6 +129,6 @@ export class NotificationsService {
     }
 
     const message = `Your complaint "${complaint.subject}" has been resolved`;
-    await this.createNotification(userId, 'COMPLAINT_RESOLVED', message, complaintId);
+    await this.createNotification(userId, 'COMPLAINT_RESOLVED', message, complaintId, sendEmailNotification);
   }
 }

@@ -37,6 +37,13 @@ enum SubjectCategory {
   ENRICHMENT
 }
 
+enum GradeBandTier {
+  PRESCHOOL_TO_G1
+  G2_TO_G4
+  G5_TO_G8
+  G9_TO_G12
+}
+
 enum SessionFrequency {
   WEEKLY
   BI_WEEKLY
@@ -61,6 +68,13 @@ enum SessionStatus {
   COMPLETED
   MISSED
   CANCELLED
+}
+
+enum RecordingStatus {
+  NONE
+  PROCESSING
+  AVAILABLE
+  FAILED
 }
 
 enum PaymentProvider {
@@ -105,6 +119,7 @@ model User {
   createdAssignments Assignment[]  @relation("AssignmentCreator")
   createdGrades     Grade[]       @relation("GradeGrader")
   approvedGrades    Grade[]       @relation("GradeApprover")
+  pricingTiersUpdated PricingTier[]
   notifications     Notification[]
 
   @@index([email])
@@ -130,23 +145,26 @@ model TutorProfile {
 }
 
 model Student {
-  id          String   @id @default(uuid())
+  id          String       @id @default(uuid())
   parentId    String
-  userId      String   @unique
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String       @unique
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   fullName    String
   dateOfBirth DateTime
   gradeLevel  String
+  gradeBandTier GradeBandTier @default(G5_TO_G8)
   school      String?
   notes       String?
   deletedAt   DateTime?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime     @default(now())
 
   enrollments        Enrollment[]
+  quizAttempts       QuizAttempt[]
 
   @@index([parentId])
   @@index([userId])
   @@index([deletedAt])
+  @@index([gradeBandTier])
 }
 
 model Subject {
@@ -171,7 +189,9 @@ model Enrollment {
   tutor             User?            @relation("TutorEnrollments", fields: [tutorId], references: [id])
   sessionFrequency  SessionFrequency
   billingFrequency BillingFrequency @default(YEARLY)
-  yearlyPrice       Decimal          @db.Decimal(10, 2)
+  yearlyPrice       Decimal          @db.Decimal(10, 2) // Legacy field, will be migrated
+  yearlyPriceNGN    Decimal?         @db.Decimal(10, 2) // Override price in NGN
+  yearlyPriceUSD    Decimal?         @db.Decimal(10, 2) // Override price in USD
   status            EnrollmentStatus @default(ACTIVE)
   startDate         DateTime
   endDate           DateTime?
@@ -198,6 +218,9 @@ model Session {
   scheduledAt     DateTime
   durationMinutes Int
   zoomLink        String?
+  zoomMeetingId   String?
+  recordingUrl    String?
+  recordingStatus RecordingStatus @default(NONE)
   status          SessionStatus @default(SCHEDULED)
   tutorNotes      String?
   homeworkAssigned String?
@@ -208,6 +231,7 @@ model Session {
   @@index([tutorId])
   @@index([scheduledAt])
   @@index([status])
+  @@index([zoomMeetingId])
 }
 
 model SessionParticipant {
@@ -292,6 +316,8 @@ model Assignment {
   updatedAt    DateTime      @updatedAt
 
   grades Grade[]
+  quizQuestions QuizQuestion[]
+  quizAttempts QuizAttempt[]
 
   @@index([enrollmentId])
   @@index([createdBy])
@@ -361,6 +387,7 @@ enum NotificationType {
   GRADE_APPROVED
   COMPLAINT_RESOLVED
   GENERAL
+  PRICING_DRIFT_ALERT
 }
 
 model Complaint {
@@ -419,4 +446,83 @@ model Otp {
   @@index([email])
   @@index([otpHash])
   @@index([expiresAt])
+}
+
+model PricingTier {
+  id              String       @id @default(uuid())
+  gradeBandTier   GradeBandTier @unique
+  yearlyPriceNGN  Decimal      @db.Decimal(10, 2)
+  yearlyPriceUSD  Decimal      @db.Decimal(10, 2)
+  updatedAt       DateTime     @updatedAt
+  updatedBy       String
+  updater         User         @relation(fields: [updatedBy], references: [id], onDelete: SetNull)
+
+  @@index([gradeBandTier])
+}
+
+model ExchangeRate {
+  id         String   @id @default(uuid())
+  fromCurrency String
+  toCurrency String
+  rate       Decimal  @db.Decimal(10, 6)
+  fetchedAt  DateTime @default(now())
+
+  @@unique([fromCurrency, toCurrency])
+  @@index([fromCurrency])
+  @@index([toCurrency])
+}
+
+model QuizQuestion {
+  id                String   @id @default(uuid())
+  assignmentId      String
+  assignment        Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  questionText      String
+  options           Json     // Array of strings
+  correctOptionIndex Int
+  points            Decimal  @db.Decimal(10, 2)
+  orderIndex        Int
+  createdAt         DateTime @default(now())
+
+  responses QuizResponse[]
+
+  @@index([assignmentId])
+}
+
+model QuizAttempt {
+  id          String          @id @default(uuid())
+  assignmentId String
+  assignment  Assignment      @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  studentId   String
+  student     Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  status      QuizAttemptStatus @default(IN_PROGRESS)
+  totalScore  Decimal?        @db.Decimal(10, 2)
+  startedAt   DateTime        @default(now())
+  completedAt DateTime?
+
+  responses QuizResponse[]
+
+  @@index([assignmentId])
+  @@index([studentId])
+  @@index([status])
+}
+
+model QuizResponse {
+  id                  String   @id @default(uuid())
+  attemptId           String
+  attempt             QuizAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId          String
+  question            QuizQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  selectedOptionIndex Int
+  isCorrect           Boolean
+  timeTakenSeconds    Int
+  pointsAwarded       Decimal  @db.Decimal(10, 2)
+  createdAt           DateTime @default(now())
+
+  @@index([attemptId])
+  @@index([questionId])
+}
+
+enum QuizAttemptStatus {
+  IN_PROGRESS
+  COMPLETED
 }

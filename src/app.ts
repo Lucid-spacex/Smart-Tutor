@@ -22,6 +22,8 @@ import gradesRoutes from './modules/grades/grades.routes';
 import notificationsRoutes from './modules/notifications/notifications.routes';
 import complaintsRoutes from './modules/complaints/complaints.routes';
 import messagesRoutes from './modules/messages/messages.routes';
+import webhooksRoutes from './modules/webhooks/webhooks.routes';
+import quizRoutes from './modules/quiz/quiz.routes';
 import { initializeScheduler } from './jobs/scheduler';
 
 dotenv.config();
@@ -34,6 +36,12 @@ app.use(express.urlencoded({ extended: true }));
 
 // Raw body parser for webhook signature verification
 app.use('/payments/webhook', express.raw({ type: 'application/json' }), (req, res, next) => {
+  (req as any).rawBody = req.body;
+  req.body = JSON.parse(req.body.toString());
+  next();
+});
+
+app.use('/webhooks/zoom', express.raw({ type: 'application/json' }), (req, res, next) => {
   (req as any).rawBody = req.body;
   req.body = JSON.parse(req.body.toString());
   next();
@@ -104,6 +112,8 @@ app.use('/grades', gradesRoutes);
 app.use('/notifications', notificationsRoutes);
 app.use('/complaints', complaintsRoutes);
 app.use('/messages', messagesRoutes);
+app.use('/webhooks', webhooksRoutes);
+app.use('/quiz', quizRoutes);
 
 // Error handling middleware (must be last)
 app.use(errorHandler);

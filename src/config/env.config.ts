@@ -20,10 +20,19 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   ALLOWED_ORIGINS: z.string().optional(),
 
-  // Email/OTP (for future implementation)
-  EMAIL_SERVICE: z.string().optional(),
-  EMAIL_USER: z.string().optional(),
-  EMAIL_PASSWORD: z.string().optional(),
+  // Email (Resend)
+  RESEND_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().default('Smart-Tutor <noreply@smarttutor.com>'),
+
+  // Exchange Rate API
+  EXCHANGERATE_API_KEY: z.string().optional(),
+  PRICING_DRIFT_THRESHOLD_PERCENT: z.string().default('7'),
+
+  // Zoom
+  ZOOM_ACCOUNT_ID: z.string().optional(),
+  ZOOM_CLIENT_ID: z.string().optional(),
+  ZOOM_CLIENT_SECRET: z.string().optional(),
+  ZOOM_WEBHOOK_SECRET: z.string().optional(),
 });
 
 // Validate and parse environment variables

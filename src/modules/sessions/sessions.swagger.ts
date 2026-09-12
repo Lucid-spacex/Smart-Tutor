@@ -99,6 +99,15 @@
  *         zoomLink:
  *           type: string
  *           nullable: true
+ *         zoomMeetingId:
+ *           type: string
+ *           nullable: true
+ *         recordingUrl:
+ *           type: string
+ *           nullable: true
+ *         recordingStatus:
+ *           type: string
+ *           enum: [NONE, PROCESSING, AVAILABLE, FAILED]
  *         status:
  *           type: string
  *           enum: [SCHEDULED, COMPLETED, MISSED, CANCELLED]

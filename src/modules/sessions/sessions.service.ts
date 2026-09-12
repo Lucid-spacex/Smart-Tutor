@@ -48,6 +48,7 @@ export class SessionsService {
           scheduledAt: new Date(data.scheduledAt),
           durationMinutes: data.durationMinutes,
           zoomLink: data.zoomLink,
+          zoomMeetingId: data.zoomMeetingId,
           status: 'SCHEDULED',
         },
       });

@@ -14,6 +14,24 @@ const options = {
         description: 'Development server',
       },
     ],
+    tags: [
+      {
+        name: 'Auth',
+        description: 'Authentication and user registration',
+      },
+      {
+        name: 'Admin - Pricing',
+        description: 'Admin pricing tier management and exchange rate monitoring',
+      },
+      {
+        name: 'Quiz',
+        description: 'Timed quiz mode for assignments',
+      },
+      {
+        name: 'Webhooks',
+        description: 'External webhook integrations (Zoom, etc.)',
+      },
+    ],
     components: {
       securitySchemes: {
         bearerAuth: {

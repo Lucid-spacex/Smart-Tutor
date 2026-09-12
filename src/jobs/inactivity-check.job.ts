@@ -1,5 +1,6 @@
 import prisma from '../config/database';
 import { logger } from '../config/logger';
+import { sendSuspensionEmail } from '../utils/email.util';
 
 /**
  * Daily job: Inactivity check for PARENT accounts
@@ -45,6 +46,15 @@ export async function runParentInactivityCheck(): Promise<{ suspendedCount: numb
       await prisma.refreshToken.deleteMany({
         where: { userId: parent.id },
       });
+
+      // Send suspension email to parent
+      if (parent.email && parent.fullName) {
+        await sendSuspensionEmail(
+          parent.email,
+          parent.fullName,
+          'Your account has been automatically suspended because no child enrollment was created within 7 days of registration. Please contact support to reactivate your account.'
+        );
+      }
 
       suspendedCount++;
       logger.info(

@@ -44,11 +44,27 @@ A production-quality backend for a tutoring organization platform. Parents creat
 - Enrollment management (assign tutors)
 - Payment monitoring
 - Overview reports with aggregate statistics
+- **Pricing tier management** (grade-based pricing with per-student overrides)
+- **Exchange rate monitoring** (drift alerts for pricing adjustments)
+- Zoom recording management
 
 ### Payment System
 - Payment provider abstraction (Paystack stub implementation)
 - Webhook processing
 - Payment status tracking
+- **Tiered pricing** (grade-based default prices with per-student overrides)
+- **Exchange rate monitoring** (daily drift alerts for pricing adjustments)
+
+### Quiz Mode
+- **Timed multiple-choice quizzes** for TEST-type assignments
+- Server-side scoring with speed multiplier (30s max per question)
+- Instant feedback per question
+- Auto-graded with admin approval workflow
+
+### Zoom Integration
+- **Recording sync** via webhook (preferred) or polling (fallback)
+- Recording URLs surfaced in session details
+- Signature verification for webhook security
 
 ## Project Structure
 
@@ -64,7 +80,24 @@ Smart-Tutor/
 │   │   ├── progress-reports/ # Progress reports
 │   │   ├── tutor/         # Tutor-specific endpoints
 │   │   ├── admin/         # Admin-specific endpoints
-│   │   └── parent/        # Parent-specific endpoints
+│   │   ├── parent/        # Parent-specific endpoints
+│   │   ├── quiz/          # Quiz mode for assignments
+│   │   ├── webhooks/      # External webhook integrations
+│   │   ├── assignments/   # Assignment management
+│   │   ├── grades/        # Grade management
+│   │   ├── notifications/ # Notification system
+│   │   ├── complaints/    # Complaint management
+│   │   ├── messages/      # Messaging system
+│   │   ├── attendance/    # Attendance tracking
+│   │   └── subjects/      # Subject management
+│   ├── services/          # External service integrations
+│   │   └── zoom.service.ts # Zoom API integration
+│   ├── jobs/              # Scheduled background jobs
+│   │   ├── inactivity-check.job.ts
+│   │   ├── assignment-due.job.ts
+│   │   ├── exchange-rate-check.job.ts
+│   │   ├── zoom-recording-sync.job.ts
+│   │   └── scheduler.ts
 │   ├── middleware/        # Express middleware
 │   ├── config/           # Configuration files
 │   ├── utils/             # Utility functions
@@ -120,6 +153,20 @@ Smart-Tutor/
    # Paystack
    PAYSTACK_SECRET_KEY="your-paystack-secret-key"
    PAYSTACK_PUBLIC_KEY="your-paystack-public-key"
+
+   # Email (Resend)
+   RESEND_API_KEY="your-resend-api-key"
+   EMAIL_FROM="Smart-Tutor <noreply@smarttutor.com>"
+
+   # Exchange Rate API (for pricing drift monitoring)
+   EXCHANGERATE_API_KEY="your-exchangerate-api-key"
+   PRICING_DRIFT_THRESHOLD_PERCENT="7"
+
+   # Zoom (for recording sync)
+   ZOOM_ACCOUNT_ID="your-zoom-account-id"
+   ZOOM_CLIENT_ID="your-zoom-client-id"
+   ZOOM_CLIENT_SECRET="your-zoom-client-secret"
+   ZOOM_WEBHOOK_SECRET="your-zoom-webhook-secret"
 
    # Server
    PORT=3000
@@ -208,6 +255,22 @@ The application uses the following main entities:
 - `PATCH /admin/enrollments/:id/assign-tutor` - Assign tutor to enrollment
 - `GET /admin/payments/failed` - Get failed payments
 - `GET /admin/reports/overview` - Get overview statistics
+- `GET /admin/pricing-tiers` - Get pricing tiers with drift information
+- `PATCH /admin/pricing-tiers/:gradeBandTier` - Update pricing tier
+- `GET /admin/enrollments/:id/pricing` - Get enrollment pricing details
+- `PATCH /admin/enrollments/:id/pricing` - Set/clear enrollment pricing override
+- `GET /admin/exchange-rate/current` - Get current exchange rate
+
+### Quiz Mode (STUDENT/TUTOR)
+- `POST /quiz/assignments/:id/questions` - Create quiz question (TUTOR only)
+- `GET /quiz/assignments/:id/questions` - Get quiz questions
+- `POST /quiz/assignments/:id/quiz/start` - Start quiz attempt (STUDENT only)
+- `POST /quiz/quiz-attempts/:id/answer` - Submit quiz answer (STUDENT only)
+- `PATCH /quiz/quiz-attempts/:id/complete` - Complete quiz (STUDENT only)
+- `GET /quiz/quiz-attempts/:id` - Get quiz attempt details
+
+### Webhooks
+- `POST /webhooks/zoom` - Handle Zoom webhook events
 
 ## Testing
 

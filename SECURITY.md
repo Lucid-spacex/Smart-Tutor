@@ -57,6 +57,7 @@ Students do not authenticate with standard email/password. Instead, students aut
 | See a tutor's assigned students (no parent info) | — | ✅ (own only) | ✅ | — |
 | See parent details | ❌ (self only) | ❌ | ✅ | ❌ |
 | Set/override pricing | ❌ | ❌ | ✅ | ❌ |
+| View pricing tiers & exchange rates | ❌ | ❌ | ✅ | ❌ |
 | Approve/reject tutors | ❌ | ❌ | ✅ | ❌ |
 | File a complaint | ✅ | ✅ | — | ❌ |
 | Resolve a complaint | ❌ | ❌ | ✅ | ❌ |
@@ -67,6 +68,7 @@ Students do not authenticate with standard email/password. Instead, students aut
 | Message a Tutor (parent) or a Parent (tutor) | ❌ | ❌ | — | — |
 | View a student's attendance | ✅ (own child) | ✅ (assigned students only) | ✅ (all) | ✅ (own only) |
 | Mark session attendance | ❌ | ✅ (assigned session, on completion only) | ❌ | ❌ |
+| **Quiz Mode** (explicit RBAC carve-out) | ❌ | ✅ (create questions for own assignments) | ✅ | ✅ (start/answer/complete own quiz only) |
 
 ---
 
@@ -116,3 +118,50 @@ The platform enforces communication isolation via the single `canMessage(senderI
 
 - **Parent Inactivity Job**: Daily runner identifies `PARENT` accounts active > 7 days with 0 child enrollments and sets `status = SUSPENDED`.
 - **Assignment Due Alerts**: Daily runner creates notifications for pending assignments due within 48 hours or overdue, with built-in deduplication.
+- **Exchange Rate Monitoring**: Daily runner fetches current USD→NGN rate, computes pricing drift for all tiers and overrides, and creates admin notifications if drift exceeds threshold.
+- **Zoom Recording Sync**: Hourly runner polls Zoom API for completed sessions without recordings (fallback if webhook unavailable).
+
+---
+
+## 9. Quiz Mode Security (Explicit RBAC Carve-Out)
+
+Students are otherwise fully read-only, but quiz mode provides a **deliberate, narrow exception**:
+
+### Security Rules:
+- **Answer Submission Only**: Students may only submit structured answers (`selectedOptionIndex`, `timeTakenSeconds`) for their own in-progress quiz attempts. No open-ended content or arbitrary writes.
+- **Server-Side Scoring**: `isCorrect` and `pointsAwarded` are **never trusted from the client**. The server computes correctness by comparing `selectedOptionIndex` to the stored `correctOptionIndex`, and calculates points with a speed multiplier (30s max per question, 1.0→0.5 multiplier).
+- **Answer Leak Prevention**: Students fetching quiz questions **never receive `correctOptionIndex`** in the response. Only tutors and admins see the correct answer.
+- **Attempt Isolation**: Students can only access their own quiz attempts (`attempt.studentId === userId`). Tutors can access attempts for their own assignments. Admins can access all attempts.
+- **No Self-Grading Bypass**: Quiz completion creates a `Grade` record with `status: PENDING_APPROVAL`, same as any other grade. Auto-scoring does not bypass admin oversight.
+- **Prevent Retries**: Students cannot start a new attempt if they already have a completed attempt for the same assignment.
+
+---
+
+## 10. Pricing Tier Security
+
+### Tiered Pricing Architecture:
+- **Grade Band Tiers**: Default prices by grade band (PRESCHOOL_TO_G1, G2_TO_G4, G5_TO_G8, G9_TO_G12). Admin-configured only.
+- **Per-Student Overrides**: Individual enrollments can have override prices (`yearlyPriceNGN`, `yearlyPriceUSD` nullable fields). `null` values revert to tier default.
+- **Resolution Order**: Payment flow checks override first, then tier default. Fails clearly if neither exists—never silently defaults to zero.
+- **Exchange Rate Monitoring**: Purely informational. The system tracks market rate drift via a scheduled job and alerts admin via notifications if drift exceeds threshold. **Never auto-applies** rate changes to pricing.
+
+### Security Rules:
+- **Admin-Only Pricing**: All pricing endpoints (`GET /admin/pricing-tiers`, `PATCH /admin/pricing-tiers/:gradeBandTier`, `PATCH /admin/enrollments/:id/pricing`) require `ADMIN` role.
+- **Server-Side Amount Calculation**: `POST /payments/initiate` computes effective price server-side using the resolution order. Client-supplied amounts are ignored.
+- **No Student/Parent Pricing Visibility**: Pricing tiers and drift information are admin-only endpoints. Students/parents only see final payment amounts.
+- **Grade Band Auto-Mapping**: `Student.gradeBandTier` is auto-set from `gradeLevel` via a mapping function at creation. Admin can manually correct if needed.
+
+---
+
+## 11. Zoom Recording Security
+
+### Recording Sync Architecture:
+- **Webhook-First**: Preferred approach—Zoom `recording.completed` webhook triggers immediate recording URL storage. Webhook signature verified via HMAC before processing.
+- **Polling Fallback**: Hourly job checks completed sessions without recordings and polls Zoom API if webhook setup isn't feasible.
+- **No Video Rehosting**: Only the recording URL is stored. Videos remain hosted on Zoom's infrastructure. The platform links out to Zoom's hosted recording URL surfaced in the UI.
+
+### Security Rules:
+- **Webhook Signature Verification**: Zoom webhook signatures are verified using `ZOOM_WEBHOOK_SECRET` via HMAC before trusting any payload.
+- **Meeting ID Tracking**: Sessions store `zoomMeetingId` for recording lookup. This is set by admin when creating sessions.
+- **No Unauthorized Recording Access**: Recording URLs are included in session responses for completed sessions to authorized users (student's parent, assigned tutor, admin).
+- **Rate Limiting**: Zoom API polling is batched (50 sessions per run) to avoid overwhelming the API or triggering rate limits.

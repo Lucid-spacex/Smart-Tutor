@@ -4,7 +4,7 @@ import { ComplaintsController } from '../complaints/complaints.controller';
 import { validate, validateQuery } from '../../middleware/validation.middleware';
 import { authenticate, requireRole } from '../../middleware/auth.middleware';
 import { validateUUID } from '../../middleware/uuid-validation.middleware';
-import { updateTutorVettingSchema, assignTutorSchema, getTutorsQuerySchema, getStudentsQuerySchema, updateEnrollmentPricingSchema, createSessionSchema, rescheduleSessionSchema } from './admin.validation';
+import { updateTutorVettingSchema, assignTutorSchema, getTutorsQuerySchema, getStudentsQuerySchema, updateEnrollmentPricingSchema, updatePricingTierSchema, updateEnrollmentPricingOverrideSchema, createSessionSchema, rescheduleSessionSchema } from './admin.validation';
 import { resolveComplaintSchema } from '../complaints/complaints.validation';
 
 const router = Router();
@@ -18,9 +18,16 @@ router.patch('/tutors/:id/vetting', authenticate, requireRole('ADMIN'), validate
 
 // Enrollments & Pricing
 router.get('/enrollments/unmatched', authenticate, requireRole('ADMIN'), adminController.getUnmatchedEnrollments);
-router.get('/enrollments/:id/pricing', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.getEnrollmentPricing);
-router.patch('/enrollments/:id/pricing', authenticate, requireRole('ADMIN'), validateUUID('id'), validate(updateEnrollmentPricingSchema), adminController.updateEnrollmentPricing);
+router.get('/enrollments/:id/pricing', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.getEnrollmentPricingOverride);
+router.patch('/enrollments/:id/pricing', authenticate, requireRole('ADMIN'), validateUUID('id'), validate(updateEnrollmentPricingOverrideSchema), adminController.updateEnrollmentPricingOverride);
 router.patch('/enrollments/:id/assign-tutor', authenticate, requireRole('ADMIN'), validateUUID('id'), validate(assignTutorSchema), adminController.assignTutor);
+
+// Pricing Tiers
+router.get('/pricing-tiers', authenticate, requireRole('ADMIN'), adminController.getPricingTiers);
+router.patch('/pricing-tiers/:gradeBandTier', authenticate, requireRole('ADMIN'), validate(updatePricingTierSchema), adminController.updatePricingTier);
+
+// Exchange Rate
+router.get('/exchange-rate/current', authenticate, requireRole('ADMIN'), adminController.getCurrentExchangeRate);
 
 // Payments & Reports
 router.get('/payments/failed', authenticate, requireRole('ADMIN'), adminController.getFailedPayments);

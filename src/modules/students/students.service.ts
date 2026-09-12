@@ -1,11 +1,35 @@
 import prisma from '../../config/database';
 import { CreateStudentInput } from './students.validation';
 import { hashPassword } from '../../utils/password.util';
-import { sendStudentCredentialsEmail } from '../../utils/email.util';
+import { sendStudentCredentialsEmail, sendPasswordResetEmail } from '../../utils/email.util';
 import crypto from 'crypto';
 import { logger } from '../../config/logger';
+import { GradeBandTier } from '@prisma/client';
 
 export class StudentsService {
+  // Map grade level string to grade band tier
+  private mapGradeToBand(gradeLevel: string): GradeBandTier {
+    const normalizedGrade = gradeLevel.toLowerCase().trim();
+    
+    // Common patterns for preschool to grade 1
+    if (normalizedGrade.match(/^(preschool|pre-?k|kindergarten|kg|reception|nursery|grade\s*0|grade\s*1|g1|class\s*1|year\s*1)$/)) {
+      return 'PRESCHOOL_TO_G1';
+    }
+    
+    // Common patterns for grades 2-4
+    if (normalizedGrade.match(/^(grade\s*[2-4]|g[2-4]|class\s*[2-4]|year\s*[2-4])$/)) {
+      return 'G2_TO_G4';
+    }
+    
+    // Common patterns for grades 5-8
+    if (normalizedGrade.match(/^(grade\s*[5-8]|g[5-8]|class\s*[5-8]|year\s*[5-8]|middle\s*school|j(?:unior)?\s*high)$/)) {
+      return 'G5_TO_G8';
+    }
+    
+    // Default to high school for grades 9-12 and above
+    return 'G9_TO_G12';
+  }
+
   // Generate a unique student code (8+ alphanumeric characters, case-insensitive)
   private generateStudentCode(): string {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Remove confusing characters like I, 1, O, 0
@@ -70,6 +94,9 @@ export class StudentsService {
       },
     });
 
+    // Map grade level to grade band tier
+    const gradeBandTier = this.mapGradeToBand(data.gradeLevel);
+
     // Create the Student profile linked to the User account
     const student = await prisma.student.create({
       data: {
@@ -78,6 +105,7 @@ export class StudentsService {
         fullName: data.fullName,
         dateOfBirth: new Date(data.dateOfBirth),
         gradeLevel: data.gradeLevel,
+        gradeBandTier,
         school: data.school,
         notes: data.notes,
       },
@@ -205,11 +233,9 @@ export class StudentsService {
     });
 
     if (parent?.email && parent.fullName) {
-      await sendStudentCredentialsEmail(
+      await sendPasswordResetEmail(
         parent.email,
         parent.fullName,
-        student.fullName,
-        student.user.studentCode!,
         plainPassword
       );
     }

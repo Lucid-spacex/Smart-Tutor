@@ -111,8 +111,8 @@ export class ComplaintsService {
       },
     });
 
-    // Create notification for the filer
-    await this.notificationsService.createComplaintResolvedNotification(complaintId, complaint.filedBy);
+    // Create notification for the filer (with email)
+    await this.notificationsService.createComplaintResolvedNotification(complaintId, complaint.filedBy, true);
 
     return updatedComplaint;
   }

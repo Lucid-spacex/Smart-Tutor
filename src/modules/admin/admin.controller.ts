@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AdminService } from './admin.service';
-import { UpdateTutorVettingInput, AssignTutorInput, GetTutorsQuery, GetStudentsQuery, UpdateEnrollmentPricingInput } from './admin.validation';
+import { UpdateTutorVettingInput, AssignTutorInput, GetTutorsQuery, GetStudentsQuery, UpdateEnrollmentPricingInput, UpdatePricingTierInput, UpdateEnrollmentPricingOverrideInput } from './admin.validation';
 import { AuthRequest } from '../../middleware/auth.middleware';
 
 export class AdminController {
@@ -208,6 +208,69 @@ export class AdminController {
       const { id } = req.params;
       const user = await this.adminService.reactivateUser(id, adminId);
       res.status(200).json(user);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // Pricing Tier Management
+  getPricingTiers = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const tiers = await this.adminService.getPricingTiers();
+      res.status(200).json(tiers);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  updatePricingTier = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const adminId = req.user?.userId;
+      if (!adminId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { gradeBandTier } = req.params;
+      const data: UpdatePricingTierInput = req.body;
+      const tier = await this.adminService.updatePricingTier(gradeBandTier as any, data, adminId);
+      res.status(200).json(tier);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  updateEnrollmentPricingOverride = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const adminId = req.user?.userId;
+      if (!adminId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id } = req.params;
+      const data: UpdateEnrollmentPricingOverrideInput = req.body;
+      const enrollment = await this.adminService.updateEnrollmentPricingOverride(id, data, adminId);
+      res.status(200).json(enrollment);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getEnrollmentPricingOverride = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const pricing = await this.adminService.getEnrollmentPricingOverride(id);
+      res.status(200).json(pricing);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getCurrentExchangeRate = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const rate = await this.adminService.getCurrentExchangeRate();
+      res.status(200).json(rate);
     } catch (error) {
       next(error);
     }

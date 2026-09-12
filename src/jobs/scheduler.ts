@@ -1,6 +1,8 @@
 import cron from 'node-cron';
 import { runParentInactivityCheck } from './inactivity-check.job';
 import { runAssignmentDueNotifications } from './assignment-due.job';
+import { runExchangeRateCheck } from './exchange-rate-check.job';
+import { runZoomRecordingSync } from './zoom-recording-sync.job';
 import { logger } from '../config/logger';
 
 export function initializeScheduler(): void {
@@ -28,6 +30,26 @@ export function initializeScheduler(): void {
       await runAssignmentDueNotifications();
     } catch (error) {
       logger.error({ error }, 'Error in assignment due notification job');
+    }
+  });
+
+  // 3. Daily at 12:00 PM - Exchange rate monitoring and drift alerts
+  cron.schedule('0 12 * * *', async () => {
+    logger.info('Running scheduled job: Exchange Rate Check');
+    try {
+      await runExchangeRateCheck();
+    } catch (error) {
+      logger.error({ error }, 'Error in exchange rate check job');
+    }
+  });
+
+  // 4. Hourly - Zoom recording sync (polling fallback)
+  cron.schedule('0 * * * *', async () => {
+    logger.info('Running scheduled job: Zoom Recording Sync');
+    try {
+      await runZoomRecordingSync();
+    } catch (error) {
+      logger.error({ error }, 'Error in Zoom recording sync job');
     }
   });
 
