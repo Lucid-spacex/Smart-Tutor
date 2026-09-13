@@ -12,7 +12,7 @@ const envSchema = z.object({
   JWT_REFRESH_EXPIRY: z.string().default('7d'),
 
   // Paystack
-  PAYSTACK_SECRET_KEY: z.string().min(1, 'PAYSTACK_SECRET_KEY is required'),
+  PAYSTACK_SECRET_KEY: z.string().optional(),
   PAYSTACK_PUBLIC_KEY: z.string().optional(),
 
   // Server

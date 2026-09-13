@@ -25,6 +25,8 @@ import messagesRoutes from './modules/messages/messages.routes';
 import webhooksRoutes from './modules/webhooks/webhooks.routes';
 import quizRoutes from './modules/quiz/quiz.routes';
 import { initializeScheduler } from './jobs/scheduler';
+import { logger } from './config/logger';
+import { generalRateLimit } from './middleware/rate-limit.middleware';
 
 dotenv.config();
 
@@ -34,17 +36,13 @@ const app: Application = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Raw body parser for webhook signature verification
-app.use('/payments/webhook', express.raw({ type: 'application/json' }), (req, res, next) => {
-  (req as any).rawBody = req.body;
-  req.body = JSON.parse(req.body.toString());
-  next();
-});
-
-app.use('/webhooks/zoom', express.raw({ type: 'application/json' }), (req, res, next) => {
-  (req as any).rawBody = req.body;
-  req.body = JSON.parse(req.body.toString());
-  next();
+// Apply general rate limiting to all API routes (except health check and webhooks)
+app.use('/api', (req, res, next) => {
+  // Skip rate limiting for webhooks
+  if (req.path.startsWith('/webhooks')) {
+    return next();
+  }
+  generalRateLimit(req, res, next);
 });
 
 // CORS configuration
@@ -94,26 +92,26 @@ app.get('/health', async (req, res) => {
 app.use('/api-docs', swaggerUi.serve as any, swaggerUi.setup(swaggerSpec) as any);
 
 // API Routes
-app.use('/auth', authRoutes);
-app.use('/me', parentRoutes);
-app.use('/students', studentRoutes);
-app.use('/student', studentFacingRoutes);
-app.use('/enrollments', enrollmentRoutes);
-app.use('/sessions', sessionRoutes);
-app.use('/payments', paymentRoutes);
-app.use('/progress-reports', progressReportRoutes);
-app.use('/tutor', tutorRoutes);
-app.use('/tutor-profile', tutorRoutes);
-app.use('/admin', adminRoutes);
-app.use('/subjects', subjectsRoutes);
-app.use('/attendance', attendanceRoutes);
-app.use('/assignments', assignmentRoutes);
-app.use('/grades', gradesRoutes);
-app.use('/notifications', notificationsRoutes);
-app.use('/complaints', complaintsRoutes);
-app.use('/messages', messagesRoutes);
-app.use('/webhooks', webhooksRoutes);
-app.use('/quiz', quizRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/me', parentRoutes);
+app.use('/api/students', studentRoutes);
+app.use('/api/student', studentFacingRoutes);
+app.use('/api/enrollments', enrollmentRoutes);
+app.use('/api/sessions', sessionRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/progress-reports', progressReportRoutes);
+app.use('/api/tutor', tutorRoutes);
+app.use('/api/tutor-profile', tutorRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/subjects', subjectsRoutes);
+app.use('/api/attendance', attendanceRoutes);
+app.use('/api/assignments', assignmentRoutes);
+app.use('/api/grades', gradesRoutes);
+app.use('/api/notifications', notificationsRoutes);
+app.use('/api/complaints', complaintsRoutes);
+app.use('/api/messages', messagesRoutes);
+app.use('/api/webhooks', webhooksRoutes);
+app.use('/api/quiz', quizRoutes);
 
 // Error handling middleware (must be last)
 app.use(errorHandler);
@@ -124,10 +122,37 @@ initializeScheduler();
 const PORT = Number(config.PORT);
 
 if (process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`📚 API Documentation available at http://localhost:${PORT}/api-docs`);
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    logger.info(`🚀 Server running on port ${PORT}`);
+    logger.info(`📚 API Documentation available at http://localhost:${PORT}/api-docs`);
   });
+
+  // Graceful shutdown
+  const gracefulShutdown = async (signal: string) => {
+    logger.info(`${signal} received. Starting graceful shutdown...`);
+    
+    server.close(async () => {
+      logger.info('HTTP server closed');
+      
+      try {
+        await prisma.$disconnect();
+        logger.info('Database connection closed');
+        process.exit(0);
+      } catch (error) {
+        logger.error({ error }, 'Error during shutdown');
+        process.exit(1);
+      }
+    });
+
+    // Force shutdown after 10 seconds
+    setTimeout(() => {
+      logger.error('Forced shutdown after timeout');
+      process.exit(1);
+    }, 10000);
+  };
+
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 }
 
 export default app;

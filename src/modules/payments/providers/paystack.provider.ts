@@ -10,7 +10,7 @@ import { config } from '../../../config/env.config';
 import { logger } from '../../../config/logger';
 
 export class PaystackProvider implements PaymentProvider {
-  private secretKey: string;
+  private secretKey: string | undefined;
 
   constructor() {
     this.secretKey = config.PAYSTACK_SECRET_KEY;
@@ -22,7 +22,7 @@ export class PaystackProvider implements PaymentProvider {
    * Prevents fake webhook calls
    */
   private verifyWebhookSignature(signature: string | string[] | undefined, rawBody: string): boolean {
-    if (!signature) {
+    if (!signature || !this.secretKey) {
       return false;
     }
 
