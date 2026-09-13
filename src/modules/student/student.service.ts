@@ -77,7 +77,7 @@ export class StudentService {
       },
     });
 
-    return sessionParticipants.map(sp => ({
+    return sessionParticipants.map((sp: any) => ({
       sessionId: sp.sessionId,
       scheduledAt: sp.session.scheduledAt,
       durationMinutes: sp.session.durationMinutes,
