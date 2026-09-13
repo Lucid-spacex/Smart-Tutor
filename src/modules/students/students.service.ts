@@ -4,11 +4,10 @@ import { hashPassword } from '../../utils/password.util';
 import { sendStudentCredentialsEmail, sendPasswordResetEmail } from '../../utils/email.util';
 import crypto from 'crypto';
 import { logger } from '../../config/logger';
-import { GradeBandTier } from '@prisma/client';
 
 export class StudentsService {
   // Map grade level string to grade band tier
-  private mapGradeToBand(gradeLevel: string): GradeBandTier {
+  private mapGradeToBand(gradeLevel: string): 'PRESCHOOL_TO_G1' | 'G2_TO_G4' | 'G5_TO_G8' | 'G9_TO_G12' {
     const normalizedGrade = gradeLevel.toLowerCase().trim();
     
     // Common patterns for preschool to grade 1
@@ -60,7 +59,7 @@ export class StudentsService {
 
     while (!isUnique && attempts < maxAttempts) {
       code = this.generateStudentCode();
-      const existing = await prisma.user.findUnique({
+      const existing = await prisma.user.findFirst({
         where: { studentCode: code },
       });
       if (!existing) {
@@ -87,8 +86,8 @@ export class StudentsService {
       data: {
         fullName: data.fullName,
         passwordHash,
-        role: 'STUDENT',
-        status: 'ACTIVE',
+        role: 'STUDENT' as const,
+        status: 'ACTIVE' as const,
         studentCode,
         parentId,
       },
@@ -217,13 +216,13 @@ export class StudentsService {
 
     // Update the user's password
     await prisma.user.update({
-      where: { id: student.userId },
+      where: { id: student.user.id },
       data: { passwordHash },
     });
 
     // Revoke all refresh tokens for security
     await prisma.refreshToken.deleteMany({
-      where: { userId: student.userId },
+      where: { userId: student.user.id },
     });
 
     // Fetch parent separately (Student has no `parent` relation, only parentId scalar)
@@ -286,26 +285,26 @@ export class StudentsService {
     });
 
     // Calculate statistics
-    const totalSessions = enrollments.reduce((sum, e) => sum + e.sessionParticipants.length, 0);
+    const totalSessions = enrollments.reduce((sum, e) => sum + (e.sessionParticipants?.length || 0), 0);
     const attendedSessions = enrollments.reduce(
-      (sum, e) => sum + e.sessionParticipants.filter(sp => sp.attended === true).length,
+      (sum, e) => sum + (e.sessionParticipants?.filter((sp: any) => sp.attended === true).length || 0),
       0
     );
     const missedSessions = enrollments.reduce(
-      (sum, e) => sum + e.sessionParticipants.filter(sp => sp.attended === false).length,
+      (sum, e) => sum + (e.sessionParticipants?.filter((sp: any) => sp.attended === false).length || 0),
       0
     );
 
     const pendingAssignments = enrollments.reduce(
-      (sum, e) => sum + e.assignments.filter(a => a.status === 'PENDING').length,
+      (sum, e) => sum + (e.assignments?.filter((a: any) => a.status === 'PENDING').length || 0),
       0
     );
     const completedAssignments = enrollments.reduce(
-      (sum, e) => sum + e.assignments.filter(a => a.status === 'COMPLETED').length,
+      (sum, e) => sum + (e.assignments?.filter((a: any) => a.status === 'COMPLETED').length || 0),
       0
     );
 
-    const grades = enrollments.flatMap(e => e.grades);
+    const grades = enrollments.flatMap(e => e.grades || []);
     const averageScore = grades.length > 0
       ? grades.reduce((sum, g) => sum + Number(g.score), 0) / grades.length
       : 0;
@@ -329,10 +328,10 @@ export class StudentsService {
       },
       enrollments: enrollments.map(e => ({
         id: e.id,
-        subject: e.subject.name,
+        subject: e.subject?.name,
         tutor: e.tutor?.fullName,
         status: e.status,
-        sessionCount: e.sessionParticipants.length,
+        sessionCount: e.sessionParticipants?.length || 0,
       })),
     };
   }

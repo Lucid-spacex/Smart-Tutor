@@ -113,18 +113,7 @@ export class AdminService {
         status: 'ACTIVE',
       },
       include: {
-        student: {
-          include: {
-            parent: {
-              select: {
-                id: true,
-                fullName: true,
-                email: true,
-                phone: true,
-              },
-            },
-          },
-        },
+        student: true,
         subject: true,
       },
       orderBy: { createdAt: 'asc' },

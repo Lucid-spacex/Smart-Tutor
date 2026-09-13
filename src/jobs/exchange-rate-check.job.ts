@@ -23,7 +23,7 @@ export async function runExchangeRateCheck(): Promise<{ rateFetched: boolean; al
       throw new Error(`Exchange rate API failed: ${response.status}`);
     }
 
-    const data = await response.json();
+    const data = await response.json() as any;
     const marketRate = data.conversion_rates?.NGN;
     
     if (!marketRate) {

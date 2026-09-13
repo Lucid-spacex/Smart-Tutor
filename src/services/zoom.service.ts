@@ -47,7 +47,7 @@ export class ZoomService {
         throw new Error(`Zoom OAuth failed: ${response.status}`);
       }
 
-      const data = await response.json();
+      const data = await response.json() as any;
       return data.access_token;
     } catch (error) {
       logger.error({ error }, 'Failed to get Zoom access token');
@@ -83,7 +83,7 @@ export class ZoomService {
         throw new Error(`Zoom API failed: ${response.status}`);
       }
 
-      const data = await response.json();
+      const data = await response.json() as any;
       
       // Get the first recording URL (video/mp4)
       if (data.recording_files && data.recording_files.length > 0) {

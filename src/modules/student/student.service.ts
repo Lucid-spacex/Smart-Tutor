@@ -258,17 +258,15 @@ export class StudentService {
     // Get the student's effective timezone
     const studentUser = await prisma.user.findUnique({
       where: { id: userId },
-      select: { timezone: true, parentId: true },
     });
 
-    let effectiveTimezone = studentUser?.timezone;
+    let effectiveTimezone: string | null = studentUser?.timezone ?? null;
     if (!effectiveTimezone && studentUser?.parentId) {
       // Fall back to parent's timezone
       const parent = await prisma.user.findUnique({
         where: { id: studentUser.parentId },
-        select: { timezone: true },
       });
-      effectiveTimezone = parent?.timezone;
+      effectiveTimezone = parent?.timezone ?? null;
     }
 
     return {

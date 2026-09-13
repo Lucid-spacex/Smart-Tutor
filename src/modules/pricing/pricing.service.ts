@@ -45,7 +45,7 @@ export class PricingService {
 
     // Get current exchange rate
     const exchangeRate = await this.getCurrentExchangeRate();
-    const marketRate = exchangeRate?.rate || 0;
+    const marketRate = Number(exchangeRate?.rate || 0);
 
     // Calculate drift for each tier
     const tiersWithDrift = tiers.map(tier => {
@@ -71,7 +71,7 @@ export class PricingService {
    */
   async updatePricingTier(gradeBandTier: string, data: { yearlyPriceNGN?: number; yearlyPriceUSD?: number }, adminId: string) {
     const tier = await prisma.pricingTier.findUnique({
-      where: { gradeBandTier },
+      where: { gradeBandTier: gradeBandTier as any },
     });
 
     if (!tier) {
@@ -79,7 +79,7 @@ export class PricingService {
     }
 
     return prisma.pricingTier.update({
-      where: { gradeBandTier },
+      where: { gradeBandTier: gradeBandTier as any },
       data: {
         yearlyPriceNGN: data.yearlyPriceNGN !== undefined ? data.yearlyPriceNGN : tier.yearlyPriceNGN,
         yearlyPriceUSD: data.yearlyPriceUSD !== undefined ? data.yearlyPriceUSD : tier.yearlyPriceUSD,
@@ -170,7 +170,7 @@ export class PricingService {
       data: {
         yearlyPriceNGN: data.yearlyPriceNGN !== undefined ? data.yearlyPriceNGN : enrollment.yearlyPriceNGN,
         yearlyPriceUSD: data.yearlyPriceUSD !== undefined ? data.yearlyPriceUSD : enrollment.yearlyPriceUSD,
-        billingFrequency: data.billingFrequency || enrollment.billingFrequency,
+        billingFrequency: (data.billingFrequency || enrollment.billingFrequency) as any,
       },
     });
   }
@@ -204,7 +204,7 @@ export class PricingService {
         throw new Error('Failed to fetch exchange rate');
       }
 
-      const data = await response.json();
+      const data = await response.json() as any;
       const rate = data.rates?.NGN;
 
       if (!rate) {
@@ -258,7 +258,7 @@ export class PricingService {
 
     for (const tier of tiers) {
       const impliedRate = Number(tier.yearlyPriceNGN) / Number(tier.yearlyPriceUSD);
-      const driftPercentage = Math.abs((impliedRate - marketRate) / marketRate * 100);
+      const driftPercentage = Math.abs((impliedRate - Number(marketRate)) / Number(marketRate) * 100);
 
       if (driftPercentage > thresholdPercent) {
         // Create admin notification
@@ -300,7 +300,7 @@ export class PricingService {
 
     for (const enrollment of enrollmentsWithOverrides) {
       const impliedRate = Number(enrollment.yearlyPriceNGN) / Number(enrollment.yearlyPriceUSD);
-      const driftPercentage = Math.abs((impliedRate - marketRate) / marketRate * 100);
+      const driftPercentage = Math.abs((impliedRate - Number(marketRate)) / Number(marketRate) * 100);
 
       if (driftPercentage > thresholdPercent) {
         const admins = await prisma.user.findMany({

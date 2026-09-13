@@ -6,7 +6,7 @@ export class NotificationsService {
     const notification = await prisma.notification.create({
       data: {
         userId,
-        type,
+        type: type as any,
         message,
         relatedId,
         isRead: false,

@@ -110,7 +110,7 @@ export class AssignmentsService {
 
     return prisma.assignment.update({
       where: { id: assignmentId },
-      data: { status },
+      data: { status: status as any },
       include: {
         enrollment: {
           include: {
