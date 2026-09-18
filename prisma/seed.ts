@@ -114,6 +114,48 @@ async function main() {
   });
   console.log('✅ Subjects created (Math, Physics, Programming)');
 
+  // 5.5. Create Default Pricing Tiers for each grade band
+  const pricingTiers = [
+    {
+      gradeBandTier: 'PRESCHOOL_TO_G1',
+      yearlyPriceNGN: 150000, // NGN 150,000 per year
+      yearlyPriceUSD: 200,    // $200 per year
+    },
+    {
+      gradeBandTier: 'G2_TO_G4',
+      yearlyPriceNGN: 200000, // NGN 200,000 per year
+      yearlyPriceUSD: 250,    // $250 per year
+    },
+    {
+      gradeBandTier: 'G5_TO_G8',
+      yearlyPriceNGN: 250000, // NGN 250,000 per year
+      yearlyPriceUSD: 300,    // $300 per year
+    },
+    {
+      gradeBandTier: 'G9_TO_G12',
+      yearlyPriceNGN: 300000, // NGN 300,000 per year
+      yearlyPriceUSD: 400,    // $400 per year
+    },
+  ];
+
+  for (const tier of pricingTiers) {
+    await prisma.pricingTier.upsert({
+      where: { gradeBandTier: tier.gradeBandTier as any },
+      update: {
+        yearlyPriceNGN: tier.yearlyPriceNGN,
+        yearlyPriceUSD: tier.yearlyPriceUSD,
+        updatedBy: admin.id,
+      },
+      create: {
+        gradeBandTier: tier.gradeBandTier as any,
+        yearlyPriceNGN: tier.yearlyPriceNGN,
+        yearlyPriceUSD: tier.yearlyPriceUSD,
+        updatedBy: admin.id,
+      },
+    });
+  }
+  console.log('✅ Default pricing tiers created for all grade bands');
+
   // 6. Create Student User and Profile
   const studentUser = await prisma.user.upsert({
     where: { studentCode: 'STUDENT01' },
@@ -136,7 +178,9 @@ async function main() {
       userId: studentUser.id,
       fullName: 'Tommy Student',
       dateOfBirth: new Date('2012-05-15'),
+      actualGrade: 'GRADE_5' as any,
       gradeLevel: '5th Grade',
+      gradeBandTier: 'G5_TO_G8' as any,
       school: 'Lincoln Elementary School',
       notes: 'Enjoys math, needs help with word problems.',
     },
@@ -158,7 +202,10 @@ async function main() {
         studentId: student.id,
         subjectId: mathSubject.id,
         tutorId: tutor.id,
-        sessionFrequency: 'WEEKLY',
+        sessionFrequency: 'TWICE_WEEKLY' as any,
+        availableDays: ['MON', 'THU'],
+        preferredStartHour: 15,
+        preferredEndHour: 17,
         billingFrequency: 'MONTHLY',
         yearlyPrice: 1200.00,
         status: 'ACTIVE',

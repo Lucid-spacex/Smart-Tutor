@@ -57,7 +57,7 @@ export class PaymentsService {
         } else {
           const tier = enrollment.student.gradeBandTier
             ? await prisma.pricingTier.findUnique({
-                where: { gradeBandTier: enrollment.student.gradeBandTier },
+                where: { gradeBandTier: enrollment.student.gradeBandTier as any },
               })
             : null;
 
@@ -190,7 +190,7 @@ export class PaymentsService {
     } else {
       const tier = enrollment.student.gradeBandTier
         ? await prisma.pricingTier.findUnique({
-            where: { gradeBandTier: enrollment.student.gradeBandTier },
+            where: { gradeBandTier: enrollment.student.gradeBandTier as any },
           })
         : null;
 

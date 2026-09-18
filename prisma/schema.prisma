@@ -247,7 +247,7 @@ model Enrollment {
   preferredStartHour Int?
   preferredEndHour   Int?
   billingFrequency BillingFrequency @default(YEARLY)
-  yearlyPrice       Decimal          @db.Decimal(10, 2) // Legacy field, will be migrated
+  yearlyPrice       Decimal?         @db.Decimal(10, 2) // Legacy field, made optional
   yearlyPriceNGN    Decimal?         @db.Decimal(10, 2) // Override price in NGN
   yearlyPriceUSD    Decimal?         @db.Decimal(10, 2) // Override price in USD
   status            EnrollmentStatus @default(ACTIVE)

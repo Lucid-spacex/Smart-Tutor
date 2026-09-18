@@ -10,6 +10,7 @@ describe('Payments Security & Integrity Integration Tests', () => {
   let parentToken = '', parentId = '';
   let singleEnrollmentId = '';
   let groupEnrollmentGroupId = '';
+  let studentRecord: any;
   let testPassword = 'Password12345!';
   const paymentsService = new PaymentsService();
 
@@ -38,7 +39,7 @@ describe('Payments Security & Integrity Integration Tests', () => {
       },
     });
 
-    const studentRecord = await prisma.student.create({
+    studentRecord = await prisma.student.create({
       data: {
         parentId: parent.id,
         userId: studentUser.id,
@@ -66,7 +67,7 @@ describe('Payments Security & Integrity Integration Tests', () => {
       },
     });
 
-    // 1. Single Enrollment with yearlyPrice = 1200 and billingFrequency = MONTHLY
+    // 1. Single Enrollment with yearlyPrice override = 1200 and billingFrequency = MONTHLY
     // -> computed amount should be 1200 / 12 = 100.00
     const singleEnrollment = await prisma.enrollment.create({
       data: {
@@ -77,7 +78,8 @@ describe('Payments Security & Integrity Integration Tests', () => {
         preferredStartHour: 15,
         preferredEndHour: 17,
         billingFrequency: 'MONTHLY',
-        yearlyPrice: 1200.00,
+        yearlyPriceNGN: 1200.00,
+        yearlyPriceUSD: 1200.00,
         status: 'PAUSED',
         startDate: new Date(),
       },
@@ -97,7 +99,8 @@ describe('Payments Security & Integrity Integration Tests', () => {
         preferredStartHour: 15,
         preferredEndHour: 17,
         billingFrequency: 'MONTHLY',
-        yearlyPrice: 1200.00,
+        yearlyPriceNGN: 1200.00,
+        yearlyPriceUSD: 1200.00,
         status: 'PAUSED', // Start inactive to test webhook activation
         startDate: new Date(),
       },
@@ -113,7 +116,8 @@ describe('Payments Security & Integrity Integration Tests', () => {
         preferredStartHour: 15,
         preferredEndHour: 17,
         billingFrequency: 'MONTHLY',
-        yearlyPrice: 600.00,
+        yearlyPriceNGN: 600.00,
+        yearlyPriceUSD: 600.00,
         status: 'PAUSED', // Start inactive to test webhook activation
         startDate: new Date(),
       },
@@ -189,6 +193,45 @@ describe('Payments Security & Integrity Integration Tests', () => {
 
     expect(res.status).toBe(400);
     expect(res.body.details.some((d: any) => d.message.includes('not both'))).toBe(true);
+  });
+
+  it('POST /payments/initiate uses default pricing tier when no override is set', async () => {
+    // Create an enrollment without pricing override to test tier fallback
+    const testSubject = await prisma.subject.create({
+      data: {
+        name: `TierTest_Subject_${Date.now()}`,
+        gradeBand: 'K-12',
+        category: 'CORE',
+      },
+    });
+
+    const tierTestEnrollment = await prisma.enrollment.create({
+      data: {
+        studentId: studentRecord.id,
+        subjectId: testSubject.id,
+        sessionFrequency: 'TWICE_WEEKLY',
+        availableDays: ['MON', 'THU'],
+        preferredStartHour: 15,
+        preferredEndHour: 17,
+        billingFrequency: 'YEARLY',
+        // No yearlyPriceNGN or yearlyPriceUSD - should use tier default
+        status: 'PAUSED',
+        startDate: new Date(),
+      },
+    });
+
+    const res = await request(app)
+      .post('/payments/initiate')
+      .set('Authorization', `Bearer ${parentToken}`)
+      .send({
+        enrollmentId: tierTestEnrollment.id,
+        currency: 'USD',
+      });
+
+    expect(res.status).toBe(200);
+    // The student has gradeBandTier 'G2_TO_G4' which has default yearlyPriceUSD: 250
+    expect(res.body.computedAmount).toBe(250);
+    expect(res.body.displayAmountUSD).toBe(250);
   });
 
   it('Webhook success atomically activates all enrollments in an enrollment group', async () => {
