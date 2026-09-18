@@ -44,10 +44,40 @@ enum GradeBandTier {
   G9_TO_G12
 }
 
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
+// Structured grade level used for deterministic pricing-tier resolution.
+// gradeLevel (free text on Student) is retained for display/notes purposes.
+// actualGrade drives gradeBandTier mapping — see StudentsService.mapActualGradeToBand().
+enum ActualGrade {
+  PRESCHOOL
+  KINDERGARTEN
+  GRADE_1
+  GRADE_2
+  GRADE_3
+  GRADE_4
+  GRADE_5
+  GRADE_6
+  GRADE_7
+  GRADE_8
+  GRADE_9
+  GRADE_10
+  GRADE_11
+  GRADE_12
+}
+
+// BREAKING CHANGE (Phase 4): Old values WEEKLY|BI_WEEKLY|MONTHLY replaced by
+// actual weekly session counts. Migration maps all existing rows to TWICE_WEEKLY
+// as the default (see migration SQL in prisma/migrations/).
 enum SessionFrequency {
-  WEEKLY
-  BI_WEEKLY
-  MONTHLY
+  TWICE_WEEKLY
+  THRICE_WEEKLY
+  FIVE_TIMES_WEEKLY
 }
 
 enum BillingFrequency {
@@ -145,18 +175,33 @@ model TutorProfile {
 }
 
 model Student {
-  id          String       @id @default(uuid())
-  parentId    String
-  userId      String       @unique
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  fullName    String
-  dateOfBirth DateTime
-  gradeLevel  String
-  gradeBandTier GradeBandTier @default(G5_TO_G8)
-  school      String?
-  notes       String?
-  deletedAt   DateTime?
-  createdAt   DateTime     @default(now())
+  id                 String        @id @default(uuid())
+  parentId           String
+  userId             String        @unique
+  user               User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName           String
+  dateOfBirth        DateTime
+  // Structured enum — drives gradeBandTier resolution deterministically.
+  // When present, takes precedence over the legacy gradeLevel regex mapping.
+  actualGrade        ActualGrade?
+  // Free-text display field (e.g. "Springfield Elementary, Grade 5 repeated").
+  // Retained alongside actualGrade for supplementary notes — NOT deprecated.
+  gradeLevel         String
+  // Auto-derived from actualGrade (preferred) or gradeLevel (legacy fallback).
+  // Admin can manually correct if the auto-mapping is wrong.
+  gradeBandTier      GradeBandTier @default(G5_TO_G8)
+  gender             Gender?
+  // Contact/notification email for the student (e.g. CC on notifications).
+  // IMPORTANT: This is metadata ONLY. It is NOT a login credential.
+  // Login remains strictly: parent email + student code + student password.
+  email              String?
+  // Parent's intended start date, captured at profile creation before
+  // a specific enrollment/subject/tutor is finalised.
+  preferredStartDate DateTime?
+  school             String?
+  notes              String?
+  deletedAt          DateTime?
+  createdAt          DateTime      @default(now())
 
   enrollments        Enrollment[]
   quizAttempts       QuizAttempt[]
@@ -165,6 +210,7 @@ model Student {
   @@index([userId])
   @@index([deletedAt])
   @@index([gradeBandTier])
+  @@index([actualGrade])
 }
 
 model Subject {
@@ -181,6 +227,9 @@ model Subject {
 
 model Enrollment {
   id                String           @id @default(uuid())
+  // Shared across all subjects enrolled in one sitting.
+  // null for single-subject enrollments created outside a batch.
+  enrollmentGroupId String?          @db.Uuid
   studentId         String
   student           Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
   subjectId         String
@@ -188,6 +237,15 @@ model Enrollment {
   tutorId           String?
   tutor             User?            @relation("TutorEnrollments", fields: [tutorId], references: [id])
   sessionFrequency  SessionFrequency
+  // Days the parent is available, subset of MON|TUE|WED|THU|FRI|SAT|SUN.
+  // Count must match sessionFrequency: 2 for TWICE_WEEKLY, 3 for THRICE_WEEKLY,
+  // 5 for FIVE_TIMES_WEEKLY. Validated at the service layer.
+  availableDays     String[]
+  // Preferred session window in parent's OWN local timezone (stored as raw hours).
+  // DO NOT store a pre-converted "Nigeria time" copy — convert on demand using
+  // the parent's User.timezone to avoid stale values across DST changes.
+  preferredStartHour Int?
+  preferredEndHour   Int?
   billingFrequency BillingFrequency @default(YEARLY)
   yearlyPrice       Decimal          @db.Decimal(10, 2) // Legacy field, will be migrated
   yearlyPriceNGN    Decimal?         @db.Decimal(10, 2) // Override price in NGN
@@ -209,6 +267,7 @@ model Enrollment {
   @@index([tutorId])
   @@index([status])
   @@index([deletedAt])
+  @@index([enrollmentGroupId])
 }
 
 model Session {
@@ -251,8 +310,12 @@ model Payment {
   id               String        @id @default(uuid())
   parentId         String
   parent           User          @relation(fields: [parentId], references: [id], onDelete: Cascade)
-  enrollmentId     String
-  enrollment       Enrollment    @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  // Populated for single-enrollment payments. null for group payments.
+  enrollmentId     String?
+  enrollment       Enrollment?   @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  // Populated for multi-subject batch payments. null for single-enrollment payments.
+  // Exactly one of enrollmentId / enrollmentGroupId is non-null on any given row.
+  enrollmentGroupId String?      @db.Uuid
   amount           Decimal       @db.Decimal(10, 2)
   currency         String        @default("USD")
   provider         PaymentProvider
@@ -264,6 +327,7 @@ model Payment {
 
   @@index([parentId])
   @@index([enrollmentId])
+  @@index([enrollmentGroupId])
   @@index([status])
   @@index([provider])
   @@index([deletedAt])

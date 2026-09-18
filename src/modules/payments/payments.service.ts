@@ -11,15 +11,163 @@ export class PaymentsService {
   }
 
   async initiatePayment(parentId: string, data: InitiatePaymentInput) {
-    // Verify enrollment belongs to parent
+    // -------------------------------------------------------------------------
+    // Path A: Group Payment (data.enrollmentGroupId provided)
+    // -------------------------------------------------------------------------
+    if (data.enrollmentGroupId) {
+      const enrollments = await prisma.enrollment.findMany({
+        where: { enrollmentGroupId: data.enrollmentGroupId },
+        include: {
+          student: {
+            include: {
+              user: true,
+            },
+          },
+          subject: true,
+        },
+      });
+
+      if (!enrollments || enrollments.length === 0) {
+        throw new Error('Enrollment group not found');
+      }
+
+      // Verify all enrollments belong to the requesting parent
+      const unauthorized = enrollments.find((e) => e.student.parentId !== parentId);
+      if (unauthorized) {
+        throw new Error('Not authorized to make payment for this enrollment group');
+      }
+
+      let totalComputedAmountNGN = 0;
+      let totalComputedAmountUSD = 0;
+      const breakdown: Array<{
+        enrollmentId: string;
+        subjectName: string;
+        billingFrequency: string;
+        amountNGN: number;
+        amountUSD: number;
+      }> = [];
+
+      for (const enrollment of enrollments) {
+        let yearlyPriceNGN: number;
+        let yearlyPriceUSD: number;
+
+        if (enrollment.yearlyPriceNGN !== null && enrollment.yearlyPriceUSD !== null) {
+          yearlyPriceNGN = Number(enrollment.yearlyPriceNGN);
+          yearlyPriceUSD = Number(enrollment.yearlyPriceUSD);
+        } else {
+          const tier = enrollment.student.gradeBandTier
+            ? await prisma.pricingTier.findUnique({
+                where: { gradeBandTier: enrollment.student.gradeBandTier },
+              })
+            : null;
+
+          if (tier) {
+            yearlyPriceNGN = Number(tier.yearlyPriceNGN);
+            yearlyPriceUSD = Number(tier.yearlyPriceUSD);
+          } else if (enrollment.yearlyPrice && Number(enrollment.yearlyPrice) > 0) {
+            yearlyPriceUSD = Number(enrollment.yearlyPrice);
+            yearlyPriceNGN = Number(enrollment.yearlyPrice);
+          } else {
+            throw new Error(
+              `No pricing configured for enrollment ${enrollment.id} (${enrollment.subject.name}). Please contact admin.`
+            );
+          }
+        }
+
+        let subNGN = yearlyPriceNGN;
+        let subUSD = yearlyPriceUSD;
+
+        switch (enrollment.billingFrequency) {
+          case 'WEEKLY':
+            subNGN = yearlyPriceNGN / 52;
+            subUSD = yearlyPriceUSD / 52;
+            break;
+          case 'MONTHLY':
+            subNGN = yearlyPriceNGN / 12;
+            subUSD = yearlyPriceUSD / 12;
+            break;
+          case 'YEARLY':
+            break;
+        }
+
+        subNGN = Math.round(subNGN * 100) / 100;
+        subUSD = Math.round(subUSD * 100) / 100;
+
+        totalComputedAmountNGN += subNGN;
+        totalComputedAmountUSD += subUSD;
+
+        breakdown.push({
+          enrollmentId: enrollment.id,
+          subjectName: enrollment.subject.name,
+          billingFrequency: enrollment.billingFrequency,
+          amountNGN: subNGN,
+          amountUSD: subUSD,
+        });
+      }
+
+      totalComputedAmountNGN = Math.round(totalComputedAmountNGN * 100) / 100;
+      totalComputedAmountUSD = Math.round(totalComputedAmountUSD * 100) / 100;
+
+      if (totalComputedAmountNGN <= 0 || totalComputedAmountUSD <= 0) {
+        throw new Error('Invalid payment amount. Please contact admin to set pricing for these enrollments.');
+      }
+
+      const parent = await prisma.user.findUnique({
+        where: { id: parentId },
+      });
+
+      if (!parent || !parent.email) {
+        throw new Error('Parent not found or missing email');
+      }
+
+      const paymentResult = await this.paymentProvider.initiatePayment({
+        amount: totalComputedAmountNGN,
+        email: parent.email,
+        currency: 'NGN',
+        metadata: {
+          enrollmentGroupId: data.enrollmentGroupId,
+          parentId,
+          subjectCount: enrollments.length,
+          computedFromYearlyPriceNGN: totalComputedAmountNGN,
+          computedFromYearlyPriceUSD: totalComputedAmountUSD,
+        },
+      });
+
+      const payment = await prisma.payment.create({
+        data: {
+          parentId,
+          enrollmentGroupId: data.enrollmentGroupId,
+          enrollmentId: null,
+          amount: totalComputedAmountNGN,
+          currency: 'NGN',
+          provider: 'PAYSTACK',
+          providerReference: paymentResult.reference,
+          status: 'PENDING',
+        },
+      });
+
+      return {
+        payment,
+        ...paymentResult,
+        computedAmount: totalComputedAmountUSD,
+        displayAmountUSD: totalComputedAmountUSD,
+        chargedAmountNGN: totalComputedAmountNGN,
+        breakdown,
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // Path B: Single Enrollment Payment (data.enrollmentId provided)
+    // -------------------------------------------------------------------------
     const enrollment = await prisma.enrollment.findUnique({
-      where: { id: data.enrollmentId },
+      where: { id: data.enrollmentId! },
       include: {
         student: {
           include: {
             user: true,
           },
         },
+        subject: true,
       },
     });
 
@@ -32,26 +180,29 @@ export class PaymentsService {
     }
 
     // SECURITY: Compute amount server-side from tiered pricing
-    // Resolution order: override > tier default
+    // Resolution order: override > tier default > legacy yearlyPrice
     let yearlyPriceNGN: number;
     let yearlyPriceUSD: number;
 
-    // Check for override first
     if (enrollment.yearlyPriceNGN !== null && enrollment.yearlyPriceUSD !== null) {
       yearlyPriceNGN = Number(enrollment.yearlyPriceNGN);
       yearlyPriceUSD = Number(enrollment.yearlyPriceUSD);
     } else {
-      // Fall back to tier default
-      const tier = await prisma.pricingTier.findUnique({
-        where: { gradeBandTier: enrollment.student.gradeBandTier },
-      });
+      const tier = enrollment.student.gradeBandTier
+        ? await prisma.pricingTier.findUnique({
+            where: { gradeBandTier: enrollment.student.gradeBandTier },
+          })
+        : null;
 
-      if (!tier) {
+      if (tier) {
+        yearlyPriceNGN = Number(tier.yearlyPriceNGN);
+        yearlyPriceUSD = Number(tier.yearlyPriceUSD);
+      } else if (enrollment.yearlyPrice && Number(enrollment.yearlyPrice) > 0) {
+        yearlyPriceUSD = Number(enrollment.yearlyPrice);
+        yearlyPriceNGN = Number(enrollment.yearlyPrice);
+      } else {
         throw new Error('No pricing configured for this enrollment. Please contact admin.');
       }
-
-      yearlyPriceNGN = Number(tier.yearlyPriceNGN);
-      yearlyPriceUSD = Number(tier.yearlyPriceUSD);
     }
 
     // Calculate amount based on billing frequency
@@ -68,7 +219,6 @@ export class PaymentsService {
         computedAmountUSD = yearlyPriceUSD / 12;
         break;
       case 'YEARLY':
-        // Already yearly
         break;
     }
 
@@ -80,7 +230,6 @@ export class PaymentsService {
       throw new Error('Invalid payment amount. Please contact admin to set pricing for this enrollment.');
     }
 
-    // Get parent email
     const parent = await prisma.user.findUnique({
       where: { id: parentId },
     });
@@ -89,7 +238,6 @@ export class PaymentsService {
       throw new Error('Parent not found or missing email');
     }
 
-    // Initiate payment with provider using NGN amount (Paystack is Nigerian-focused)
     const paymentResult = await this.paymentProvider.initiatePayment({
       amount: computedAmountNGN,
       email: parent.email,
@@ -103,7 +251,6 @@ export class PaymentsService {
       },
     });
 
-    // Create payment record with NGN amount
     const payment = await prisma.payment.create({
       data: {
         parentId,
@@ -119,6 +266,7 @@ export class PaymentsService {
     return {
       payment,
       ...paymentResult,
+      computedAmount: computedAmountUSD,
       displayAmountUSD: computedAmountUSD,
       chargedAmountNGN: computedAmountNGN,
       billingFrequency: enrollment.billingFrequency,
@@ -143,13 +291,35 @@ export class PaymentsService {
       throw new Error('Payment not found');
     }
 
-    // Update payment status (idempotent - safe to retry)
-    const updatedPayment = await prisma.payment.update({
-      where: { id: payment.id },
-      data: {
-        status: webhookResult.status === 'success' ? 'SUCCESS' : 'FAILED',
-        paidAt: webhookResult.status === 'success' ? new Date() : null,
-      },
+    const isSuccess = webhookResult.status === 'success';
+
+    // Atomic transaction: update payment status AND activate enrollment(s)
+    const updatedPayment = await prisma.$transaction(async (tx) => {
+      const p = await tx.payment.update({
+        where: { id: payment.id },
+        data: {
+          status: isSuccess ? 'SUCCESS' : 'FAILED',
+          paidAt: isSuccess ? new Date() : null,
+        },
+      });
+
+      if (isSuccess) {
+        if (payment.enrollmentGroupId) {
+          // Atomically update ALL enrollments in the group to ACTIVE — no partial activation
+          await tx.enrollment.updateMany({
+            where: { enrollmentGroupId: payment.enrollmentGroupId },
+            data: { status: 'ACTIVE' },
+          });
+        } else if (payment.enrollmentId) {
+          // Single enrollment activation
+          await tx.enrollment.update({
+            where: { id: payment.enrollmentId },
+            data: { status: 'ACTIVE' },
+          });
+        }
+      }
+
+      return p;
     });
 
     return updatedPayment;

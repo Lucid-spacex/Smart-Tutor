@@ -26,7 +26,7 @@ import webhooksRoutes from './modules/webhooks/webhooks.routes';
 import quizRoutes from './modules/quiz/quiz.routes';
 import { initializeScheduler } from './jobs/scheduler';
 import { logger } from './config/logger';
-import { generalRateLimit } from './middleware/rate-limit.middleware';
+import { tier2WriteRateLimit, tier3ReadRateLimit } from './middleware/rate-limit.middleware';
 
 dotenv.config();
 
@@ -36,13 +36,32 @@ const app: Application = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Apply general rate limiting to all API routes (except health check and webhooks)
-app.use('/api', (req, res, next) => {
-  // Skip rate limiting for webhooks
-  if (req.path.startsWith('/webhooks')) {
+// Tiered rate limiting applied centrally.
+//
+// Tier 1 (Strict / 7 req per 15 min) is applied at the route level for:
+//   POST /auth/login|register|verify|resend-otp|student-login
+//   POST /payments/initiate
+//
+// Tier 2 (Moderate / 60 req per min) covers all other mutating operations
+// here. The Tier 1 routes will be reached first by their own limiter before
+// this block runs, so there's no double-counting.
+//
+// Tier 3 (Loose / 300 req per 15 min) covers all GET requests.
+app.use((req, res, next) => {
+  // Webhooks must always be reachable by Paystack / Zoom — skip entirely.
+  if (req.path.startsWith('/webhooks') || req.path.startsWith('/api/webhooks')) {
     return next();
   }
-  generalRateLimit(req, res, next);
+  // Swagger docs and health checks skip rate limiting
+  if (req.path.startsWith('/api-docs') || req.path === '/health') {
+    return next();
+  }
+  // GET requests → Tier 3 (loose read limit).
+  if (req.method === 'GET') {
+    return tier3ReadRateLimit(req, res, next);
+  }
+  // All other methods (POST, PATCH, PUT, DELETE) → Tier 2 (moderate write limit).
+  return tier2WriteRateLimit(req, res, next);
 });
 
 // CORS configuration
@@ -91,27 +110,32 @@ app.get('/health', async (req, res) => {
 // API Documentation
 app.use('/api-docs', swaggerUi.serve as any, swaggerUi.setup(swaggerSpec) as any);
 
-// API Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/me', parentRoutes);
-app.use('/api/students', studentRoutes);
-app.use('/api/student', studentFacingRoutes);
-app.use('/api/enrollments', enrollmentRoutes);
-app.use('/api/sessions', sessionRoutes);
-app.use('/api/payments', paymentRoutes);
-app.use('/api/progress-reports', progressReportRoutes);
-app.use('/api/tutor', tutorRoutes);
-app.use('/api/tutor-profile', tutorRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/subjects', subjectsRoutes);
-app.use('/api/attendance', attendanceRoutes);
-app.use('/api/assignments', assignmentRoutes);
-app.use('/api/grades', gradesRoutes);
-app.use('/api/notifications', notificationsRoutes);
-app.use('/api/complaints', complaintsRoutes);
-app.use('/api/messages', messagesRoutes);
-app.use('/api/webhooks', webhooksRoutes);
-app.use('/api/quiz', quizRoutes);
+// API Routes mounted at both /api and root for backwards compatibility with tests and clients
+const mountRoutes = (prefix: string = '') => {
+  app.use(`${prefix}/auth`, authRoutes);
+  app.use(`${prefix}/me`, parentRoutes);
+  app.use(`${prefix}/students`, studentRoutes);
+  app.use(`${prefix}/student`, studentFacingRoutes);
+  app.use(`${prefix}/enrollments`, enrollmentRoutes);
+  app.use(`${prefix}/sessions`, sessionRoutes);
+  app.use(`${prefix}/payments`, paymentRoutes);
+  app.use(`${prefix}/progress-reports`, progressReportRoutes);
+  app.use(`${prefix}/tutor`, tutorRoutes);
+  app.use(`${prefix}/tutor-profile`, tutorRoutes);
+  app.use(`${prefix}/admin`, adminRoutes);
+  app.use(`${prefix}/subjects`, subjectsRoutes);
+  app.use(`${prefix}/attendance`, attendanceRoutes);
+  app.use(`${prefix}/assignments`, assignmentRoutes);
+  app.use(`${prefix}/grades`, gradesRoutes);
+  app.use(`${prefix}/notifications`, notificationsRoutes);
+  app.use(`${prefix}/complaints`, complaintsRoutes);
+  app.use(`${prefix}/messages`, messagesRoutes);
+  app.use(`${prefix}/webhooks`, webhooksRoutes);
+  app.use(`${prefix}/quiz`, quizRoutes);
+};
+
+mountRoutes('/api');
+mountRoutes('');
 
 // Error handling middleware (must be last)
 app.use(errorHandler);

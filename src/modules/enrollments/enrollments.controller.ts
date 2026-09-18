@@ -68,4 +68,21 @@ export class EnrollmentsController {
       next(error);
     }
   };
+
+  getEnrollmentsByGroupId = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const userId = (req as any).user?.userId;
+      const userRole = (req as any).user?.role;
+      if (!userId || !userRole) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { groupId } = req.params;
+      const result = await this.enrollmentsService.getEnrollmentsByGroupId(groupId, userId, userRole);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
 }

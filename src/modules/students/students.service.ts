@@ -5,27 +5,61 @@ import { sendStudentCredentialsEmail, sendPasswordResetEmail } from '../../utils
 import crypto from 'crypto';
 import { logger } from '../../config/logger';
 
+// ActualGrade → GradeBandTier mapping.
+// This is the deterministic, authoritative mapping for pricing-tier resolution.
+// It replaces the legacy fuzzy regex for any student created with actualGrade set.
+const ACTUAL_GRADE_TO_BAND: Record<string, 'PRESCHOOL_TO_G1' | 'G2_TO_G4' | 'G5_TO_G8' | 'G9_TO_G12'> = {
+  PRESCHOOL:   'PRESCHOOL_TO_G1',
+  KINDERGARTEN:'PRESCHOOL_TO_G1',
+  GRADE_1:     'PRESCHOOL_TO_G1',
+  GRADE_2:     'G2_TO_G4',
+  GRADE_3:     'G2_TO_G4',
+  GRADE_4:     'G2_TO_G4',
+  GRADE_5:     'G5_TO_G8',
+  GRADE_6:     'G5_TO_G8',
+  GRADE_7:     'G5_TO_G8',
+  GRADE_8:     'G5_TO_G8',
+  GRADE_9:     'G9_TO_G12',
+  GRADE_10:    'G9_TO_G12',
+  GRADE_11:    'G9_TO_G12',
+  GRADE_12:    'G9_TO_G12',
+};
+
 export class StudentsService {
-  // Map grade level string to grade band tier
+  /**
+   * Deterministic mapping from ActualGrade enum to GradeBandTier.
+   * Used when actualGrade is provided — takes precedence over the legacy regex.
+   */
+  private mapActualGradeToBand(
+    actualGrade: string,
+  ): 'PRESCHOOL_TO_G1' | 'G2_TO_G4' | 'G5_TO_G8' | 'G9_TO_G12' {
+    const band = ACTUAL_GRADE_TO_BAND[actualGrade];
+    if (!band) {
+      // Should never happen if Zod validation passed, but guard anyway.
+      throw new Error(`Unknown actualGrade value: ${actualGrade}`);
+    }
+    return band;
+  }
+
+  /**
+   * Legacy fuzzy regex mapper \u2014 retained as fallback when actualGrade is absent.
+   * Used for backward compat with existing callers that only supply gradeLevel.
+   */
   private mapGradeToBand(gradeLevel: string): 'PRESCHOOL_TO_G1' | 'G2_TO_G4' | 'G5_TO_G8' | 'G9_TO_G12' {
     const normalizedGrade = gradeLevel.toLowerCase().trim();
-    
-    // Common patterns for preschool to grade 1
+
     if (normalizedGrade.match(/^(preschool|pre-?k|kindergarten|kg|reception|nursery|grade\s*0|grade\s*1|g1|class\s*1|year\s*1)$/)) {
       return 'PRESCHOOL_TO_G1';
     }
-    
-    // Common patterns for grades 2-4
+
     if (normalizedGrade.match(/^(grade\s*[2-4]|g[2-4]|class\s*[2-4]|year\s*[2-4])$/)) {
       return 'G2_TO_G4';
     }
-    
-    // Common patterns for grades 5-8
+
     if (normalizedGrade.match(/^(grade\s*[5-8]|g[5-8]|class\s*[5-8]|year\s*[5-8]|middle\s*school|j(?:unior)?\s*high)$/)) {
       return 'G5_TO_G8';
     }
-    
-    // Default to high school for grades 9-12 and above
+
     return 'G9_TO_G12';
   }
 
@@ -76,7 +110,10 @@ export class StudentsService {
   }
 
   async createStudent(parentId: string, data: CreateStudentInput) {
-    // Generate credentials for the student's login account
+    // Generate credentials for the student's login account.
+    // studentCode is always generated regardless of whether data.email is provided.
+    // The student contact email (data.email) is notification metadata only \u2014
+    // it does NOT become an alternate login credential.
     const studentCode = await this.getUniqueStudentCode();
     const plainPassword = this.generatePassword();
     const passwordHash = await hashPassword(plainPassword);
@@ -93,8 +130,12 @@ export class StudentsService {
       },
     });
 
-    // Map grade level to grade band tier
-    const gradeBandTier = this.mapGradeToBand(data.gradeLevel);
+    // Resolve gradeBandTier:
+    // 1. actualGrade (structured enum) \u2014 deterministic, authoritative for pricing.
+    // 2. gradeLevel (free text) \u2014 legacy fuzzy regex, used as fallback only.
+    const gradeBandTier = data.actualGrade
+      ? this.mapActualGradeToBand(data.actualGrade)
+      : this.mapGradeToBand(data.gradeLevel);
 
     // Create the Student profile linked to the User account
     const student = await prisma.student.create({
@@ -103,8 +144,12 @@ export class StudentsService {
         parentId,
         fullName: data.fullName,
         dateOfBirth: new Date(data.dateOfBirth),
+        actualGrade: data.actualGrade ?? null,
         gradeLevel: data.gradeLevel,
         gradeBandTier,
+        gender: data.gender ?? null,
+        email: data.email ?? null,
+        preferredStartDate: data.preferredStartDate ? new Date(data.preferredStartDate) : null,
         school: data.school,
         notes: data.notes,
       },
@@ -126,12 +171,17 @@ export class StudentsService {
       );
     }
 
-    logger.info({ parentId, studentId: student.id, studentCode }, 'Student created with credentials');
+    logger.info({ parentId, studentId: student.id, studentCode, gradeBandTier }, 'Student created with credentials');
 
     return {
       id: student.id,
       fullName: student.fullName,
-      studentCode, // Safe to return - it's a login identifier, not a secret
+      studentCode, // Safe to return \u2014 it's a login identifier, not a secret
+      actualGrade: student.actualGrade,
+      gradeBandTier: student.gradeBandTier,
+      gender: student.gender,
+      email: student.email,
+      preferredStartDate: student.preferredStartDate,
       // Never return the password
     };
   }
@@ -314,6 +364,8 @@ export class StudentsService {
         id: student.id,
         fullName: student.fullName,
         gradeLevel: student.gradeLevel,
+        actualGrade: student.actualGrade,
+        gradeBandTier: student.gradeBandTier,
       },
       statistics: {
         totalEnrollments: enrollments.length,

@@ -165,3 +165,73 @@ Students are otherwise fully read-only, but quiz mode provides a **deliberate, n
 - **Meeting ID Tracking**: Sessions store `zoomMeetingId` for recording lookup. This is set by admin when creating sessions.
 - **No Unauthorized Recording Access**: Recording URLs are included in session responses for completed sessions to authorized users (student's parent, assigned tutor, admin).
 - **Rate Limiting**: Zoom API polling is batched (50 sessions per run) to avoid overwhelming the API or triggering rate limits.
+
+---
+
+## 12. Rate Limiting Tiers
+
+Rate limiting is applied in **three separately-instanced tiers** based on risk level. A single blanket limit is intentionally avoided — it would throttle normal usage (dashboard loads, notification polling) while under-protecting the endpoints that actually need aggressive limits.
+
+### Tier 1 — Strict (7 requests / 15 minutes)
+
+**Applies to:**
+- `POST /auth/login`
+- `POST /auth/register`
+- `POST /auth/verify`
+- `POST /auth/resend-otp`
+- `POST /auth/student-login`
+- `POST /payments/initiate`
+
+**Key strategy:** `IP + identifying body field` (email for standard auth endpoints, `studentCode` for student login).
+
+**Why not IP-only:** Keying by IP alone would let a targeted attack on one specific account go undetected from a rotating IP, and would also lock out every other legitimate user behind the same NAT (school or office shared IP). The combined key gives each account its own counter bucket per IP, stopping both targeted attacks and NAT collateral damage.
+
+**Applied at:** Route level (`tier1AuthRateLimit` imported and applied per-route in `auth.routes.ts` and `payments.routes.ts`).
+
+---
+
+### Tier 2 — Moderate (60 requests / 1 minute)
+
+**Applies to:** All `POST / PATCH / PUT / DELETE` requests under `/api` not already covered by Tier 1 (creating students, submitting grades, sending messages, filing complaints, etc.).
+
+**Key strategy:** Authenticated `userId` where available; falls back to `req.ip` for unauthenticated writes.
+
+**Purpose:** Backstop against runaway scripts or client bugs. A real user doing normal actions should never approach 60 writes per minute.
+
+**Applied at:** Central `app.use('/api', ...)` middleware in `app.ts` (dispatched by HTTP method).
+
+---
+
+### Tier 3 — Loose (300 requests / 15 minutes)
+
+**Applies to:** All `GET` requests under `/api` (dashboard loads, list views, notification polling, etc.), including unauthenticated reads like `GET /subjects`.
+
+**Key strategy:** Authenticated `userId` where available; falls back to `req.ip`.
+
+**Purpose:** Anti-scraping / abuse backstop only. A real user clicking around a dashboard should never come close to 300 GETs in 15 minutes.
+
+**Applied at:** Central `app.use('/api', ...)` middleware in `app.ts` (dispatched by HTTP method).
+
+---
+
+### Webhook Exception
+
+`POST /api/webhooks/*` is **exempt from all rate limiting**. Paystack webhook retries must always reach the server regardless of other traffic patterns. Webhook authenticity is instead verified via HMAC signature.
+
+---
+
+### Headers
+
+All three tiers emit standard rate-limit headers on every response:
+- `RateLimit-Limit` — the maximum requests allowed in the window
+- `RateLimit-Remaining` — requests remaining in the current window
+- `RateLimit-Reset` — seconds until the window resets
+
+Legacy `X-RateLimit-*` headers are **disabled** across all tiers.
+
+---
+
+### Known Limitation — In-Memory Store
+
+All three limiters currently use `express-rate-limit`'s default `MemoryStore`. This is correct and sufficient for a single-instance deployment. **If/when the app scales to multiple server instances, limits will NOT be consistent across nodes** — each instance maintains its own counter. At that point, replace the store with a shared Redis-backed implementation (`rate-limit-redis` or `@upstash/ratelimit`) passed as the `store` option to each limiter. No other code changes are required.
+

@@ -10,6 +10,7 @@ const enrollmentsController = new EnrollmentsController();
 
 router.post('/', authenticate, requireRole('PARENT'), validate(createEnrollmentSchema), enrollmentsController.createEnrollment);
 router.get('/', authenticate, requireRole('PARENT', 'TUTOR'), validateQuery(getEnrollmentsQuerySchema), enrollmentsController.getEnrollments);
+router.get('/group/:groupId', authenticate, requireRole('PARENT', 'TUTOR', 'ADMIN'), validateUUID('groupId'), enrollmentsController.getEnrollmentsByGroupId);
 router.get('/:id', authenticate, requireRole('PARENT', 'TUTOR'), validateUUID('id'), enrollmentsController.getEnrollmentById);
 
 export default router;

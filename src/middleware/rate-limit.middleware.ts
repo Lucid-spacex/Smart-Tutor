@@ -1,93 +1,127 @@
 import rateLimit from 'express-rate-limit';
-import { config } from '../config/env.config';
+import { Request } from 'express';
+
+// ---------------------------------------------------------------------------
+// Rate Limiting — Three Tiers by Risk Level
+//
+// Each tier is a separate limiter instance applied to the relevant route group.
+// Do NOT collapse these into one configurable limiter with conditional logic —
+// that makes audit and reasoning much harder.
+//
+// NOTE — In-memory store limitation:
+// These limiters use express-rate-limit's default MemoryStore, which is correct
+// for a single-instance deployment. If/when the app scales to multiple server
+// instances, limits will NOT be consistent across nodes — each instance will
+// maintain its own counter. At that point, replace the store with a shared
+// Redis-backed store (e.g. `rate-limit-redis` or `@upstash/ratelimit`).
+// This is a known and accepted trade-off for the current single-instance setup.
+// ---------------------------------------------------------------------------
 
 /**
- * Rate limit configuration for authentication endpoints
- * Prevents brute force attacks and abuse
+ * Tier 1 — STRICT (7 req / 15 min)
+ *
+ * Applied to:
+ *   POST /auth/login
+ *   POST /auth/register
+ *   POST /auth/verify
+ *   POST /auth/resend-otp
+ *   POST /auth/student-login
+ *   POST /payments/initiate
+ *
+ * Key strategy: IP + the identifying body field (email for standard login,
+ * studentCode for student login). This combination:
+ *   - Catches someone hammering ONE specific account from a rotating/shared IP.
+ *   - Stops a single flagged IP from locking out ALL users behind a school or
+ *     office NAT (because each account gets its own counter bucket).
+ *
+ * Usage: import { tier1AuthRateLimit } from '...' and apply per-route.
  */
-export const authRateLimit = rateLimit({
+export const tier1AuthRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // Limit each IP to 5 requests per windowMs
-  message: 'Too many authentication attempts, please try again later.',
-  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-  skipSuccessfulRequests: false, // Count successful requests
-});
-
-/**
- * Rate limit for registration endpoint
- * Prevents registration spam
- */
-export const registerRateLimit = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 3, // Limit each IP to 3 registrations per hour
-  message: 'Too many registration attempts, please try again later.',
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-/**
- * Rate limit for OTP verification endpoint
- * Prevents OTP brute-forcing
- */
-export const otpRateLimit = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // Limit each IP to 10 OTP attempts per 15 minutes
-  message: 'Too many OTP attempts, please try again later.',
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-/**
- * Rate limit for OTP resend endpoint
- * Prevents SMS/email bombing
- */
-export const otpResendRateLimit = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 5, // Limit each IP to 5 OTP resends per hour
-  message: 'Too many OTP resend attempts, please try again later.',
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-/**
- * Rate limit for student login endpoint
- * More aggressive rate limiting for three-factor authentication
- * Prevents targeted brute-forcing of student credentials
- */
-export const studentLoginRateLimit = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // Limit each IP to 5 student login attempts per 15 minutes
-  message: 'Too many student login attempts, please try again later.',
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req) => {
-    // Rate limit by both IP and studentCode to prevent targeted attacks
-    const studentCode = req.body?.studentCode || 'unknown';
-    const ip = req.ip || 'unknown';
-    return `${ip}-${studentCode}`;
+  max: 7,
+  standardHeaders: true,  // Emit RateLimit-* headers (RFC 6585)
+  legacyHeaders: false,   // Disable X-RateLimit-* legacy headers
+  message: {
+    error: 'Too many attempts. Please wait 15 minutes before trying again.',
   },
+  keyGenerator: (req: Request): string => {
+    // Prefer email (standard login/register/verify/resend), then studentCode,
+    // then fall back to IP-only so the limiter always has a key.
+    const identifier =
+      req.body?.email ||
+      req.body?.studentCode ||
+      'unknown';
+    const ip = req.ip || 'unknown';
+    return `t1:${ip}:${identifier}`;
+  },
+  skipSuccessfulRequests: false,
+  validate: { keyGeneratorIpFallback: false },
 });
 
 /**
- * Rate limit for payment initiation
- * Prevents payment spam/abuse
+ * Tier 2 — MODERATE (60 req / 1 min)
+ *
+ * Applied to:
+ *   All non-GET, non-Tier-1 API routes (POST/PATCH/PUT/DELETE for creating
+ *   students, submitting grades, sending messages, filing complaints, etc.)
+ *
+ * Key strategy: authenticated userId where available; falls back to IP for
+ * any unauthenticated write (which should be rare given RBAC).
+ *
+ * Purpose: backstop against runaway scripts or bugs, not a user-facing limit.
+ * A real parent doing normal actions should never approach 60 writes/minute.
+ *
+ * Usage: applied centrally in app.ts on all mutating /api routes (after
+ * excluding auth and payment initiation which already have Tier 1).
  */
-export const paymentRateLimit = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 10, // Limit each IP to 10 payment initiations per hour
-  message: 'Too many payment attempts, please try again later.',
+export const tier2WriteRateLimit = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 60,
   standardHeaders: true,
   legacyHeaders: false,
+  message: {
+    error: 'Too many requests. Please slow down.',
+  },
+  keyGenerator: (req: Request): string => {
+    // req.user is set by authenticate() middleware for authenticated routes.
+    // Using 'any' cast because express-rate-limit's Request type doesn't know
+    // about our custom user property.
+    const userId = (req as any).user?.userId;
+    const key = userId ? `uid:${userId}` : `ip:${req.ip || 'unknown'}`;
+    return `t2:${key}`;
+  },
+  skipSuccessfulRequests: false,
+  validate: { keyGeneratorIpFallback: false },
 });
 
 /**
- * General API rate limit for all endpoints
+ * Tier 3 — LOOSE (300 req / 15 min)
+ *
+ * Applied to:
+ *   All GET requests under /api (dashboard loads, list views, notification
+ *   polling, etc.). Also covers unauthenticated reads like GET /subjects,
+ *   GET /health.
+ *
+ * Key strategy: authenticated userId where available; falls back to IP.
+ *
+ * Purpose: anti-scraping / abuse backstop only. A real user clicking around
+ *   a dashboard should never get close to 300 GETs in 15 minutes.
+ *
+ * Usage: applied centrally in app.ts on all GET /api routes.
  */
-export const generalRateLimit = rateLimit({
+export const tier3ReadRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per 15 minutes
-  message: 'Too many requests, please try again later.',
+  max: 300,
   standardHeaders: true,
   legacyHeaders: false,
+  message: {
+    error: 'Too many requests. Please try again later.',
+  },
+  keyGenerator: (req: Request): string => {
+    const userId = (req as any).user?.userId;
+    const key = userId ? `uid:${userId}` : `ip:${req.ip || 'unknown'}`;
+    return `t3:${key}`;
+  },
+  skipSuccessfulRequests: false,
+  validate: { keyGeneratorIpFallback: false },
 });
