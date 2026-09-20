@@ -206,11 +206,16 @@ export class PaystackProvider implements PaymentProvider {
       const verifyResponse = responseData as PaystackVerifyResponse;
       const status = verifyResponse.data?.status?.toLowerCase();
       
+      // Map Paystack status to our expected union type
+      const mappedStatus: 'success' | 'failed' | 'pending' = 
+        status === 'success' ? 'success' : 
+        status === 'failed' ? 'failed' : 'pending';
+      
       return {
         success: status === 'success',
         amount: verifyResponse.data?.amount || 0,
         currency: verifyResponse.data?.currency || 'NGN',
-        status: status || 'unknown',
+        status: mappedStatus,
       };
 
     } catch (error) {
