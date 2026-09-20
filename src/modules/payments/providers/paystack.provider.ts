@@ -9,6 +9,34 @@ import {
 import { config } from '../../../config/env.config';
 import { logger } from '../../../config/logger';
 
+// Paystack API response types
+interface PaystackInitializeResponse {
+  status: boolean;
+  message: string;
+  data: {
+    authorization_url: string;
+    access_code?: string;
+    reference: string;
+  };
+}
+
+interface PaystackVerifyResponse {
+  status: boolean;
+  message: string;
+  data: {
+    status: string;
+    reference: string;
+    amount: number;
+    currency: string;
+    [key: string]: any;
+  };
+}
+
+interface PaystackErrorResponse {
+  status: boolean;
+  message: string;
+}
+
 export class PaystackProvider implements PaymentProvider {
   private secretKey: string | undefined;
   private readonly PAYSTACK_API_URL = 'https://api.paystack.co';
@@ -97,10 +125,10 @@ export class PaystackProvider implements PaymentProvider {
         body: JSON.stringify(requestBody),
       });
 
-      const responseData = await response.json();
+      const responseData = await response.json() as PaystackInitializeResponse | PaystackErrorResponse;
 
       if (!response.ok) {
-        const error = responseData.message || responseData.message || 'Paystack API request failed';
+        const error = (responseData as PaystackErrorResponse).message || 'Paystack API request failed';
         logger.error({
           status: response.status,
           statusText: response.statusText,
@@ -111,7 +139,8 @@ export class PaystackProvider implements PaymentProvider {
         throw new Error(`Paystack API error: ${error}`);
       }
 
-      if (!responseData.data || !responseData.data.authorization_url) {
+      const successResponse = responseData as PaystackInitializeResponse;
+      if (!successResponse.data || !successResponse.data.authorization_url) {
         const error = 'Paystack API response missing authorization_url';
         logger.error({
           response: responseData,
@@ -123,14 +152,14 @@ export class PaystackProvider implements PaymentProvider {
 
       logger.info({
         reference,
-        authorizationUrl: responseData.data.authorization_url,
+        authorizationUrl: successResponse.data.authorization_url,
       }, 'Paystack payment initiated successfully');
 
       return {
         success: true,
         reference,
-        authorizationUrl: responseData.data.authorization_url,
-        message: responseData.message || 'Payment initiated successfully',
+        authorizationUrl: successResponse.data.authorization_url,
+        message: successResponse.message || 'Payment initiated successfully',
       };
 
     } catch (error) {
@@ -161,24 +190,26 @@ export class PaystackProvider implements PaymentProvider {
         },
       });
 
-      const responseData = await response.json();
+      const responseData = await response.json() as PaystackVerifyResponse | PaystackErrorResponse;
 
       if (!response.ok) {
+        const error = (responseData as PaystackErrorResponse).message;
         logger.error({
           status: response.status,
           reference,
-          error: responseData.message,
+          error,
         }, 'Paystack verification failed');
         
-        throw new Error(`Paystack verification failed: ${responseData.message}`);
+        throw new Error(`Paystack verification failed: ${error}`);
       }
 
-      const status = responseData.data?.status?.toLowerCase();
+      const verifyResponse = responseData as PaystackVerifyResponse;
+      const status = verifyResponse.data?.status?.toLowerCase();
       
       return {
         success: status === 'success',
-        amount: responseData.data?.amount || 0,
-        currency: responseData.data?.currency || 'NGN',
+        amount: verifyResponse.data?.amount || 0,
+        currency: verifyResponse.data?.currency || 'NGN',
         status: status || 'unknown',
       };
 
