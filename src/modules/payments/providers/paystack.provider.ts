@@ -11,10 +11,16 @@ import { logger } from '../../../config/logger';
 
 export class PaystackProvider implements PaymentProvider {
   private secretKey: string | undefined;
+  private readonly PAYSTACK_API_URL = 'https://api.paystack.co';
 
   constructor() {
     this.secretKey = config.PAYSTACK_SECRET_KEY;
-    logger.info('Paystack provider initialized');
+    
+    if (!this.secretKey) {
+      logger.warn('Paystack secret key not configured - payment initiation will fail');
+    } else {
+      logger.info('Paystack provider initialized with API key');
+    }
   }
 
   /**
@@ -40,31 +46,150 @@ export class PaystackProvider implements PaymentProvider {
   }
 
   async initiatePayment(data: PaymentInitiationData): Promise<PaymentInitiationResponse> {
-    // Stub implementation - in production, this would call Paystack API with this.secretKey
-    console.log(`[PAYSTACK STUB] Using secret key: ${this.secretKey ? 'configured' : 'not configured'}`);
-    console.log(`[PAYSTACK STUB] Initiating payment for ${data.email}: ${data.amount} ${data.currency || 'USD'}`);
+    // Validate API key is configured
+    if (!this.secretKey) {
+      const error = 'Paystack secret key not configured. Please set PAYSTACK_SECRET_KEY in environment variables.';
+      logger.error({ error }, 'Paystack payment initiation failed - missing API key');
+      throw new Error(error);
+    }
+
+    // Validate required fields
+    if (!data.email || !data.amount) {
+      const error = 'Missing required payment data: email and amount are required';
+      logger.error({ error, email: data.email, amount: data.amount }, 'Paystack payment initiation failed - invalid data');
+      throw new Error(error);
+    }
+
+    // Validate amount is positive
+    if (data.amount <= 0 || isNaN(data.amount)) {
+      const error = `Invalid payment amount: ${data.amount}. Amount must be a positive number.`;
+      logger.error({ error, amount: data.amount }, 'Paystack payment initiation failed - invalid amount');
+      throw new Error(error);
+    }
 
     const reference = this.generateReference();
+    const currency = data.currency || 'NGN';
 
-    return {
-      success: true,
-      reference,
-      authorizationUrl: `https://paystack.com/pay/${reference}`,
-      message: 'Payment initiated successfully',
-    };
+    try {
+      logger.info({
+        email: data.email,
+        amount: data.amount,
+        currency,
+        reference,
+      }, 'Initiating Paystack payment');
+
+      // Prepare Paystack API request
+      const requestBody = {
+        email: data.email,
+        amount: Math.round(data.amount * 100), // Convert to kobo/cents (smallest currency unit)
+        currency,
+        reference,
+        metadata: data.metadata || {},
+        callback_url: this.getCallbackUrl(),
+      };
+
+      const response = await fetch(`${this.PAYSTACK_API_URL}/transaction/initialize`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.secretKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+
+      const responseData = await response.json();
+
+      if (!response.ok) {
+        const error = responseData.message || responseData.message || 'Paystack API request failed';
+        logger.error({
+          status: response.status,
+          statusText: response.statusText,
+          error,
+          reference,
+        }, 'Paystack API request failed');
+        
+        throw new Error(`Paystack API error: ${error}`);
+      }
+
+      if (!responseData.data || !responseData.data.authorization_url) {
+        const error = 'Paystack API response missing authorization_url';
+        logger.error({
+          response: responseData,
+          reference,
+        }, 'Paystack API response invalid');
+        
+        throw new Error(error);
+      }
+
+      logger.info({
+        reference,
+        authorizationUrl: responseData.data.authorization_url,
+      }, 'Paystack payment initiated successfully');
+
+      return {
+        success: true,
+        reference,
+        authorizationUrl: responseData.data.authorization_url,
+        message: responseData.message || 'Payment initiated successfully',
+      };
+
+    } catch (error) {
+      logger.error({
+        error: error instanceof Error ? error.message : String(error),
+        reference,
+        email: data.email,
+        amount: data.amount,
+        currency,
+      }, 'Paystack payment initiation failed');
+      
+      throw error;
+    }
   }
 
   async verifyPayment(reference: string): Promise<PaymentVerificationResponse> {
-    // Stub implementation - in production, this would call Paystack API
-    console.log(`[PAYSTACK STUB] Verifying payment with reference: ${reference}`);
+    if (!this.secretKey) {
+      throw new Error('Paystack secret key not configured');
+    }
 
-    // For testing, return success
-    return {
-      success: true,
-      amount: 5000,
-      currency: 'USD',
-      status: 'success',
-    };
+    try {
+      logger.info({ reference }, 'Verifying Paystack payment');
+
+      const response = await fetch(`${this.PAYSTACK_API_URL}/transaction/verify/${reference}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${this.secretKey}`,
+        },
+      });
+
+      const responseData = await response.json();
+
+      if (!response.ok) {
+        logger.error({
+          status: response.status,
+          reference,
+          error: responseData.message,
+        }, 'Paystack verification failed');
+        
+        throw new Error(`Paystack verification failed: ${responseData.message}`);
+      }
+
+      const status = responseData.data?.status?.toLowerCase();
+      
+      return {
+        success: status === 'success',
+        amount: responseData.data?.amount || 0,
+        currency: responseData.data?.currency || 'NGN',
+        status: status || 'unknown',
+      };
+
+    } catch (error) {
+      logger.error({
+        error: error instanceof Error ? error.message : String(error),
+        reference,
+      }, 'Paystack payment verification failed');
+      
+      throw error;
+    }
   }
 
   async processWebhook(data: any, signature: string | string[] | undefined, rawBody: string): Promise<WebhookProcessingResult> {
@@ -107,5 +232,18 @@ export class PaystackProvider implements PaymentProvider {
 
   private generateReference(): string {
     return `pay_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  private getCallbackUrl(): string {
+    // In production, this should be configured via environment variable
+    // For now, use a sensible default or env var if available
+    const frontendUrl = process.env.FRONTEND_URL || process.env.ALLOWED_ORIGINS?.split(',')[0];
+    if (frontendUrl) {
+      return `${frontendUrl}/payment/callback`;
+    }
+    
+    // Fallback - this should be configured properly in production
+    logger.warn('No FRONTEND_URL or ALLOWED_ORIGINS configured - using default callback URL');
+    return 'https://your-frontend-domain.com/payment/callback';
   }
 }

@@ -15,6 +15,9 @@ const envSchema = z.object({
   PAYSTACK_SECRET_KEY: z.string().optional(),
   PAYSTACK_PUBLIC_KEY: z.string().optional(),
 
+  // Frontend
+  FRONTEND_URL: z.string().optional(),
+
   // Server
   PORT: z.string().default('3000'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),

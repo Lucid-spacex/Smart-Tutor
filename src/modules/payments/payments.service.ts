@@ -120,10 +120,14 @@ export class PaymentsService {
         throw new Error('Parent not found or missing email');
       }
 
+      // Use the requested currency (default to NGN) and corresponding amount
+      const requestedCurrency = data.currency || 'NGN';
+      const amountToSend = requestedCurrency === 'USD' ? totalComputedAmountUSD : totalComputedAmountNGN;
+
       const paymentResult = await this.paymentProvider.initiatePayment({
-        amount: totalComputedAmountNGN,
+        amount: amountToSend,
         email: parent.email,
-        currency: 'NGN',
+        currency: requestedCurrency,
         metadata: {
           enrollmentGroupId: data.enrollmentGroupId,
           parentId,
@@ -138,8 +142,8 @@ export class PaymentsService {
           parentId,
           enrollmentGroupId: data.enrollmentGroupId,
           enrollmentId: null,
-          amount: totalComputedAmountNGN,
-          currency: 'NGN',
+          amount: amountToSend,
+          currency: requestedCurrency,
           provider: 'PAYSTACK',
           providerReference: paymentResult.reference,
           status: 'PENDING',
@@ -152,6 +156,8 @@ export class PaymentsService {
         computedAmount: totalComputedAmountUSD,
         displayAmountUSD: totalComputedAmountUSD,
         chargedAmountNGN: totalComputedAmountNGN,
+        chargedAmount: amountToSend,
+        chargedCurrency: requestedCurrency,
         breakdown,
       };
     }
@@ -238,10 +244,14 @@ export class PaymentsService {
       throw new Error('Parent not found or missing email');
     }
 
+    // Use the requested currency (default to NGN) and corresponding amount
+    const requestedCurrency = data.currency || 'NGN';
+    const amountToSend = requestedCurrency === 'USD' ? computedAmountUSD : computedAmountNGN;
+
     const paymentResult = await this.paymentProvider.initiatePayment({
-      amount: computedAmountNGN,
+      amount: amountToSend,
       email: parent.email,
-      currency: 'NGN',
+      currency: requestedCurrency,
       metadata: {
         enrollmentId: data.enrollmentId,
         parentId,
@@ -255,8 +265,8 @@ export class PaymentsService {
       data: {
         parentId,
         enrollmentId: data.enrollmentId,
-        amount: computedAmountNGN,
-        currency: 'NGN',
+        amount: amountToSend,
+        currency: requestedCurrency,
         provider: 'PAYSTACK',
         providerReference: paymentResult.reference,
         status: 'PENDING',
@@ -269,6 +279,8 @@ export class PaymentsService {
       computedAmount: computedAmountUSD,
       displayAmountUSD: computedAmountUSD,
       chargedAmountNGN: computedAmountNGN,
+      chargedAmount: amountToSend,
+      chargedCurrency: requestedCurrency,
       billingFrequency: enrollment.billingFrequency,
     };
   }

@@ -14,6 +14,23 @@ describe('Payments Security & Integrity Integration Tests', () => {
   let testPassword = 'Password12345!';
   const paymentsService = new PaymentsService();
 
+  // Mock Paystack provider for testing (since we don't want real API calls in tests)
+  beforeAll(() => {
+    const { PaystackProvider } = require('../../src/modules/payments/providers/paystack.provider');
+    const originalInitiate = PaystackProvider.prototype.initiatePayment;
+    
+    PaystackProvider.prototype.initiatePayment = async function(data: any) {
+      console.log(`[MOCK PAYSTACK] Initiating payment for ${data.email}: ${data.amount} ${data.currency}`);
+      const reference = `test_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      return {
+        success: true,
+        reference,
+        authorizationUrl: `https://paystack.com/pay/${reference}`,
+        message: 'Payment initiated successfully (mock)',
+      };
+    };
+  });
+
   beforeAll(async () => {
     const passHash = await hashPassword(testPassword);
 
@@ -144,7 +161,10 @@ describe('Payments Security & Integrity Integration Tests', () => {
     // Verified: computed amount is $100.00 (1200 / 12)
     expect(res.body.computedAmount).toBe(100);
     expect(res.body.displayAmountUSD).toBe(100);
+    expect(res.body.chargedAmount).toBe(100);
+    expect(res.body.chargedCurrency).toBe('USD');
     expect(Number(res.body.payment.amount)).toBe(100);
+    expect(res.body.payment.currency).toBe('USD');
     expect(res.body.payment.enrollmentId).toBe(singleEnrollmentId);
     expect(res.body.payment.enrollmentGroupId).toBeNull();
   });
@@ -162,7 +182,10 @@ describe('Payments Security & Integrity Integration Tests', () => {
     // Verified: $100 (subject1) + $50 (subject2) = $150
     expect(res.body.computedAmount).toBe(150);
     expect(res.body.displayAmountUSD).toBe(150);
+    expect(res.body.chargedAmount).toBe(150);
+    expect(res.body.chargedCurrency).toBe('USD');
     expect(Number(res.body.payment.amount)).toBe(150);
+    expect(res.body.payment.currency).toBe('USD');
     expect(res.body.payment.enrollmentGroupId).toBe(groupEnrollmentGroupId);
     expect(res.body.payment.enrollmentId).toBeNull();
     expect(res.body.breakdown).toBeDefined();
@@ -232,6 +255,24 @@ describe('Payments Security & Integrity Integration Tests', () => {
     // The student has gradeBandTier 'G2_TO_G4' which has default yearlyPriceUSD: 250
     expect(res.body.computedAmount).toBe(250);
     expect(res.body.displayAmountUSD).toBe(250);
+    expect(res.body.chargedAmount).toBe(250);
+    expect(res.body.chargedCurrency).toBe('USD');
+  });
+
+  it('POST /payments/initiate handles NGN currency correctly', async () => {
+    const res = await request(app)
+      .post('/payments/initiate')
+      .set('Authorization', `Bearer ${parentToken}`)
+      .send({
+        enrollmentId: singleEnrollmentId,
+        currency: 'NGN',
+      });
+
+    expect(res.status).toBe(200);
+    // For NGN, should charge the NGN amount (1200 / 12 = 100 NGN)
+    expect(res.body.chargedAmount).toBe(100);
+    expect(res.body.chargedCurrency).toBe('NGN');
+    expect(res.body.payment.currency).toBe('NGN');
   });
 
   it('Webhook success atomically activates all enrollments in an enrollment group', async () => {
