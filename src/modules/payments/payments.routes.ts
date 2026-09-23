@@ -19,4 +19,8 @@ router.post('/webhook', paymentsController.processWebhook);
 // GET /payments — Tier 3 (Loose) via app.ts global read limiter.
 router.get('/', authenticate, requireRole('PARENT'), paymentsController.getPayments);
 
+// GET /payments/verify/:reference — Verify payment status by reference (public endpoint for callback)
+// No authentication required since this is called from Paystack callback
+router.get('/verify/:reference', paymentsController.verifyPayment);
+
 export default router;

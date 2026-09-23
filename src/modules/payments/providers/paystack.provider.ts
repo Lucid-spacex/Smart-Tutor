@@ -280,8 +280,8 @@ export class PaystackProvider implements PaymentProvider {
       return `${frontendUrl}/payment/callback`;
     }
     
-    // Fallback - this should be configured properly in production
+    // Fallback - using the actual frontend production URL
     logger.warn('No FRONTEND_URL or ALLOWED_ORIGINS configured - using default callback URL');
-    return 'https://smarttutor.com/payment/callback';
+    return 'https://teach-me-hub.vercel.app/payment/callback';
   }
 }

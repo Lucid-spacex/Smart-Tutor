@@ -361,4 +361,24 @@ export class PaymentsService {
       orderBy: { createdAt: 'desc' },
     });
   }
+
+  async verifyPaymentByReference(reference: string) {
+    const payment = await prisma.payment.findFirst({
+      where: { providerReference: reference },
+      include: {
+        enrollment: {
+          include: {
+            student: true,
+            subject: true,
+          },
+        },
+      },
+    });
+
+    if (!payment) {
+      throw new Error('Payment not found');
+    }
+
+    return payment;
+  }
 }

@@ -50,4 +50,19 @@ export class PaymentsController {
       next(error);
     }
   };
+
+  verifyPayment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { reference } = req.params;
+      if (!reference) {
+        res.status(400).json({ error: 'Reference is required' });
+        return;
+      }
+
+      const payment = await this.paymentsService.verifyPaymentByReference(reference);
+      res.status(200).json(payment);
+    } catch (error) {
+      next(error);
+    }
+  };
 }
