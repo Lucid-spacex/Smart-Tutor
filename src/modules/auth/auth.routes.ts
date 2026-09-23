@@ -2,19 +2,20 @@ import { Router } from 'express';
 import { AuthController } from './auth.controller';
 import { validate } from '../../middleware/validation.middleware';
 import { authenticate } from '../../middleware/auth.middleware';
-import { tier1AuthRateLimit } from '../../middleware/rate-limit.middleware';
+import { tier1AuthRateLimit, studentLoginRateLimit } from '../../middleware/rate-limit.middleware';
 import { registerSchema, verifySchema, loginSchema, studentLoginSchema, refreshSchema, resendOtpSchema, changePasswordSchema, timezoneSchema } from './auth.validation';
 
 const router = Router();
 const authController = new AuthController();
 
 // Tier 1 (Strict) rate limiting applied to all sensitive auth endpoints.
-// 7 requests per 15 minutes, keyed by IP + email/studentCode.
+// 7 requests per 15 minutes, keyed by IP + email.
 // See SECURITY.md §12 for rationale.
 router.post('/register', tier1AuthRateLimit, validate(registerSchema), authController.register);
 router.post('/verify', tier1AuthRateLimit, validate(verifySchema), authController.verify);
 router.post('/login', tier1AuthRateLimit, validate(loginSchema), authController.login);
-router.post('/student-login', tier1AuthRateLimit, validate(studentLoginSchema), authController.studentLogin);
+// Student login uses stricter rate limiting (5 req / 15 min) due to smaller PIN search space
+router.post('/student-login', studentLoginRateLimit, validate(studentLoginSchema), authController.studentLogin);
 router.post('/resend-otp', tier1AuthRateLimit, validate(resendOtpSchema), authController.resendOtp);
 
 // /refresh uses a separate flow (refresh token, not credentials) — Tier 2 via app.ts

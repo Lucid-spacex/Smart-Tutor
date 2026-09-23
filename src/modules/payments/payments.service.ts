@@ -318,16 +318,26 @@ export class PaymentsService {
       if (isSuccess) {
         if (payment.enrollmentGroupId) {
           // Atomically update ALL enrollments in the group to ACTIVE — no partial activation
+          // Only activate enrollments that are currently PENDING_PAYMENT
           await tx.enrollment.updateMany({
-            where: { enrollmentGroupId: payment.enrollmentGroupId },
+            where: { 
+              enrollmentGroupId: payment.enrollmentGroupId,
+              status: 'PENDING_PAYMENT',
+            },
             data: { status: 'ACTIVE' },
           });
         } else if (payment.enrollmentId) {
-          // Single enrollment activation
-          await tx.enrollment.update({
+          // Single enrollment activation - only if currently PENDING_PAYMENT
+          const enrollment = await tx.enrollment.findUnique({
             where: { id: payment.enrollmentId },
-            data: { status: 'ACTIVE' },
           });
+          
+          if (enrollment && enrollment.status === 'PENDING_PAYMENT') {
+            await tx.enrollment.update({
+              where: { id: payment.enrollmentId },
+              data: { status: 'ACTIVE' },
+            });
+          }
         }
       }
 

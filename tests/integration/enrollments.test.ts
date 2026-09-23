@@ -251,6 +251,8 @@ describe('Enrollment Flow Integration Tests', () => {
         expect(enr.availableDays).toEqual(['MON', 'THU']);
         expect(enr.preferredStartHour).toBe(15);
         expect(enr.preferredEndHour).toBe(17);
+        // Verify enrollment is created with PENDING_PAYMENT status
+        expect(enr.status).toBe('PENDING_PAYMENT');
       }
     });
 
@@ -288,7 +290,7 @@ describe('Enrollment Flow Integration Tests', () => {
         .get(`/enrollments/group/${createdGroupId}`)
         .set('Authorization', `Bearer ${otherParentToken}`);
 
-      expect(response.status).toBe(400);
+      expect(response.status).toBe(403);
       expect(response.body.error).toContain('Not authorized');
     });
   });

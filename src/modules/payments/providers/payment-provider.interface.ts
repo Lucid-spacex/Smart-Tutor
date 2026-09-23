@@ -14,6 +14,7 @@ export interface PaymentInitiationData {
 export interface PaymentInitiationResponse {
   success: boolean;
   reference: string;
+  accessCode?: string;
   authorizationUrl?: string;
   message?: string;
 }

@@ -34,7 +34,7 @@ export const createStudentSchema = z.object({
 
   // Structured grade field \u2014 drives gradeBandTier resolution deterministically.
   // Required when provided; takes precedence over gradeLevel for tier mapping.
-  actualGrade: z.enum(actualGradeValues).optional(),
+  actualGrade: z.enum(actualGradeValues),
 
   // Free-text display field kept for notes (e.g. "Springfield Elementary, Grade 5 repeated").
   // Still accepted for backward compat and used as fallback for gradeBandTier

@@ -25,11 +25,10 @@ import { Request } from 'express';
  *   POST /auth/register
  *   POST /auth/verify
  *   POST /auth/resend-otp
- *   POST /auth/student-login
  *   POST /payments/initiate
  *
- * Key strategy: IP + the identifying body field (email for standard login,
- * studentCode for student login). This combination:
+ * Key strategy: IP + the identifying body field (email for standard login/register/verify/resend).
+ * This combination:
  *   - Catches someone hammering ONE specific account from a rotating/shared IP.
  *   - Stops a single flagged IP from locking out ALL users behind a school or
  *     office NAT (because each account gets its own counter bucket).
@@ -45,14 +44,42 @@ export const tier1AuthRateLimit = rateLimit({
     error: 'Too many attempts. Please wait 15 minutes before trying again.',
   },
   keyGenerator: (req: Request): string => {
-    // Prefer email (standard login/register/verify/resend), then studentCode,
-    // then fall back to IP-only so the limiter always has a key.
-    const identifier =
-      req.body?.email ||
-      req.body?.studentCode ||
-      'unknown';
+    // Prefer email, then fall back to IP-only so the limiter always has a key.
+    const identifier = req.body?.email || 'unknown';
     const ip = req.ip || 'unknown';
     return `t1:${ip}:${identifier}`;
+  },
+  skipSuccessfulRequests: false,
+  validate: { keyGeneratorIpFallback: false },
+});
+
+/**
+ * Tier 1b — STUDENT LOGIN STRICT (5 req / 15 min)
+ *
+ * Applied to:
+ *   POST /auth/student-login
+ *
+ * Key strategy: IP + studentCode. Since student PINs are 6 digits (smaller search space),
+ * we use a stricter limit than standard auth.
+ *
+ * Purpose: Protect against brute force attacks on student accounts given the smaller
+ * credential space.
+ *
+ * Usage: import { studentLoginRateLimit } from '...' and apply to student-login route.
+ */
+export const studentLoginRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // Stricter than tier1 due to smaller PIN search space
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many login attempts. Please wait 15 minutes before trying again.',
+  },
+  keyGenerator: (req: Request): string => {
+    // Use studentCode as the identifier, fall back to IP
+    const identifier = req.body?.studentCode || 'unknown';
+    const ip = req.ip || 'unknown';
+    return `t1b:${ip}:${identifier}`;
   },
   skipSuccessfulRequests: false,
   validate: { keyGeneratorIpFallback: false },

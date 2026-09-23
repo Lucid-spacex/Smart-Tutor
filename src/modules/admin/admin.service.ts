@@ -14,15 +14,14 @@ export class AdminService {
   private sessionsService: SessionsService;
   private gradesService: GradesService;
 
-  // Generate a strong random password (12+ chars, mixed case + digits + symbol)
-  private generatePassword(): string {
-    const length = 12;
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
-    let password = '';
+  // Generate a 6-digit numeric PIN for student login
+  private generatePin(): string {
+    const length = 6;
+    let pin = '';
     for (let i = 0; i < length; i++) {
-      password += chars.charAt(Math.floor(Math.random() * chars.length));
+      pin += Math.floor(Math.random() * 10).toString();
     }
-    return password;
+    return pin;
   }
 
   constructor() {
@@ -106,12 +105,21 @@ export class AdminService {
     return updatedProfile;
   }
 
-  async getUnmatchedEnrollments() {
+  async getUnmatchedEnrollments(includeUnpaid: boolean = false) {
+    const where: any = {
+      tutorId: null,
+    };
+
+    // By default, exclude PENDING_PAYMENT enrollments from tutor assignment queue
+    if (!includeUnpaid) {
+      where.status = 'ACTIVE';
+    } else {
+      // When including unpaid, show both ACTIVE and PENDING_PAYMENT
+      where.status = { in: ['ACTIVE', 'PENDING_PAYMENT'] };
+    }
+
     return prisma.enrollment.findMany({
-      where: {
-        tutorId: null,
-        status: 'ACTIVE',
-      },
+      where,
       include: {
         student: true,
         subject: true,
@@ -280,7 +288,7 @@ export class AdminService {
     }));
   }
 
-  async regenerateStudentPassword(studentId: string, adminId: string) {
+  async regenerateStudentPin(studentId: string, adminId: string) {
     // Get the student with their linked user account
     const student = await prisma.student.findUnique({
       where: { id: studentId },
@@ -295,9 +303,9 @@ export class AdminService {
       throw new Error('Student not found');
     }
 
-    // Generate new password
-    const plainPassword = this.generatePassword();
-    const passwordHash = await hashPassword(plainPassword);
+    // Generate new PIN
+    const plainPin = this.generatePin();
+    const passwordHash = await hashPassword(plainPin);
 
     // Update the user's password
     await prisma.user.update({
@@ -320,14 +328,14 @@ export class AdminService {
       await sendPasswordResetEmail(
         parent.email,
         parent.fullName,
-        plainPassword
+        plainPin
       );
     }
 
-    logger.info({ studentId, adminId }, 'Admin regenerated student password');
+    logger.info({ studentId, adminId }, 'Admin regenerated student PIN');
 
     return {
-      message: 'Password regenerated successfully. New credentials sent to parent email.',
+      message: 'PIN regenerated successfully. New credentials sent to parent email.',
     };
   }
 

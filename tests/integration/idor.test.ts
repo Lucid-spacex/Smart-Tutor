@@ -145,9 +145,9 @@ describe('IDOR & Resource-Level Authorization Tests', () => {
       expect([403, 404]).toContain(res.status);
     });
 
-    it('Parent 1 cannot regenerate password for Parent 2 child', async () => {
+    it('Parent 1 cannot regenerate PIN for Parent 2 child', async () => {
       const res = await request(app)
-        .post(`/students/${student2Id}/regenerate-password`)
+        .post(`/students/${student2Id}/regenerate-pin`)
         .set('Authorization', `Bearer ${parent1Token}`);
 
       expect([403, 404, 500]).toContain(res.status);

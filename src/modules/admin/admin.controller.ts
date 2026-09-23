@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AdminService } from './admin.service';
-import { UpdateTutorVettingInput, AssignTutorInput, GetTutorsQuery, GetStudentsQuery, UpdateEnrollmentPricingInput, UpdatePricingTierInput, UpdateEnrollmentPricingOverrideInput } from './admin.validation';
+import { UpdateTutorVettingInput, AssignTutorInput, GetTutorsQuery, GetStudentsQuery, UpdateEnrollmentPricingInput, UpdatePricingTierInput, UpdateEnrollmentPricingOverrideInput, GetUnmatchedEnrollmentsQuery } from './admin.validation';
 import { AuthRequest } from '../../middleware/auth.middleware';
 
 export class AdminController {
@@ -30,9 +30,11 @@ export class AdminController {
     }
   };
 
-  getUnmatchedEnrollments = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+  getUnmatchedEnrollments = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const enrollments = await this.adminService.getUnmatchedEnrollments();
+      const query: GetUnmatchedEnrollmentsQuery = req.query as any;
+      const includeUnpaid = query.includeUnpaid === true;
+      const enrollments = await this.adminService.getUnmatchedEnrollments(includeUnpaid);
       res.status(200).json(enrollments);
     } catch (error) {
       next(error);
@@ -109,7 +111,7 @@ export class AdminController {
     }
   };
 
-  regenerateStudentPassword = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  regenerateStudentPin = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const requestorId = req.user?.userId;
       if (!requestorId) {
@@ -118,7 +120,7 @@ export class AdminController {
       }
 
       const { id } = req.params;
-      const result = await this.adminService.regenerateStudentPassword(id, requestorId);
+      const result = await this.adminService.regenerateStudentPin(id, requestorId);
       res.status(200).json(result);
     } catch (error) {
       next(error);

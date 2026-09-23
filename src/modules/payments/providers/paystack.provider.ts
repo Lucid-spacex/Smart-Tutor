@@ -153,11 +153,13 @@ export class PaystackProvider implements PaymentProvider {
       logger.info({
         reference,
         authorizationUrl: successResponse.data.authorization_url,
+        accessCode: successResponse.data.access_code,
       }, 'Paystack payment initiated successfully');
 
       return {
         success: true,
         reference,
+        accessCode: successResponse.data.access_code,
         authorizationUrl: successResponse.data.authorization_url,
         message: successResponse.message || 'Payment initiated successfully',
       };
@@ -272,7 +274,7 @@ export class PaystackProvider implements PaymentProvider {
 
   private getCallbackUrl(): string {
     // In production, this should be configured via environment variable
-    // For now, use a sensible default or env var if available
+    // Use FRONTEND_URL for the callback, fallback to ALLOWED_ORIGINS
     const frontendUrl = process.env.FRONTEND_URL || process.env.ALLOWED_ORIGINS?.split(',')[0];
     if (frontendUrl) {
       return `${frontendUrl}/payment/callback`;
@@ -280,6 +282,6 @@ export class PaystackProvider implements PaymentProvider {
     
     // Fallback - this should be configured properly in production
     logger.warn('No FRONTEND_URL or ALLOWED_ORIGINS configured - using default callback URL');
-    return 'https://your-frontend-domain.com/payment/callback';
+    return 'https://smarttutor.com/payment/callback';
   }
 }

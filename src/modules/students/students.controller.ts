@@ -74,7 +74,7 @@ export class StudentsController {
     }
   };
 
-  regeneratePassword = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  regeneratePin = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const requestorId = req.user?.userId;
       const isAdmin = req.user?.role === 'ADMIN';
@@ -84,7 +84,7 @@ export class StudentsController {
       }
 
       const { id } = req.params;
-      const result = await this.studentsService.regenerateStudentPassword(id, requestorId, isAdmin);
+      const result = await this.studentsService.regenerateStudentPin(id, requestorId, isAdmin);
       res.status(200).json(result);
     } catch (error) {
       next(error);

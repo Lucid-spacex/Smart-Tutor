@@ -72,14 +72,14 @@ export const sendVerificationEmail = async (email: string, otp: string): Promise
 };
 
 /**
- * Send student credentials to parent
+ * Send student credentials to parent (with PIN)
  */
 export const sendStudentCredentialsEmail = async (
   parentEmail: string,
   parentName: string,
   studentName: string,
   studentCode: string,
-  password: string
+  studentPin: string
 ): Promise<void> => {
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -89,14 +89,14 @@ export const sendStudentCredentialsEmail = async (
       
       <div style="background: #f4f4f4; padding: 20px; margin: 20px 0;">
         <p><strong>Student Code:</strong> <span style="font-size: 18px; font-weight: bold; color: #333;">${studentCode}</span></p>
-        <p><strong>Password:</strong> <span style="font-size: 18px; font-weight: bold; color: #333;">${password}</span></p>
+        <p><strong>Student PIN:</strong> <span style="font-size: 24px; font-weight: bold; color: #333; letter-spacing: 3px;">${studentPin}</span></p>
       </div>
       
       <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0;">
         <p style="margin: 0;"><strong>⚠️ Important Security Notice:</strong></p>
         <ul style="margin: 10px 0;">
           <li>Share these credentials <strong>only</strong> with your child</li>
-          <li>Do not share the student code or password with anyone else</li>
+          <li>Do not share the student code or PIN with anyone else</li>
           <li>Your child will use these credentials to log in independently</li>
           <li>Keep this information secure</li>
         </ul>
@@ -111,45 +111,48 @@ export const sendStudentCredentialsEmail = async (
     to: parentEmail,
     subject: `Student Account Created for ${studentName}`,
     html,
-    text: `Student Code: ${studentCode}, Password: ${password}. Please share these credentials only with your child.`,
+    text: `Student Code: ${studentCode}, Student PIN: ${studentPin}. Please share these credentials only with your child.`,
   });
 };
 
 /**
- * Send password reset/regeneration email
+ * Send PIN reset/regeneration email
  */
-export const sendPasswordResetEmail = async (
+export const sendPinResetEmail = async (
   email: string,
   name: string,
-  newPassword: string
+  newPin: string
 ): Promise<void> => {
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <h2 style="color: #333;">Password Regenerated</h2>
+      <h2 style="color: #333;">Student PIN Regenerated</h2>
       <p>Dear ${name},</p>
-      <p>Your password has been successfully regenerated. Below is your new temporary password:</p>
+      <p>The student PIN has been successfully regenerated. Below is the new PIN:</p>
       
       <div style="background: #f4f4f4; padding: 20px; text-align: center; margin: 20px 0;">
-        <span style="font-size: 24px; font-weight: bold; color: #333;">${newPassword}</span>
+        <span style="font-size: 32px; font-weight: bold; color: #333; letter-spacing: 5px;">${newPin}</span>
       </div>
       
       <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0;">
         <p style="margin: 0;"><strong>⚠️ Security Notice:</strong></p>
-        <p style="margin: 5px 0;">Please change this password immediately after logging in for better security.</p>
+        <p style="margin: 5px 0;">Please share this new PIN only with your child.</p>
       </div>
       
-      <p>If you didn't request this password change, please contact support immediately.</p>
+      <p>If you didn't request this PIN change, please contact support immediately.</p>
       <p style="color: #666; font-size: 12px;">Smart-Tutor Platform</p>
     </div>
   `;
 
   await sendEmail({
     to: email,
-    subject: 'Your Password Has Been Regenerated',
+    subject: 'Student PIN Has Been Regenerated',
     html,
-    text: `Your new temporary password is: ${newPassword}. Please change it after logging in.`,
+    text: `The new student PIN is: ${newPin}. Please share this PIN only with your child.`,
   });
 };
+
+// Legacy function name for backward compatibility
+export const sendPasswordResetEmail = sendPinResetEmail;
 
 /**
  * Send notification email

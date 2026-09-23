@@ -36,20 +36,20 @@ export class EnrollmentsService {
       throw new AppError(404, 'One or more subjects not found');
     }
 
-    // 4. Check for existing active enrollments for this student with any of these subjects
-    const existingActiveEnrollment = await prisma.enrollment.findFirst({
+    // 4. Check for existing active or pending payment enrollments for this student with any of these subjects
+    const existingEnrollment = await prisma.enrollment.findFirst({
       where: {
         studentId: data.studentId,
         subjectId: { in: data.subjectIds },
-        status: 'ACTIVE',
+        status: { in: ['ACTIVE', 'PENDING_PAYMENT'] },
       },
       include: {
         subject: true,
       },
     });
 
-    if (existingActiveEnrollment) {
-      throw new AppError(400, `Student is already enrolled in ${existingActiveEnrollment.subject.name}`);
+    if (existingEnrollment) {
+      throw new AppError(400, `Student is already enrolled in ${existingEnrollment.subject.name}`);
     }
 
     // 5. Generate shared enrollmentGroupId for the batch
@@ -71,7 +71,7 @@ export class EnrollmentsService {
             yearlyPrice: 0, // Default, admin will set actual price or pricing tier applies
             startDate: new Date(data.startDate),
             endDate: data.endDate ? new Date(data.endDate) : null,
-            status: 'ACTIVE',
+            status: 'PENDING_PAYMENT',
           },
           include: {
             student: true,

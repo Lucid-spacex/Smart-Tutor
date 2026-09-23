@@ -26,7 +26,7 @@ export const loginSchema = z.object({
 export const studentLoginSchema = z.object({
   parentEmail: z.string().email('Invalid parent email address'),
   studentCode: z.string().min(6, 'Student code must be at least 6 characters'),
-  studentPassword: z.string().min(1, 'Password is required'),
+  studentPin: z.string().length(6, 'Student PIN must be exactly 6 digits'),
 });
 
 export const refreshSchema = z.object({

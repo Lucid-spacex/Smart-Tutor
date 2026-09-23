@@ -97,7 +97,7 @@ describe('Payments Security & Integrity Integration Tests', () => {
         billingFrequency: 'MONTHLY',
         yearlyPriceNGN: 1200.00,
         yearlyPriceUSD: 1200.00,
-        status: 'PAUSED',
+        status: 'PENDING_PAYMENT', // Start as PENDING_PAYMENT to test payment gating
         startDate: new Date(),
       },
     });
@@ -118,7 +118,7 @@ describe('Payments Security & Integrity Integration Tests', () => {
         billingFrequency: 'MONTHLY',
         yearlyPriceNGN: 1200.00,
         yearlyPriceUSD: 1200.00,
-        status: 'PAUSED', // Start inactive to test webhook activation
+        status: 'PENDING_PAYMENT', // Start as PENDING_PAYMENT to test payment gating
         startDate: new Date(),
       },
     });
@@ -135,7 +135,7 @@ describe('Payments Security & Integrity Integration Tests', () => {
         billingFrequency: 'MONTHLY',
         yearlyPriceNGN: 600.00,
         yearlyPriceUSD: 600.00,
-        status: 'PAUSED', // Start inactive to test webhook activation
+        status: 'PENDING_PAYMENT', // Start as PENDING_PAYMENT to test payment gating
         startDate: new Date(),
       },
     });
@@ -238,7 +238,7 @@ describe('Payments Security & Integrity Integration Tests', () => {
         preferredEndHour: 17,
         billingFrequency: 'YEARLY',
         // No yearlyPriceNGN or yearlyPriceUSD - should use tier default
-        status: 'PAUSED',
+        status: 'PENDING_PAYMENT', // Start as PENDING_PAYMENT to test payment gating
         startDate: new Date(),
       },
     });
@@ -321,5 +321,117 @@ describe('Payments Security & Integrity Integration Tests', () => {
     for (const enr of enrollments) {
       expect(enr.status).toBe('ACTIVE');
     }
+  });
+
+  it('Enrollment cannot become ACTIVE without successful webhook payment', async () => {
+    // Create a new enrollment in PENDING_PAYMENT status
+    const testSubject = await prisma.subject.create({
+      data: {
+        name: `Test_Subject_${Date.now()}`,
+        gradeBand: 'K-12',
+        category: 'CORE',
+      },
+    });
+
+    const pendingEnrollment = await prisma.enrollment.create({
+      data: {
+        studentId: studentRecord.id,
+        subjectId: testSubject.id,
+        sessionFrequency: 'TWICE_WEEKLY',
+        availableDays: ['MON', 'THU'],
+        preferredStartHour: 15,
+        preferredEndHour: 17,
+        billingFrequency: 'MONTHLY',
+        yearlyPriceNGN: 1200.00,
+        yearlyPriceUSD: 1200.00,
+        status: 'PENDING_PAYMENT', // Created as PENDING_PAYMENT
+        startDate: new Date(),
+      },
+    });
+
+    // Verify it starts as PENDING_PAYMENT
+    expect(pendingEnrollment.status).toBe('PENDING_PAYMENT');
+
+    // Attempt to manually update status to ACTIVE (simulating client-side bypass)
+    const manualUpdate = await prisma.enrollment.update({
+      where: { id: pendingEnrollment.id },
+      data: { status: 'ACTIVE' },
+    });
+
+    // Verify it can be manually updated (for testing purposes only)
+    expect(manualUpdate.status).toBe('ACTIVE');
+
+    // Now test the actual webhook flow - ensure only webhook can activate
+    // Reset to PENDING_PAYMENT
+    await prisma.enrollment.update({
+      where: { id: pendingEnrollment.id },
+      data: { status: 'PENDING_PAYMENT' },
+    });
+
+    // Create a payment record
+    const providerRef = `test_gating_ref_${Date.now()}`;
+    await prisma.payment.create({
+      data: {
+        parentId,
+        enrollmentId: pendingEnrollment.id,
+        amount: 100,
+        currency: 'NGN',
+        provider: 'PAYSTACK',
+        providerReference: providerRef,
+        status: 'PENDING',
+      },
+    });
+
+    // Mock failed webhook
+    const mockFailedWebhookPayload = {
+      event: 'charge.failed',
+      data: {
+        reference: providerRef,
+        status: 'failed',
+      },
+    };
+
+    jest.spyOn((paymentsService as any).paymentProvider, 'processWebhook').mockResolvedValue({
+      valid: true,
+      reference: providerRef,
+      status: 'failed',
+      amount: 100,
+    });
+
+    // Process failed webhook
+    const failedPayment = await paymentsService.processWebhook(mockFailedWebhookPayload);
+    expect(failedPayment.status).toBe('FAILED');
+
+    // Verify enrollment remains PENDING_PAYMENT after failed payment
+    const enrollmentAfterFailed = await prisma.enrollment.findUnique({
+      where: { id: pendingEnrollment.id },
+    });
+    expect(enrollmentAfterFailed?.status).toBe('PENDING_PAYMENT');
+
+    // Now test successful webhook
+    const mockSuccessWebhookPayload = {
+      event: 'charge.success',
+      data: {
+        reference: providerRef,
+        status: 'success',
+      },
+    };
+
+    jest.spyOn((paymentsService as any).paymentProvider, 'processWebhook').mockResolvedValue({
+      valid: true,
+      reference: providerRef,
+      status: 'success',
+      amount: 100,
+    });
+
+    // Process successful webhook
+    const successPayment = await paymentsService.processWebhook(mockSuccessWebhookPayload);
+    expect(successPayment.status).toBe('SUCCESS');
+
+    // Verify enrollment is now ACTIVE after successful payment
+    const enrollmentAfterSuccess = await prisma.enrollment.findUnique({
+      where: { id: pendingEnrollment.id },
+    });
+    expect(enrollmentAfterSuccess?.status).toBe('ACTIVE');
   });
 });

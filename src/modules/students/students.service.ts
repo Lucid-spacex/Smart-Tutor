@@ -73,15 +73,14 @@ export class StudentsService {
     return code;
   }
 
-  // Generate a strong random password (12+ chars, mixed case + digits + symbol)
-  private generatePassword(): string {
-    const length = 12;
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
-    let password = '';
+  // Generate a 6-digit numeric PIN for student login
+  private generatePin(): string {
+    const length = 6;
+    let pin = '';
     for (let i = 0; i < length; i++) {
-      password += chars.charAt(Math.floor(Math.random() * chars.length));
+      pin += Math.floor(Math.random() * 10).toString();
     }
-    return password;
+    return pin;
   }
 
   // Ensure student code is unique (retry on collision)
@@ -112,11 +111,11 @@ export class StudentsService {
   async createStudent(parentId: string, data: CreateStudentInput) {
     // Generate credentials for the student's login account.
     // studentCode is always generated regardless of whether data.email is provided.
-    // The student contact email (data.email) is notification metadata only \u2014
+    // The student contact email (data.email) is notification metadata only —
     // it does NOT become an alternate login credential.
     const studentCode = await this.getUniqueStudentCode();
-    const plainPassword = this.generatePassword();
-    const passwordHash = await hashPassword(plainPassword);
+    const plainPin = this.generatePin();
+    const passwordHash = await hashPassword(plainPin);
 
     // Create User account first (required FK for Student)
     const user = await prisma.user.create({
@@ -167,7 +166,7 @@ export class StudentsService {
         parent.fullName,
         data.fullName,
         studentCode,
-        plainPassword
+        plainPin
       );
     }
 
@@ -240,7 +239,7 @@ export class StudentsService {
     return student;
   }
 
-  async regenerateStudentPassword(studentId: string, requestorId: string, isAdmin: boolean = false) {
+  async regenerateStudentPin(studentId: string, requestorId: string, isAdmin: boolean = false) {
     // Get student and their linked user account
     const student = await prisma.student.findUnique({
       where: { id: studentId },
@@ -260,9 +259,9 @@ export class StudentsService {
       throw new Error('Access denied');
     }
 
-    // Generate new password
-    const plainPassword = this.generatePassword();
-    const passwordHash = await hashPassword(plainPassword);
+    // Generate new PIN
+    const plainPin = this.generatePin();
+    const passwordHash = await hashPassword(plainPin);
 
     // Update the user's password
     await prisma.user.update({
@@ -285,14 +284,14 @@ export class StudentsService {
       await sendPasswordResetEmail(
         parent.email,
         parent.fullName,
-        plainPassword
+        plainPin
       );
     }
 
-    logger.info({ studentId, requestorId, isAdmin }, 'Student password regenerated');
+    logger.info({ studentId, requestorId, isAdmin }, 'Student PIN regenerated');
 
     return {
-      message: 'Password regenerated successfully. New credentials sent to parent email.',
+      message: 'PIN regenerated successfully. New credentials sent to parent email.',
     };
   }
 
@@ -310,7 +309,7 @@ export class StudentsService {
       throw new Error('Access denied');
     }
 
-    // Get aggregate data
+    // Get comprehensive data for the student
     const enrollments = await prisma.enrollment.findMany({
       where: { studentId },
       include: {
@@ -319,18 +318,62 @@ export class StudentsService {
           select: {
             id: true,
             fullName: true,
+            email: true,
+            tutorProfile: {
+              select: {
+                bio: true,
+                subjects: true,
+              },
+            },
           },
         },
         sessionParticipants: {
           include: {
-            session: true,
+            session: {
+              select: {
+                id: true,
+                scheduledAt: true,
+                durationMinutes: true,
+                status: true,
+                zoomLink: true,
+              },
+            },
           },
         },
-        assignments: true,
-        grades: {
-          where: { visibleToStudent: true },
+        assignments: {
+          include: {
+            creator: {
+              select: {
+                id: true,
+                fullName: true,
+              },
+            },
+          },
         },
-        progressReports: true,
+        grades: {
+          where: { 
+            status: 'APPROVED',
+            visibleToStudent: true,
+          },
+          include: {
+            grader: {
+              select: {
+                id: true,
+                fullName: true,
+              },
+            },
+          },
+        },
+        progressReports: {
+          include: {
+            creator: {
+              select: {
+                id: true,
+                fullName: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -359,6 +402,69 @@ export class StudentsService {
       ? grades.reduce((sum, g) => sum + Number(g.score), 0) / grades.length
       : 0;
 
+    // Get upcoming sessions (scheduled in the future)
+    const now = new Date();
+    const upcomingSessions = enrollments
+      .flatMap(e => 
+        e.sessionParticipants
+          .filter((sp: any) => sp.session.status === 'SCHEDULED' && new Date(sp.session.scheduledAt) > now)
+          .map((sp: any) => ({
+            id: sp.session.id,
+            scheduledAt: sp.session.scheduledAt,
+            durationMinutes: sp.session.durationMinutes,
+            zoomLink: sp.session.zoomLink,
+            subject: e.subject?.name,
+            tutor: e.tutor?.fullName,
+          }))
+      )
+      .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
+
+    // Get pending assignments
+    const pendingAssignmentsList = enrollments
+      .flatMap(e => 
+        e.assignments
+          .filter((a: any) => a.status === 'PENDING')
+          .map((a: any) => ({
+            id: a.id,
+            title: a.title,
+            description: a.description,
+            type: a.type,
+            dueDate: a.dueDate,
+            subject: e.subject?.name,
+            createdBy: a.creator?.fullName,
+          }))
+      )
+      .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+
+    // Get recent approved grades
+    const recentGrades = grades
+      .map((g: any) => ({
+        id: g.id,
+        score: Number(g.score),
+        comments: g.comments,
+        gradedAt: g.createdAt,
+        subject: enrollments.find(e => e.id === g.enrollmentId)?.subject?.name,
+        gradedBy: g.grader?.fullName,
+      }))
+      .sort((a, b) => new Date(b.gradedAt).getTime() - new Date(a.gradedAt).getTime());
+
+    // Get progress reports
+    const progressReports = enrollments
+      .flatMap(e => 
+        e.progressReports
+          .map((pr: any) => ({
+            id: pr.id,
+            period: pr.period,
+            summary: pr.summary,
+            strengths: pr.strengths,
+            areasToImprove: pr.areasToImprove,
+            createdAt: pr.createdAt,
+            createdBy: pr.creator?.fullName,
+            subject: e.subject?.name,
+          }))
+      )
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
     return {
       student: {
         id: student.id,
@@ -380,11 +486,23 @@ export class StudentsService {
       },
       enrollments: enrollments.map(e => ({
         id: e.id,
-        subject: e.subject?.name,
-        tutor: e.tutor?.fullName,
+        subject: {
+          id: e.subject?.id,
+          name: e.subject?.name,
+        },
         status: e.status,
-        sessionCount: e.sessionParticipants?.length || 0,
+        tutor: e.tutor ? {
+          id: e.tutor.id,
+          fullName: e.tutor.fullName,
+          email: e.tutor.email,
+          bio: e.tutor.tutorProfile?.bio,
+          subjects: e.tutor.tutorProfile?.subjects,
+        } : null,
       })),
+      upcomingSessions,
+      pendingAssignments: pendingAssignmentsList,
+      recentGrades,
+      progressReports,
     };
   }
 }

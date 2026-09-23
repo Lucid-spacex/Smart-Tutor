@@ -46,6 +46,10 @@ export const getStudentsQuerySchema = z.object({
   parentId: z.string().uuid('Invalid parent ID').optional(),
 });
 
+export const getUnmatchedEnrollmentsQuerySchema = z.object({
+  includeUnpaid: z.coerce.boolean().optional(),
+});
+
 export type UpdateTutorVettingInput = z.infer<typeof updateTutorVettingSchema>;
 export type AssignTutorInput = z.infer<typeof assignTutorSchema>;
 export type UpdateEnrollmentPricingInput = z.infer<typeof updateEnrollmentPricingSchema>;
@@ -55,3 +59,4 @@ export type CreateSessionInput = z.infer<typeof createSessionSchema>;
 export type RescheduleSessionInput = z.infer<typeof rescheduleSessionSchema>;
 export type GetTutorsQuery = z.infer<typeof getTutorsQuerySchema>;
 export type GetStudentsQuery = z.infer<typeof getStudentsQuerySchema>;
+export type GetUnmatchedEnrollmentsQuery = z.infer<typeof getUnmatchedEnrollmentsQuerySchema>;

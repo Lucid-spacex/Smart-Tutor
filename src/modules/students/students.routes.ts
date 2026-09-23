@@ -15,7 +15,7 @@ router.post('/', authenticate, requireRole('PARENT'), validate(createStudentSche
 router.get('/', authenticate, requireRole('PARENT'), studentsController.getStudents);
 router.get('/:id', authenticate, requireRole('PARENT'), validateUUID('id'), studentsController.getStudentById);
 router.get('/:id/activity', authenticate, requireRole('PARENT'), validateUUID('id'), studentsController.getStudentActivity);
-router.post('/:id/regenerate-password', authenticate, requireRole('PARENT'), validateUUID('id'), studentsController.regeneratePassword);
+router.post('/:id/regenerate-pin', authenticate, requireRole('PARENT'), validateUUID('id'), studentsController.regeneratePin);
 
 // Student attendance routes
 router.get('/:id/attendance', authenticate, validateUUID('id'), attendanceController.getStudentAttendance);

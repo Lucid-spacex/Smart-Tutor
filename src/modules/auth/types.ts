@@ -32,7 +32,7 @@ export interface LoginData {
 export interface StudentLoginData {
   parentEmail: string;
   studentCode: string;
-  studentPassword: string;
+  studentPin: string;
 }
 
 export interface RefreshData {

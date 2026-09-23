@@ -87,6 +87,7 @@ enum BillingFrequency {
 }
 
 enum EnrollmentStatus {
+  PENDING_PAYMENT
   ACTIVE
   PAUSED
   COMPLETED

@@ -146,7 +146,7 @@ export class AuthService {
   }
 
   async studentLogin(data: StudentLoginData): Promise<AuthResponse> {
-    // Three-factor login: parentEmail + studentCode + studentPassword
+    // Three-factor login: parentEmail + studentCode + studentPin
     // Look up by studentCode (case-insensitive)
     const studentUser = await prisma.user.findFirst({
       where: {
@@ -175,10 +175,10 @@ export class AuthService {
       throw new Error('Invalid credentials');
     }
 
-    // Verify password
-    const isValidPassword = await comparePassword(data.studentPassword, studentUser.passwordHash);
-    if (!isValidPassword) {
-      logger.warn({ studentCode: data.studentCode }, 'Failed student login - invalid password');
+    // Verify PIN
+    const isValidPin = await comparePassword(data.studentPin, studentUser.passwordHash);
+    if (!isValidPin) {
+      logger.warn({ studentCode: data.studentCode }, 'Failed student login - invalid PIN');
       throw new Error('Invalid credentials');
     }
 

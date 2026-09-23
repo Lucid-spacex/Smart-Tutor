@@ -4,7 +4,7 @@ import { ComplaintsController } from '../complaints/complaints.controller';
 import { validate, validateQuery } from '../../middleware/validation.middleware';
 import { authenticate, requireRole } from '../../middleware/auth.middleware';
 import { validateUUID } from '../../middleware/uuid-validation.middleware';
-import { updateTutorVettingSchema, assignTutorSchema, getTutorsQuerySchema, getStudentsQuerySchema, updateEnrollmentPricingSchema, updatePricingTierSchema, updateEnrollmentPricingOverrideSchema, createSessionSchema, rescheduleSessionSchema } from './admin.validation';
+import { updateTutorVettingSchema, assignTutorSchema, getTutorsQuerySchema, getStudentsQuerySchema, updateEnrollmentPricingSchema, updatePricingTierSchema, updateEnrollmentPricingOverrideSchema, createSessionSchema, rescheduleSessionSchema, getUnmatchedEnrollmentsQuerySchema } from './admin.validation';
 import { resolveComplaintSchema } from '../complaints/complaints.validation';
 
 const router = Router();
@@ -17,7 +17,7 @@ router.get('/tutors', authenticate, requireRole('ADMIN'), validateQuery(getTutor
 router.patch('/tutors/:id/vetting', authenticate, requireRole('ADMIN'), validateUUID('id'), validate(updateTutorVettingSchema), adminController.updateTutorVetting);
 
 // Enrollments & Pricing
-router.get('/enrollments/unmatched', authenticate, requireRole('ADMIN'), adminController.getUnmatchedEnrollments);
+router.get('/enrollments/unmatched', authenticate, requireRole('ADMIN'), validateQuery(getUnmatchedEnrollmentsQuerySchema), adminController.getUnmatchedEnrollments);
 router.get('/enrollments/:id/pricing', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.getEnrollmentPricingOverride);
 router.patch('/enrollments/:id/pricing', authenticate, requireRole('ADMIN'), validateUUID('id'), validate(updateEnrollmentPricingOverrideSchema), adminController.updateEnrollmentPricingOverride);
 router.patch('/enrollments/:id/assign-tutor', authenticate, requireRole('ADMIN'), validateUUID('id'), validate(assignTutorSchema), adminController.assignTutor);
@@ -35,7 +35,7 @@ router.get('/reports/overview', authenticate, requireRole('ADMIN'), adminControl
 
 // Students
 router.get('/students', authenticate, requireRole('ADMIN'), validateQuery(getStudentsQuerySchema), adminController.getStudents);
-router.patch('/students/:id/regenerate-password', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.regenerateStudentPassword);
+router.patch('/students/:id/regenerate-pin', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.regenerateStudentPin);
 
 // Suspended Users Management
 router.get('/users/suspended', authenticate, requireRole('ADMIN'), adminController.getSuspendedUsers);
