@@ -861,10 +861,6 @@ export const swaggerUiOptions = {
     operationsSorter: 'alpha',
     // Enable validator URL for schema validation
     validatorUrl: null,
-    // Preload specs
-    spec: {
-      schemes: ['http', 'https'],
-    },
     // Add search settings
     search: {
       depth: 3,
