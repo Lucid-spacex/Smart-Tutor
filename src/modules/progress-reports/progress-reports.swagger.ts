@@ -72,32 +72,3 @@
  *       401:
  *         description: Not authenticated
  */
-
-/**
- * @swagger
- * components:
- *   schemas:
- *     ProgressReport:
- *       type: object
- *       properties:
- *         id:
- *           type: string
- *           format: uuid
- *         enrollmentId:
- *           type: string
- *           format: uuid
- *         period:
- *           type: string
- *         summary:
- *           type: string
- *         strengths:
- *           type: string
- *         areasToImprove:
- *           type: string
- *         createdBy:
- *           type: string
- *           format: uuid
- *         createdAt:
- *           type: string
- *           format: date-time
- */

@@ -26,40 +26,7 @@
  *             schema:
  *               type: array
  *               items:
- *                 type: object
- *                 properties:
- *                   id:
- *                     type: string
- *                     format: uuid
- *                   name:
- *                     type: string
- *                   gradeBand:
- *                     type: string
- *                   category:
- *                     type: string
- *                     enum: [CORE, ENRICHMENT]
+ *                 $ref: '#/components/schemas/Subject'
  *       401:
  *         description: Not authenticated
- */
-
-/**
- * @swagger
- * components:
- *   schemas:
- *     Subject:
- *       type: object
- *       properties:
- *         id:
- *           type: string
- *           format: uuid
- *         name:
- *           type: string
- *         gradeBand:
- *           type: string
- *         category:
- *           type: string
- *           enum: [CORE, ENRICHMENT]
- *         createdAt:
- *           type: string
- *           format: date-time
  */

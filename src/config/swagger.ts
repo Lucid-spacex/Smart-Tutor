@@ -10,7 +10,7 @@ const customCss = fs.existsSync(customCssPath)
 
 const options = {
   definition: {
-    openapi: '3.1.0',
+    openapi: '3.0.3',
     info: {
       title: 'Smart Tutor API',
       version: '1.0.0',

@@ -184,39 +184,3 @@
  *       403:
  *         description: Not authorized
  */
-
-/**
- * @swagger
- * components:
- *   schemas:
- *     TutorProfile:
- *       type: object
- *       properties:
- *         id:
- *           type: string
- *           format: uuid
- *         userId:
- *           type: string
- *           format: uuid
- *         subjects:
- *           type: array
- *           items:
- *             type: string
- *         bio:
- *           type: string
- *         credentialsUrl:
- *           type: string
- *           format: uri
- *           nullable: true
- *         vettingStatus:
- *           type: string
- *           enum: [PENDING, APPROVED, REJECTED]
- *         hourlyRate:
- *           type: number
- *           format: decimal
- *         availability:
- *           type: object
- *         createdAt:
- *           type: string
- *           format: date-time
- */
