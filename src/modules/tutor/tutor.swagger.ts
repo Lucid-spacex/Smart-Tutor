@@ -80,11 +80,63 @@
  *         description: Not authenticated
  *       403:
  *         description: Not authorized
+ *
+ *   get:
+ *     summary: Get tutor profile
+ *     tags: [Tutor]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Tutor profile retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/TutorProfile'
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized
  */
 
 /**
  * @swagger
- * /tutor/students:
+ * /tutor-profile/availability:
+ *   patch:
+ *     summary: Update tutor availability
+ *     tags: [Tutor]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - availability
+ *             properties:
+ *               availability:
+ *                 type: object
+ *                 example: {"monday": ["9:00-12:00", "14:00-17:00"]}
+ *     responses:
+ *       200:
+ *         description: Availability updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/TutorProfile'
+ *       400:
+ *         description: Validation error
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized
+ */
+
+/**
+ * @swagger
+ * /students:
  *   get:
  *     summary: Get assigned students
  *     tags: [Tutor]
@@ -112,7 +164,7 @@
 
 /**
  * @swagger
- * /tutor/sessions:
+ * /sessions:
  *   get:
  *     summary: Get tutor's schedule
  *     tags: [Tutor]

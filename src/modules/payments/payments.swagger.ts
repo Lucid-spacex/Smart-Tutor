@@ -87,6 +87,51 @@
  *         description: Webhook processed successfully, enrollments activated atomically
  *       400:
  *         description: Invalid webhook signature or payload
+ *
+ * /payments:
+ *   get:
+ *     summary: Get all payments for authenticated parent
+ *     tags: [Payments]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of payments
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Payment'
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized
+ *
+ * /payments/verify/{reference}:
+ *   get:
+ *     summary: Verify payment by reference
+ *     tags: [Payments]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: reference
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Payment reference from provider
+ *     responses:
+ *       200:
+ *         description: Payment verification result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Payment'
+ *       400:
+ *         description: Invalid reference
+ *       404:
+ *         description: Payment not found
  */
 
 /**

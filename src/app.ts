@@ -1,7 +1,7 @@
 import express, { Application } from 'express';
 import swaggerUi from 'swagger-ui-express';
 import dotenv from 'dotenv';
-import { swaggerSpec } from './config/swagger';
+import { swaggerSpec, swaggerUiOptions } from './config/swagger';
 import { errorHandler } from './middleware/error-handler.middleware';
 import { config } from './config/env.config';
 import prisma from './config/database';
@@ -108,7 +108,7 @@ app.get('/health', async (req, res) => {
 });
 
 // API Documentation
-app.use('/api-docs', swaggerUi.serve as any, swaggerUi.setup(swaggerSpec) as any);
+app.use('/api-docs', swaggerUi.serve as any, swaggerUi.setup(swaggerSpec, swaggerUiOptions) as any);
 
 // API Routes mounted at both /api and root for backwards compatibility with tests and clients
 const mountRoutes = (prefix: string = '') => {

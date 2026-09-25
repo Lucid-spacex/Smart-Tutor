@@ -85,6 +85,142 @@
 
 /**
  * @swagger
+ * /students/{id}:
+ *   get:
+ *     summary: Get a specific student by ID
+ *     tags: [Students]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Student details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Student'
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized
+ *       404:
+ *         description: Student not found
+ */
+
+/**
+ * @swagger
+ * /students/{id}/activity:
+ *   get:
+ *     summary: Get student activity log
+ *     tags: [Students]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Student activity log
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   activityType:
+ *                     type: string
+ *                   description:
+ *                     type: string
+ *                   timestamp:
+ *                     type: string
+ *                     format: date-time
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized
+ *       404:
+ *         description: Student not found
+ */
+
+/**
+ * @swagger
+ * /students/{id}/regenerate-pin:
+ *   post:
+ *     summary: Regenerate student login PIN
+ *     tags: [Students]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: PIN regenerated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 studentId:
+ *                   type: string
+ *                 newPin:
+ *                   type: string
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized
+ *       404:
+ *         description: Student not found
+ */
+
+/**
+ * @swagger
+ * /students/{id}/attendance:
+ *   get:
+ *     summary: Get student attendance statistics and breakdown
+ *     description: |
+ *       Accessible by:
+ *       - STUDENT (self only)
+ *       - PARENT (must own student)
+ *       - TUTOR (must be assigned to at least one enrollment of this student)
+ *       - ADMIN (any)
+ *       Calculates attendance percentage only over COMPLETED and MISSED sessions.
+ *     tags: [Students]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Attendance statistics and breakdown
+ *       403:
+ *         description: Access denied
+ *       404:
+ *         description: Student not found
+ */
+
+/**
+ * @swagger
  * components:
  *   schemas:
  *     Student:

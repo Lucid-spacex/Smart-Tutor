@@ -142,6 +142,48 @@
 
 /**
  * @swagger
+ * /auth/student-login:
+ *   post:
+ *     summary: Login student using PIN and student code
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - studentCode
+ *               - pin
+ *             properties:
+ *               studentCode:
+ *                 type: string
+ *                 example: "STU123456"
+ *               pin:
+ *                 type: string
+ *                 example: "1234"
+ *     responses:
+ *       200:
+ *         description: Student login successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 student:
+ *                   $ref: '#/components/schemas/Student'
+ *                 accessToken:
+ *                   type: string
+ *                 refreshToken:
+ *                   type: string
+ *       401:
+ *         description: Invalid credentials
+ *       404:
+ *         description: Student not found
+ */
+
+/**
+ * @swagger
  * /auth/refresh:
  *   post:
  *     summary: Refresh access token
@@ -254,29 +296,81 @@
 
 /**
  * @swagger
- * components:
- *   schemas:
- *     User:
- *       type: object
- *       properties:
- *         id:
- *           type: string
- *           format: uuid
- *         fullName:
- *           type: string
- *         email:
- *           type: string
- *           format: email
- *         role:
- *           type: string
- *           enum: [PARENT, TUTOR, ADMIN]
- *         status:
- *           type: string
- *           enum: [UNVERIFIED, ACTIVE, PENDING_VETTING, APPROVED, REJECTED, SUSPENDED]
- *         createdAt:
- *           type: string
- *           format: date-time
- *         updatedAt:
- *           type: string
- *           format: date-time
+ * /auth/change-password:
+ *   patch:
+ *     summary: Change user password
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - currentPassword
+ *               - newPassword
+ *             properties:
+ *               currentPassword:
+ *                 type: string
+ *                 format: password
+ *                 example: "oldpassword123"
+ *               newPassword:
+ *                 type: string
+ *                 format: password
+ *                 example: "newpassword123"
+ *     responses:
+ *       200:
+ *         description: Password changed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Password changed successfully"
+ *       400:
+ *         description: Invalid current password or new password validation failed
+ *       401:
+ *         description: Not authenticated
+ */
+
+/**
+ * @swagger
+ * /auth/me/timezone:
+ *   patch:
+ *     summary: Update user timezone
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - timezone
+ *             properties:
+ *               timezone:
+ *                 type: string
+ *                 example: "America/New_York"
+ *                 description: IANA timezone identifier
+ *     responses:
+ *       200:
+ *         description: Timezone updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Timezone updated successfully"
+ *       400:
+ *         description: Invalid timezone
+ *       401:
+ *         description: Not authenticated
  */
