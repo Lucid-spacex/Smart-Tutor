@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+// Admin-only: Create session with multiple participants
 export const createSessionSchema = z.object({
   tutorId: z.string().uuid('Invalid tutor ID'),
   scheduledAt: z.string().refine((val) => !isNaN(Date.parse(val)), 'Invalid scheduled date'),
@@ -8,6 +9,13 @@ export const createSessionSchema = z.object({
   zoomMeetingId: z.string().optional(),
   participantEnrollmentIds: z.array(z.string().uuid('Invalid enrollment ID')).min(1, 'At least one participant required'),
   sharedSessionConfirmed: z.boolean().optional(),
+});
+
+// Tutor-only: Create session for single enrollment (their own assigned student)
+export const createTutorSessionSchema = z.object({
+  enrollmentId: z.string().uuid('Invalid enrollment ID'),
+  scheduledAt: z.string().refine((val) => !isNaN(Date.parse(val)), 'Invalid scheduled date'),
+  durationMinutes: z.number().int().positive('Duration must be positive'),
 });
 
 export const rescheduleSessionSchema = z.object({
@@ -31,6 +39,7 @@ export const getSessionsQuerySchema = z.object({
 });
 
 export type CreateSessionInput = z.infer<typeof createSessionSchema>;
+export type CreateTutorSessionInput = z.infer<typeof createTutorSessionSchema>;
 export type RescheduleSessionInput = z.infer<typeof rescheduleSessionSchema>;
 export type UpdateSessionInput = z.infer<typeof updateSessionSchema>;
 export type GetSessionsQuery = z.infer<typeof getSessionsQuerySchema>;

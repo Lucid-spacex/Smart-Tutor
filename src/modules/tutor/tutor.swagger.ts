@@ -184,3 +184,115 @@
  *       403:
  *         description: Not authorized
  */
+
+/**
+ * @swagger
+ * /students/{studentId}:
+ *   get:
+ *     summary: Get detailed student information (TUTOR only)
+ *     description: Tutors can view comprehensive details about their assigned students, excluding parent contact/financial info and other tutors' notes. Authorization check ensures tutors can only view students they teach.
+ *     tags: [Tutor]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: studentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: ID of the student
+ *     responses:
+ *       200:
+ *         description: Student details retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 student:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                       format: uuid
+ *                     fullName:
+ *                       type: string
+ *                     dateOfBirth:
+ *                       type: string
+ *                       format: date
+ *                     gender:
+ *                       type: string
+ *                     actualGrade:
+ *                       type: string
+ *                     gradeLevel:
+ *                       type: string
+ *                     gradeBandTier:
+ *                       type: string
+ *                     school:
+ *                       type: string
+ *                     notes:
+ *                       type: string
+ *                 enrollment:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                       format: uuid
+ *                     subject:
+ *                       type: object
+ *                       properties:
+ *                         name:
+ *                           type: string
+ *                     status:
+ *                       type: string
+ *                     sessionFrequency:
+ *                       type: string
+ *                     availableDays:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                     startDate:
+ *                       type: string
+ *                       format: date
+ *                     endDate:
+ *                       type: string
+ *                       format: date
+ *                 upcomingSessions:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Session'
+ *                 pastSessions:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Session'
+ *                 assignments:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Assignment'
+ *                 gradesGiven:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Grade'
+ *                 progressReports:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/ProgressReport'
+ *                 attendance:
+ *                   type: object
+ *                   properties:
+ *                     totalSessions:
+ *                       type: integer
+ *                     attended:
+ *                       type: integer
+ *                     missed:
+ *                       type: integer
+ *                     percentage:
+ *                       type: integer
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized - tutor not assigned to this student
+ *       404:
+ *         description: Student not found
+ */

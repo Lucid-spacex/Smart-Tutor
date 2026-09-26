@@ -131,4 +131,36 @@ export class NotificationsService {
     const message = `Your complaint "${complaint.subject}" has been resolved`;
     await this.createNotification(userId, 'COMPLAINT_RESOLVED', message, complaintId, sendEmailNotification);
   }
+
+  // Helper method to create tutor assignment notifications for both parent and student
+  async createTutorAssignedNotification(enrollmentId: string, tutorId: string, sendEmailNotification: boolean = true) {
+    const enrollment = await prisma.enrollment.findUnique({
+      where: { id: enrollmentId },
+      include: {
+        student: true,
+        subject: true,
+        tutor: {
+          select: {
+            fullName: true,
+          },
+        },
+      },
+    });
+
+    if (!enrollment || !enrollment.student) {
+      return;
+    }
+
+    const tutorName = enrollment.tutor?.fullName || 'Your tutor';
+    const subjectName = enrollment.subject?.name || 'your subject';
+    const message = `You've been assigned a tutor for ${subjectName}: ${tutorName}`;
+
+    // Create notification for student (with email)
+    await this.createNotification(enrollment.student.userId, 'TUTOR_ASSIGNED', message, enrollmentId, sendEmailNotification);
+
+    // Create notification for parent (with email)
+    if (enrollment.student.parentId) {
+      await this.createNotification(enrollment.student.parentId, 'TUTOR_ASSIGNED', message, enrollmentId, sendEmailNotification);
+    }
+  }
 }

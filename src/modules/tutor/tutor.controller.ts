@@ -85,4 +85,20 @@ export class TutorController {
       next(error);
     }
   };
+
+  getStudentDetail = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const tutorId = (req as any).user?.userId;
+      if (!tutorId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { studentId } = req.params;
+      const studentDetail = await this.tutorService.getStudentDetail(tutorId, studentId);
+      res.status(200).json(studentDetail);
+    } catch (error) {
+      next(error);
+    }
+  };
 }

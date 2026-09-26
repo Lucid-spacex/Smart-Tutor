@@ -177,4 +177,45 @@
  *         description: Not authenticated
  *       403:
  *         description: Not authorized - user is not a student
+ *
+ * /student/me/tutors:
+ *   get:
+ *     summary: Get student's assigned tutors
+ *     description: Students can view their assigned tutors' profiles including bio, subjects, and assignment details. Contact details (email, phone) are excluded.
+ *     tags: [Student]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of assigned tutors
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   tutorId:
+ *                     type: string
+ *                     format: uuid
+ *                   fullName:
+ *                     type: string
+ *                   bio:
+ *                     type: string
+ *                     nullable: true
+ *                   subjects:
+ *                     type: array
+ *                     items:
+ *                       type: string
+ *                   enrollmentSubject:
+ *                     type: string
+ *                     description: Subject this tutor teaches the student
+ *                   assignedSince:
+ *                     type: string
+ *                     format: date
+ *                     description: When this tutor was assigned
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized - user is not a student
  */

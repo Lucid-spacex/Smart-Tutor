@@ -16,5 +16,6 @@ router.get('/me/progress-reports', authenticate, requireRole('STUDENT'), student
 router.get('/me/notifications', authenticate, requireRole('STUDENT'), studentController.getStudentNotifications);
 router.get('/me/next-class', authenticate, requireRole('STUDENT'), studentController.getNextClass);
 router.get('/me/attendance', authenticate, requireRole('STUDENT'), attendanceController.getMyAttendance);
+router.get('/me/tutors', authenticate, requireRole('STUDENT'), studentController.getMyTutors);
 
 export default router;

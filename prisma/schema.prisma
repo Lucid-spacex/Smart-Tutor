@@ -453,6 +453,7 @@ enum NotificationType {
   COMPLAINT_RESOLVED
   GENERAL
   PRICING_DRIFT_ALERT
+  TUTOR_ASSIGNED
 }
 
 model Complaint {

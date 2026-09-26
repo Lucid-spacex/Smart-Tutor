@@ -1,7 +1,94 @@
 import prisma from '../../config/database';
-import { UpdateSessionInput, GetSessionsQuery, CreateSessionInput, RescheduleSessionInput } from './sessions.validation';
+import { UpdateSessionInput, GetSessionsQuery, CreateSessionInput, CreateTutorSessionInput, RescheduleSessionInput } from './sessions.validation';
+import { ZoomService } from '../../services/zoom.service';
 
 export class SessionsService {
+  private zoomService: ZoomService;
+
+  constructor() {
+    this.zoomService = new ZoomService();
+  }
+
+  // Tutor-only: Create a session for their own assigned student (single enrollment)
+  async createTutorSession(tutorId: string, data: CreateTutorSessionInput) {
+    // CRITICAL OWNERSHIP CHECK: Verify enrollment belongs to this tutor
+    const enrollment = await prisma.enrollment.findUnique({
+      where: { id: data.enrollmentId },
+      include: {
+        student: true,
+        subject: true,
+      },
+    });
+
+    if (!enrollment) {
+      throw new Error('Enrollment not found');
+    }
+
+    if (enrollment.tutorId !== tutorId) {
+      throw new Error('You can only create sessions for your own assigned students');
+    }
+
+    // Create session with single participant
+    const session = await prisma.$transaction(async (tx) => {
+      // Auto-create Zoom meeting
+      const { zoomLink, zoomMeetingId } = await this.zoomService.createMeeting(
+        new Date(data.scheduledAt),
+        data.durationMinutes
+      );
+
+      const newSession = await tx.session.create({
+        data: {
+          tutorId,
+          scheduledAt: new Date(data.scheduledAt),
+          durationMinutes: data.durationMinutes,
+          zoomLink,
+          zoomMeetingId,
+          status: 'SCHEDULED',
+        },
+      });
+
+      // Create single session participant
+      await tx.sessionParticipant.create({
+        data: {
+          sessionId: newSession.id,
+          enrollmentId: data.enrollmentId,
+        },
+      });
+
+      return newSession;
+    });
+
+    return session;
+  }
+
+  // Tutor-only: Reschedule a session they created
+  async rescheduleTutorSession(sessionId: string, tutorId: string, data: RescheduleSessionInput) {
+    const session = await prisma.session.findUnique({
+      where: { id: sessionId },
+    });
+
+    if (!session) {
+      throw new Error('Session not found');
+    }
+
+    // CRITICAL OWNERSHIP CHECK: Verify session belongs to this tutor
+    if (session.tutorId !== tutorId) {
+      throw new Error('You can only reschedule sessions you created');
+    }
+
+    // Only allow rescheduling scheduled sessions
+    if (session.status !== 'SCHEDULED') {
+      throw new Error('Can only reschedule scheduled sessions');
+    }
+
+    return prisma.session.update({
+      where: { id: sessionId },
+      data: {
+        scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : session.scheduledAt,
+      },
+    });
+  }
+
   // Admin-only: Create a new session with multiple participants
   async createSession(data: CreateSessionInput) {
     // Verify tutor exists and is approved
@@ -42,13 +129,26 @@ export class SessionsService {
 
     // Create session and participants in a transaction
     const session = await prisma.$transaction(async (tx) => {
+      // Auto-create Zoom meeting if not provided
+      let zoomLink = data.zoomLink;
+      let zoomMeetingId = data.zoomMeetingId;
+
+      if (!zoomLink && !zoomMeetingId) {
+        const zoomMeeting = await this.zoomService.createMeeting(
+          new Date(data.scheduledAt),
+          data.durationMinutes
+        );
+        zoomLink = zoomMeeting.zoomLink;
+        zoomMeetingId = zoomMeeting.zoomMeetingId;
+      }
+
       const newSession = await tx.session.create({
         data: {
           tutorId: data.tutorId,
           scheduledAt: new Date(data.scheduledAt),
           durationMinutes: data.durationMinutes,
-          zoomLink: data.zoomLink,
-          zoomMeetingId: data.zoomMeetingId,
+          zoomLink,
+          zoomMeetingId,
           status: 'SCHEDULED',
         },
       });

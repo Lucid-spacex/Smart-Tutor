@@ -281,4 +281,54 @@ export class StudentService {
       timezone: effectiveTimezone || 'UTC', // Send timezone for client-side display
     };
   }
+
+  async getMyTutors(userId: string) {
+    const student = await prisma.student.findUnique({
+      where: { userId },
+    });
+
+    if (!student) {
+      throw new Error('Student profile not found');
+    }
+
+    // Get all active enrollments with assigned tutors
+    const enrollments = await prisma.enrollment.findMany({
+      where: {
+        studentId: student.id,
+        status: 'ACTIVE',
+        tutorId: {
+          not: null,
+        },
+      },
+      include: {
+        tutor: {
+          include: {
+            tutorProfile: true,
+          },
+        },
+        subject: true,
+      },
+    });
+
+    // Create a map to deduplicate tutors (one entry per distinct tutor)
+    const tutorMap = new Map();
+
+    for (const enrollment of enrollments) {
+      if (!enrollment.tutor) continue;
+
+      const tutorId = enrollment.tutor.id;
+      if (!tutorMap.has(tutorId)) {
+        tutorMap.set(tutorId, {
+          tutorId: enrollment.tutor.id,
+          fullName: enrollment.tutor.fullName,
+          bio: enrollment.tutor.tutorProfile?.bio || null,
+          subjects: enrollment.tutor.tutorProfile?.subjects || [],
+          enrollmentSubject: enrollment.subject.name,
+          assignedSince: enrollment.startDate,
+        });
+      }
+    }
+
+    return Array.from(tutorMap.values());
+  }
 }

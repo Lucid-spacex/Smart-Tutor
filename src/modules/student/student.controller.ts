@@ -113,4 +113,19 @@ export class StudentController {
       next(error);
     }
   };
+
+  getMyTutors = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const userId = req.user?.userId;
+      if (!userId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const tutors = await this.studentService.getMyTutors(userId);
+      res.status(200).json(tutors);
+    } catch (error) {
+      next(error);
+    }
+  };
 }

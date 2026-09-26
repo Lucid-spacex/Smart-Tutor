@@ -7,12 +7,21 @@ import crypto from 'crypto';
 import { EnrollmentsService } from '../enrollments/enrollments.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { GradesService } from '../grades/grades.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { GradeBandTier } from '@prisma/client';
 
 export class AdminService {
   private enrollmentsService: EnrollmentsService;
   private sessionsService: SessionsService;
   private gradesService: GradesService;
+  private notificationsService: NotificationsService;
+
+  constructor() {
+    this.enrollmentsService = new EnrollmentsService();
+    this.sessionsService = new SessionsService();
+    this.gradesService = new GradesService();
+    this.notificationsService = new NotificationsService();
+  }
 
   // Generate a 6-digit numeric PIN for student login
   private generatePin(): string {
@@ -22,12 +31,6 @@ export class AdminService {
       pin += Math.floor(Math.random() * 10).toString();
     }
     return pin;
-  }
-
-  constructor() {
-    this.enrollmentsService = new EnrollmentsService();
-    this.sessionsService = new SessionsService();
-    this.gradesService = new GradesService();
   }
 
   async getPendingTutors() {
@@ -155,7 +158,7 @@ export class AdminService {
       throw new Error('Tutor is not approved for tutoring');
     }
 
-    return prisma.enrollment.update({
+    const updatedEnrollment = await prisma.enrollment.update({
       where: { id: enrollmentId },
       data: { tutorId: data.tutorId },
       include: {
@@ -170,6 +173,11 @@ export class AdminService {
         },
       },
     });
+
+    // Create notifications for both parent and student
+    await this.notificationsService.createTutorAssignedNotification(enrollmentId, data.tutorId, true);
+
+    return updatedEnrollment;
   }
 
   async getFailedPayments() {

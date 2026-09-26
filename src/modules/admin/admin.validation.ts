@@ -29,6 +29,7 @@ export const createSessionSchema = z.object({
   scheduledAt: z.string().refine((val) => !isNaN(Date.parse(val)), 'Invalid scheduled date'),
   durationMinutes: z.number().int().positive('Duration must be positive'),
   zoomLink: z.string().url('Invalid zoom link').optional(),
+  zoomMeetingId: z.string().optional(),
   participantEnrollmentIds: z.array(z.string().uuid('Invalid enrollment ID')).min(1, 'At least one participant required'),
   sharedSessionConfirmed: z.boolean().optional(),
 });

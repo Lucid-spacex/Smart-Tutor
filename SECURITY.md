@@ -49,7 +49,7 @@ Students do not authenticate with standard email/password. Instead, students aut
 | Enroll a child, view own children | ✅ | ❌ | ✅ (all) | — |
 | View own schedule/assignments/progress reports | ✅ (own children) | — | ✅ (all) | ✅ (own only) |
 | View grades | ✅ (own children, approved only) | ✅ (own submissions, any status) | ✅ (all) | ✅ (own, approved only) |
-| Schedule/reschedule a session | ❌ | ❌ | ✅ | ❌ |
+| Schedule/reschedule a session | ❌ | ✅ (own assigned students only) | ✅ | ❌ |
 | Log session notes/homework (not time/link) | — | ✅ (assigned only) | ✅ | ❌ |
 | Create assignments/tests | ❌ | ✅ (assigned only) | ✅ | ❌ |
 | Submit a grade | ❌ | ✅ (assigned only, → pending approval) | ✅ | ❌ |
@@ -69,8 +69,15 @@ Students do not authenticate with standard email/password. Instead, students aut
 | View a student's attendance | ✅ (own child) | ✅ (assigned students only) | ✅ (all) | ✅ (own only) |
 | Mark session attendance | ❌ | ✅ (assigned session, on completion only) | ❌ | ❌ |
 | **Quiz Mode** (explicit RBAC carve-out) | ❌ | ✅ (create questions for own assignments) | ✅ | ✅ (start/answer/complete own quiz only) |
+| View detailed student info (single student) | — | ✅ (own assigned students only, no parent info) | ✅ | — |
+| View assigned tutor profiles | — | — | — | ✅ (own assigned tutors only) |
 
 ---
+
+**Note**: Additional RBAC entries added 2026-09-26:
+- Tutors can now schedule/reschedule sessions for their own assigned students only
+- Tutors can view detailed student info for their assigned students (excluding parent info)
+- Students can view their assigned tutors' profiles
 
 ## 4. IDOR Defense & Resource-Level Authorization
 
@@ -168,7 +175,29 @@ Students are otherwise fully read-only, but quiz mode provides a **deliberate, n
 
 ---
 
-## 12. Rate Limiting Tiers
+## 12. Tutor Self-Scheduling Policy Change (2026-09-26)
+
+**Policy Change Notice**: As of 2026-09-26, tutors are now permitted to create and reschedule sessions for their own assigned students. This is a deliberate reversal of the earlier admin-only scheduling rule and is documented here as an intentional policy change.
+
+### Updated Session Scheduling Rules:
+- **Tutors**: Can create and reschedule sessions for their own assigned students only (single enrollment sessions)
+- **Admins**: Retain full scheduling power across all enrollments, including shared/multi-student sessions
+- **Ownership Checks**: 
+  - `POST /tutor/sessions` requires the `enrollmentId` to belong to the requesting tutor
+  - `PATCH /tutor/sessions/:id/reschedule` requires the session's `tutorId` to match the requesting tutor
+  - Tutors cannot create sessions for students they don't teach
+  - Tutors cannot reschedule sessions created by other tutors or admins
+- **Zoom Integration**: Tutor-created sessions auto-generate Zoom meetings using the same logic as admin-created sessions
+- **Scope**: Tutor-created sessions are single-student only. Multi-student shared sessions remain admin-only
+
+### Security Considerations:
+- The ownership check (`enrollmentId` must belong to the requesting tutor) is the single most important security constraint
+- This change is additive to admin capabilities, not a replacement
+- Tutors still cannot modify `scheduledAt` or `zoomLink` when logging session notes (only status, notes, homework, attendance)
+
+---
+
+## 13. Rate Limiting Tiers
 
 Rate limiting is applied in **three separately-instanced tiers** based on risk level. A single blanket limit is intentionally avoided — it would throttle normal usage (dashboard loads, notification polling) while under-protecting the endpoints that actually need aggressive limits.
 

@@ -144,6 +144,61 @@ export class ZoomService {
   }
 
   /**
+   * Create a Zoom meeting
+   */
+  async createMeeting(scheduledAt: Date, durationMinutes: number): Promise<{ zoomLink: string; zoomMeetingId: string }> {
+    if (!this.zoomAccountId || !this.zoomClientId || !this.zoomClientSecret) {
+      logger.warn('Zoom credentials not configured, meeting creation disabled');
+      return { zoomLink: '', zoomMeetingId: '' };
+    }
+
+    try {
+      const accessToken = await this.getAccessToken();
+      
+      const response = await fetch(`${this.zoomBaseUrl}/users/me/meetings`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          topic: 'Smart Tutor Session',
+          type: 2, // Scheduled meeting
+          start_time: scheduledAt.toISOString(),
+          duration: durationMinutes,
+          settings: {
+            host_video: true,
+            participant_video: true,
+            join_before_host: false,
+            mute_upon_entry: false,
+            watermark: false,
+            use_pmi: false,
+            approval_type: 2, // No approval required
+            audio: 'both',
+            auto_recording: 'cloud',
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Zoom meeting creation failed: ${response.status}`);
+      }
+
+      const data = await response.json() as any;
+      
+      logger.info({ meetingId: data.id, joinUrl: data.join_url }, 'Zoom meeting created successfully');
+      
+      return {
+        zoomLink: data.join_url,
+        zoomMeetingId: data.id.toString(),
+      };
+    } catch (error) {
+      logger.error({ error }, 'Failed to create Zoom meeting');
+      throw error;
+    }
+  }
+
+  /**
    * Handle Zoom recording.completed webhook event
    */
   async handleRecordingCompleted(payload: any): Promise<void> {
