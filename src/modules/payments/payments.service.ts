@@ -379,6 +379,72 @@ export class PaymentsService {
       throw new Error('Payment not found');
     }
 
+    // If payment is still pending, verify with Paystack directly
+    if (payment.status === 'PENDING') {
+      try {
+        const verification = await this.paymentProvider.verifyPayment(reference);
+        
+        if (verification.status === 'success') {
+          // Update payment status in database
+          const updatedPayment = await prisma.$transaction(async (tx) => {
+            const p = await tx.payment.update({
+              where: { id: payment.id },
+              data: {
+                status: 'SUCCESS',
+                paidAt: new Date(),
+              },
+            });
+
+            // Activate enrollment(s) if payment is successful
+            if (payment.enrollmentGroupId) {
+              await tx.enrollment.updateMany({
+                where: { 
+                  enrollmentGroupId: payment.enrollmentGroupId,
+                  status: 'PENDING_PAYMENT',
+                },
+                data: { status: 'ACTIVE' },
+              });
+            } else if (payment.enrollmentId) {
+              const enrollment = await tx.enrollment.findUnique({
+                where: { id: payment.enrollmentId },
+              });
+              
+              if (enrollment && enrollment.status === 'PENDING_PAYMENT') {
+                await tx.enrollment.update({
+                  where: { id: payment.enrollmentId },
+                  data: { status: 'ACTIVE' },
+                });
+              }
+            }
+
+            return p;
+          });
+
+          // Return updated payment with relations
+          return await prisma.payment.findFirst({
+            where: { id: updatedPayment.id },
+            include: {
+              enrollment: {
+                include: {
+                  student: true,
+                  subject: true,
+                },
+              },
+            },
+          });
+        } else if (verification.status === 'failed') {
+          // Update payment to failed
+          await prisma.payment.update({
+            where: { id: payment.id },
+            data: { status: 'FAILED' },
+          });
+        }
+      } catch (error) {
+        logger.error({ error, reference }, 'Paystack verification failed, returning pending status');
+        // Return payment as-is if verification fails
+      }
+    }
+
     return payment;
   }
 }
