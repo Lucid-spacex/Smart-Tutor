@@ -1,4 +1,5 @@
 import prisma from '../../config/database';
+import { logger } from '../../config/logger';
 import { PaystackProvider } from './providers/paystack.provider';
 import { PaymentProvider } from './providers/payment-provider.interface';
 import { InitiatePaymentInput } from './payments.validation';

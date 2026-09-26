@@ -1,6 +1,10 @@
 import express, { Application } from 'express';
 import swaggerUi from 'swagger-ui-express';
 import dotenv from 'dotenv';
+
+// Load environment variables before importing config
+dotenv.config();
+
 import { swaggerSpec, swaggerUiOptions } from './config/swagger';
 import { errorHandler } from './middleware/error-handler.middleware';
 import { config } from './config/env.config';
@@ -27,8 +31,6 @@ import quizRoutes from './modules/quiz/quiz.routes';
 import { initializeScheduler } from './jobs/scheduler';
 import { logger } from './config/logger';
 import { tier2WriteRateLimit, tier3ReadRateLimit } from './middleware/rate-limit.middleware';
-
-dotenv.config();
 
 const app: Application = express();
 
@@ -109,6 +111,12 @@ app.get('/health', async (req, res) => {
 
 // API Documentation
 app.use('/api-docs', swaggerUi.serve as any, swaggerUi.setup(swaggerSpec, swaggerUiOptions) as any);
+
+// Serve raw Swagger JSON for debugging
+app.get('/api-docs.json', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.send(swaggerSpec);
+});
 
 // API Routes mounted at both /api and root for backwards compatibility with tests and clients
 const mountRoutes = (prefix: string = '') => {
