@@ -2,6 +2,7 @@ import prisma from '../../config/database';
 import { CreateMessageInput } from './messages.validation';
 import crypto from 'crypto';
 import { logger } from '../../config/logger';
+import { AppError } from '../../middleware/error-handler.middleware';
 
 export class MessagesService {
   /**
@@ -102,7 +103,7 @@ export class MessagesService {
   async sendMessage(senderId: string, data: CreateMessageInput) {
     const isAllowed = await this.canMessage(senderId, data.recipientId);
     if (!isAllowed) {
-      throw new Error('You are not permitted to message this user');
+      throw new AppError(403, 'You are not permitted to message this user');
     }
 
     // Look for existing thread between these two users

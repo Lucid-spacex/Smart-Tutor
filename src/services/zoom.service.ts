@@ -1,6 +1,7 @@
 import prisma from '../config/database';
 import { logger } from '../config/logger';
 import crypto from 'crypto';
+import { AppError } from '../middleware/error-handler.middleware';
 
 /**
  * Zoom Recording Service
@@ -28,30 +29,34 @@ export class ZoomService {
    */
   private async getAccessToken(): Promise<string> {
     try {
+      const auth = Buffer.from(`${this.zoomClientId}:${this.zoomClientSecret}`).toString('base64');
+
       const response = await fetch('https://zoom.us/oauth/token', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
+          'Authorization': `Basic ${auth}`,
         },
         body: new URLSearchParams({
           grant_type: 'account_credentials',
           account_id: this.zoomAccountId,
         }),
-        auth: {
-          username: this.zoomClientId,
-          password: this.zoomClientSecret,
-        },
-      } as any);
+      });
 
       if (!response.ok) {
-        throw new Error(`Zoom OAuth failed: ${response.status}`);
+        const errorText = await response.text();
+        logger.error({ status: response.status, errorText }, 'Zoom OAuth failed');
+        throw new AppError(502, 'Failed to authenticate with Zoom. Please check credentials.');
       }
 
       const data = await response.json() as any;
       return data.access_token;
     } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
       logger.error({ error }, 'Failed to get Zoom access token');
-      throw error;
+      throw new AppError(502, 'Failed to authenticate with Zoom. Please check credentials.');
     }
   }
 
@@ -154,7 +159,7 @@ export class ZoomService {
 
     try {
       const accessToken = await this.getAccessToken();
-      
+
       const response = await fetch(`${this.zoomBaseUrl}/users/me/meetings`, {
         method: 'POST',
         headers: {
@@ -181,20 +186,25 @@ export class ZoomService {
       });
 
       if (!response.ok) {
-        throw new Error(`Zoom meeting creation failed: ${response.status}`);
+        const errorText = await response.text();
+        logger.error({ status: response.status, errorText }, 'Zoom meeting creation failed');
+        throw new AppError(502, 'Failed to create Zoom meeting. Please try again later.');
       }
 
       const data = await response.json() as any;
-      
+
       logger.info({ meetingId: data.id, joinUrl: data.join_url }, 'Zoom meeting created successfully');
-      
+
       return {
         zoomLink: data.join_url,
         zoomMeetingId: data.id.toString(),
       };
     } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
       logger.error({ error }, 'Failed to create Zoom meeting');
-      throw error;
+      throw new AppError(502, 'Failed to create Zoom meeting. Please try again later.');
     }
   }
 
