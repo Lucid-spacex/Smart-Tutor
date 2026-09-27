@@ -183,11 +183,17 @@ export class SessionsService {
       throw new AppError(400, 'Can only reschedule scheduled sessions');
     }
 
+    const updateData: any = {};
+    if (data.scheduledAt) {
+      updateData.scheduledAt = new Date(data.scheduledAt);
+    }
+    if (data.zoomLink !== undefined) {
+      updateData.zoomLink = data.zoomLink;
+    }
+
     return prisma.session.update({
       where: { id: sessionId },
-      data: {
-        scheduledAt: new Date(data.scheduledAt),
-      },
+      data: updateData,
     });
   }
 
