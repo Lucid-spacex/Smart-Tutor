@@ -204,20 +204,64 @@ export class SessionsService {
       where.status = query.status;
     }
 
-    // Filter based on user role using new schema structure
+    // Filter based on user role
     if (userRole === 'PARENT' || userRole === 'STUDENT') {
-      // Get sessions where the user is a participant
-      where.participants = {
-        enrollment: {
-          student: userRole === 'STUDENT'
-            ? { userId }
-            : { parentId: userId },
-        },
-      };
+      // Get enrollment IDs based on user role
+      let enrollmentIds: string[] = [];
 
-      // If enrollmentId is specified, further filter by that enrollment
+      if (userRole === 'STUDENT') {
+        // Get student's enrollments
+        const student = await prisma.student.findUnique({
+          where: { userId },
+          select: { id: true },
+        });
+
+        if (!student) {
+          throw new AppError(404, 'Student profile not found');
+        }
+
+        const enrollments = await prisma.enrollment.findMany({
+          where: { studentId: student.id },
+          select: { id: true },
+        });
+
+        enrollmentIds = enrollments.map(e => e.id);
+      } else if (userRole === 'PARENT') {
+        // Get parent's children's enrollments
+        const children = await prisma.student.findMany({
+          where: { parentId: userId },
+          select: { id: true },
+        });
+
+        const childIds = children.map(c => c.id);
+
+        if (childIds.length === 0) {
+          return []; // No children, no sessions
+        }
+
+        const enrollments = await prisma.enrollment.findMany({
+          where: { studentId: { in: childIds } },
+          select: { id: true },
+        });
+
+        enrollmentIds = enrollments.map(e => e.id);
+      }
+
+      // If enrollmentId is specified, verify it belongs to the user
       if (query.enrollmentId) {
-        where.participants.enrollmentId = query.enrollmentId;
+        if (!enrollmentIds.includes(query.enrollmentId)) {
+          throw new AppError(403, 'You do not have permission to access sessions for this enrollment');
+        }
+        enrollmentIds = [query.enrollmentId];
+      }
+
+      // Filter sessions by enrollment IDs
+      if (enrollmentIds.length > 0) {
+        where.participants = {
+          enrollmentId: { in: enrollmentIds },
+        };
+      } else {
+        return []; // No enrollments, no sessions
       }
     } else if (userRole === 'TUTOR') {
       where.tutorId = userId;

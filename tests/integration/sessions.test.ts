@@ -197,4 +197,125 @@ describe('Sessions & Attendance Lock Integration Tests', () => {
       expect(res.body.statistics.percentage).toBe(100);
     });
   });
+
+  describe('Session Visibility Across Roles', () => {
+    let tutorSessionId = '';
+
+    it('Tutor creates a session via POST /tutor/sessions', async () => {
+      const scheduledAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const res = await request(app)
+        .post('/tutor/sessions')
+        .set('Authorization', `Bearer ${tutorToken}`)
+        .send({
+          enrollmentId,
+          scheduledAt,
+          durationMinutes: 60,
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.tutorId).toBe(tutorId);
+      expect(res.body.status).toBe('SCHEDULED');
+      tutorSessionId = res.body.id;
+    });
+
+    it('Tutor can see the session via GET /tutor/sessions', async () => {
+      const res = await request(app)
+        .get('/tutor/sessions')
+        .set('Authorization', `Bearer ${tutorToken}`);
+
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body)).toBe(true);
+      const tutorSession = res.body.find((s: any) => s.id === tutorSessionId);
+      expect(tutorSession).toBeDefined();
+      expect(tutorSession.tutorId).toBe(tutorId);
+    });
+
+    it('Parent can see the session via GET /sessions?enrollmentId=X', async () => {
+      const res = await request(app)
+        .get(`/sessions?enrollmentId=${enrollmentId}`)
+        .set('Authorization', `Bearer ${parentToken}`);
+
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body)).toBe(true);
+      const session = res.body.find((s: any) => s.id === tutorSessionId);
+      expect(session).toBeDefined();
+      expect(session.tutorId).toBe(tutorId);
+      expect(session.status).toBe('SCHEDULED');
+    });
+
+    it('Student can see the session via GET /student/me/schedule', async () => {
+      const res = await request(app)
+        .get('/student/me/schedule')
+        .set('Authorization', `Bearer ${studentToken}`);
+
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body)).toBe(true);
+      const session = res.body.find((s: any) => s.sessionId === tutorSessionId);
+      expect(session).toBeDefined();
+      expect(session.status).toBe('SCHEDULED');
+    });
+
+    it('Parent cannot access sessions for enrollment not belonging to their children', async () => {
+      // Create another enrollment with different parent
+      const otherParent = await prisma.user.create({
+        data: {
+          fullName: 'Other Parent',
+          email: `other_parent_${Date.now()}@test.com`,
+          passwordHash: await hashPassword(testPassword),
+          role: 'PARENT',
+          status: 'ACTIVE',
+        },
+      });
+
+      const otherStudentUser = await prisma.user.create({
+        data: {
+          fullName: 'Other Student',
+          studentCode: `OTH${Math.floor(1000 + Math.random() * 9000)}`,
+          passwordHash: await hashPassword(testPassword),
+          role: 'STUDENT',
+          status: 'ACTIVE',
+          parentId: otherParent.id,
+        },
+      });
+
+      const otherStudent = await prisma.student.create({
+        data: {
+          parentId: otherParent.id,
+          userId: otherStudentUser.id,
+          fullName: 'Other Student',
+          dateOfBirth: new Date('2014-01-01'),
+          gradeLevel: '4th',
+        },
+      });
+
+      // Create a new subject for the other enrollment
+      const otherSubject = await prisma.subject.create({
+        data: {
+          name: `Other_Subject_${Date.now()}`,
+          gradeBand: 'K-12',
+          category: 'CORE',
+        },
+      });
+
+      const otherEnrollment = await prisma.enrollment.create({
+        data: {
+          studentId: otherStudent.id,
+          subjectId: otherSubject.id,
+          tutorId: tutorId,
+          sessionFrequency: 'TWICE_WEEKLY',
+          availableDays: ['MON', 'THU'],
+          billingFrequency: 'MONTHLY',
+          yearlyPrice: 1200,
+          status: 'ACTIVE',
+          startDate: new Date()
+        },
+      });
+
+      const res = await request(app)
+        .get(`/sessions?enrollmentId=${otherEnrollment.id}`)
+        .set('Authorization', `Bearer ${parentToken}`);
+
+      expect(res.status).toBe(403);
+    });
+  });
 });
