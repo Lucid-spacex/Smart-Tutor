@@ -128,4 +128,36 @@ export class StudentController {
       next(error);
     }
   };
+
+  getMyEnrollments = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const userId = req.user?.userId;
+      if (!userId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const enrollments = await this.studentService.getMyEnrollments(userId);
+      res.status(200).json(enrollments);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getEnrollmentSessions = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const userId = req.user?.userId;
+      const { enrollmentId } = req.params;
+
+      if (!userId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const sessions = await this.studentService.getEnrollmentSessions(userId, enrollmentId);
+      res.status(200).json(sessions);
+    } catch (error) {
+      next(error);
+    }
+  };
 }

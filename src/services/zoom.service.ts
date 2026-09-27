@@ -174,7 +174,7 @@ export class ZoomService {
           settings: {
             host_video: true,
             participant_video: true,
-            join_before_host: false,
+            join_before_host: true, // Allow students to join before tutor arrives
             mute_upon_entry: false,
             watermark: false,
             use_pmi: false,

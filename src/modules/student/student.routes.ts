@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { StudentController } from './student.controller';
 import { AttendanceController } from '../attendance/attendance.controller';
 import { authenticate, requireRole } from '../../middleware/auth.middleware';
+import { validateUUID } from '../../middleware/uuid-validation.middleware';
 
 const router = Router();
 const studentController = new StudentController();
@@ -17,5 +18,7 @@ router.get('/me/notifications', authenticate, requireRole('STUDENT'), studentCon
 router.get('/me/next-class', authenticate, requireRole('STUDENT'), studentController.getNextClass);
 router.get('/me/attendance', authenticate, requireRole('STUDENT'), attendanceController.getMyAttendance);
 router.get('/me/tutors', authenticate, requireRole('STUDENT'), studentController.getMyTutors);
+router.get('/me/enrollments', authenticate, requireRole('STUDENT'), studentController.getMyEnrollments);
+router.get('/me/enrollments/:enrollmentId/sessions', authenticate, requireRole('STUDENT'), validateUUID('enrollmentId'), studentController.getEnrollmentSessions);
 
 export default router;

@@ -214,6 +214,11 @@ export class SessionsService {
             : { parentId: userId },
         },
       };
+
+      // If enrollmentId is specified, further filter by that enrollment
+      if (query.enrollmentId) {
+        where.participants.enrollmentId = query.enrollmentId;
+      }
     } else if (userRole === 'TUTOR') {
       where.tutorId = userId;
     }

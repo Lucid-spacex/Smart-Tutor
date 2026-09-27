@@ -41,17 +41,11 @@ export class StudentService {
       throw new AppError(404, 'Student profile not found');
     }
 
-    // Get upcoming sessions via session participants
+    // Get all sessions via session participants (including past and future)
     const sessionParticipants = await prisma.sessionParticipant.findMany({
       where: {
         enrollment: {
           studentId: student.id,
-        },
-        session: {
-          status: 'SCHEDULED',
-          scheduledAt: {
-            gte: new Date(),
-          },
         },
       },
       include: {
@@ -73,7 +67,7 @@ export class StudentService {
       },
       orderBy: {
         session: {
-          scheduledAt: 'asc',
+          scheduledAt: 'desc',
         },
       },
     });
@@ -83,6 +77,7 @@ export class StudentService {
       scheduledAt: sp.session.scheduledAt,
       durationMinutes: sp.session.durationMinutes,
       zoomLink: sp.session.zoomLink,
+      status: sp.session.status,
       tutor: sp.session.tutor,
       subject: sp.enrollment.subject.name,
     }));
@@ -331,5 +326,101 @@ export class StudentService {
     }
 
     return Array.from(tutorMap.values());
+  }
+
+  async getMyEnrollments(userId: string) {
+    const student = await prisma.student.findUnique({
+      where: { userId },
+    });
+
+    if (!student) {
+      throw new AppError(404, 'Student profile not found');
+    }
+
+    // Get all enrollments for this student with tutor and subject data
+    const enrollments = await prisma.enrollment.findMany({
+      where: {
+        studentId: student.id,
+      },
+      include: {
+        tutor: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            tutorProfile: {
+              select: {
+                bio: true,
+                subjects: true,
+                vettingStatus: true,
+              },
+            },
+          },
+        },
+        subject: true,
+        payments: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    return enrollments;
+  }
+
+  async getEnrollmentSessions(userId: string, enrollmentId: string) {
+    const student = await prisma.student.findUnique({
+      where: { userId },
+    });
+
+    if (!student) {
+      throw new AppError(404, 'Student profile not found');
+    }
+
+    // Verify the enrollment belongs to this student
+    const enrollment = await prisma.enrollment.findUnique({
+      where: { id: enrollmentId },
+      select: { studentId: true },
+    });
+
+    if (!enrollment || enrollment.studentId !== student.id) {
+      throw new AppError(403, 'You do not have access to this enrollment');
+    }
+
+    // Get sessions for this enrollment
+    const sessionParticipants = await prisma.sessionParticipant.findMany({
+      where: {
+        enrollmentId,
+      },
+      include: {
+        session: {
+          include: {
+            tutor: {
+              select: {
+                id: true,
+                fullName: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        session: {
+          scheduledAt: 'desc',
+        },
+      },
+    });
+
+    return sessionParticipants.map((sp: any) => ({
+      sessionId: sp.sessionId,
+      scheduledAt: sp.session.scheduledAt,
+      durationMinutes: sp.session.durationMinutes,
+      zoomLink: sp.session.zoomLink,
+      status: sp.session.status,
+      tutor: sp.session.tutor,
+    }));
   }
 }
