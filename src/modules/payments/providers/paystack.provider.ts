@@ -275,11 +275,11 @@ export class PaystackProvider implements PaymentProvider {
   private getCallbackUrl(): string {
     // In production, this should be configured via environment variable
     // Use FRONTEND_URL for the callback, fallback to ALLOWED_ORIGINS
-    const frontendUrl = process.env.FRONTEND_URL || process.env.ALLOWED_ORIGINS?.split(',')[0];
+    const frontendUrl = config.FRONTEND_URL || (config.ALLOWED_ORIGINS?.split(',')[0]);
     if (frontendUrl) {
       return `${frontendUrl}/payment/callback`;
     }
-    
+
     // Fallback - using the actual frontend production URL
     logger.warn('No FRONTEND_URL or ALLOWED_ORIGINS configured - using default callback URL');
     return 'https://teach-me-hub.vercel.app/payment/callback';

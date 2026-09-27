@@ -68,9 +68,11 @@ app.use((req, res, next) => {
 
 // CORS configuration
 app.use((req, res, next) => {
-  const allowedOrigins = config.NODE_ENV === 'production'
-    ? (process.env.ALLOWED_ORIGINS?.split(',') || ['https://yourdomain.com'])
-    : ['http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:3000'];
+  const allowedOrigins = config.ALLOWED_ORIGINS
+    ? config.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
+    : (config.NODE_ENV === 'production'
+      ? ['https://teach-me-hub.vercel.app']
+      : ['http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:3000']);
 
   const origin = req.headers.origin;
   if (origin && allowedOrigins.includes(origin)) {
