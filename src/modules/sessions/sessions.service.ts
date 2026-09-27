@@ -1,6 +1,7 @@
 import prisma from '../../config/database';
-import { UpdateSessionInput, GetSessionsQuery, CreateSessionInput, CreateTutorSessionInput, RescheduleSessionInput } from './sessions.validation';
+import { UpdateSessionInput, GetSessionsQuery, CreateSessionInput, CreateTutorSessionInput, RescheduleSessionInput, RescheduleTutorSessionInput } from './sessions.validation';
 import { ZoomService } from '../../services/zoom.service';
+import { AppError } from '../../middleware/error-handler.middleware';
 
 export class SessionsService {
   private zoomService: ZoomService;
@@ -21,11 +22,11 @@ export class SessionsService {
     });
 
     if (!enrollment) {
-      throw new Error('Enrollment not found');
+      throw new AppError(404, 'Enrollment not found');
     }
 
     if (enrollment.tutorId !== tutorId) {
-      throw new Error('You can only create sessions for your own assigned students');
+      throw new AppError(403, 'You can only create sessions for your own assigned students');
     }
 
     // Create session with single participant
@@ -62,29 +63,29 @@ export class SessionsService {
   }
 
   // Tutor-only: Reschedule a session they created
-  async rescheduleTutorSession(sessionId: string, tutorId: string, data: RescheduleSessionInput) {
+  async rescheduleTutorSession(sessionId: string, tutorId: string, data: RescheduleTutorSessionInput) {
     const session = await prisma.session.findUnique({
       where: { id: sessionId },
     });
 
     if (!session) {
-      throw new Error('Session not found');
+      throw new AppError(404, 'Session not found');
     }
 
     // CRITICAL OWNERSHIP CHECK: Verify session belongs to this tutor
     if (session.tutorId !== tutorId) {
-      throw new Error('You can only reschedule sessions you created');
+      throw new AppError(403, 'You can only reschedule sessions you created');
     }
 
     // Only allow rescheduling scheduled sessions
     if (session.status !== 'SCHEDULED') {
-      throw new Error('Can only reschedule scheduled sessions');
+      throw new AppError(400, 'Can only reschedule scheduled sessions');
     }
 
     return prisma.session.update({
       where: { id: sessionId },
       data: {
-        scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : session.scheduledAt,
+        scheduledAt: new Date(data.scheduledAt),
       },
     });
   }
@@ -98,11 +99,11 @@ export class SessionsService {
     });
 
     if (!tutor || tutor.role !== 'TUTOR') {
-      throw new Error('Tutor not found');
+      throw new AppError(404, 'Tutor not found');
     }
 
     if (tutor.status !== 'APPROVED' || !tutor.tutorProfile || tutor.tutorProfile.vettingStatus !== 'APPROVED') {
-      throw new Error('Tutor is not approved for tutoring');
+      throw new AppError(403, 'Tutor is not approved for tutoring');
     }
 
     // Verify all enrollment IDs are valid and belong to the same tutor (if assigned)
@@ -117,13 +118,13 @@ export class SessionsService {
     });
 
     if (enrollments.length !== data.participantEnrollmentIds.length) {
-      throw new Error('One or more enrollments not found');
+      throw new AppError(404, 'One or more enrollments not found');
     }
 
     // Check if enrollments have assigned tutors
     for (const enrollment of enrollments) {
       if (enrollment.tutorId && enrollment.tutorId !== data.tutorId) {
-        throw new Error(`Enrollment ${enrollment.id} is assigned to a different tutor`);
+        throw new AppError(400, `Enrollment ${enrollment.id} is assigned to a different tutor`);
       }
     }
 
@@ -174,19 +175,18 @@ export class SessionsService {
     });
 
     if (!session) {
-      throw new Error('Session not found');
+      throw new AppError(404, 'Session not found');
     }
 
     // Only allow rescheduling scheduled sessions
     if (session.status !== 'SCHEDULED') {
-      throw new Error('Can only reschedule scheduled sessions');
+      throw new AppError(400, 'Can only reschedule scheduled sessions');
     }
 
     return prisma.session.update({
       where: { id: sessionId },
       data: {
-        scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : session.scheduledAt,
-        zoomLink: data.zoomLink !== undefined ? data.zoomLink : session.zoomLink,
+        scheduledAt: new Date(data.scheduledAt),
       },
     });
   }
@@ -264,11 +264,11 @@ export class SessionsService {
     });
 
     if (!session) {
-      throw new Error('Session not found');
+      throw new AppError(404, 'Session not found');
     }
 
     if (session.tutorId !== tutorId) {
-      throw new Error('Not authorized to update this session');
+      throw new AppError(403, 'Not authorized to update this session');
     }
 
     // SECURITY: Tutors cannot change scheduledAt or zoomLink
@@ -289,7 +289,7 @@ export class SessionsService {
       const effectiveStatus = data.status || session.status;
       // Only allow marking attendance when completing or missing a session (can't mark attendance for a still-SCHEDULED session)
       if (effectiveStatus !== 'COMPLETED' && effectiveStatus !== 'MISSED') {
-        throw new Error('Can only mark attendance when session is COMPLETED or MISSED');
+        throw new AppError(400, 'Can only mark attendance when session is COMPLETED or MISSED');
       }
 
       // Validate that all provided enrollmentIds are actual participants
@@ -301,7 +301,7 @@ export class SessionsService {
       const validEnrollmentIds = new Set(participantEnrollmentIds.map(p => p.enrollmentId));
       for (const participant of data.participants) {
         if (!validEnrollmentIds.has(participant.enrollmentId)) {
-          throw new Error(`Enrollment ${participant.enrollmentId} is not a participant in this session`);
+          throw new AppError(400, `Enrollment ${participant.enrollmentId} is not a participant in this session`);
         }
       }
 

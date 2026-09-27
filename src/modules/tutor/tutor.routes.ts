@@ -4,6 +4,7 @@ import { validate } from '../../middleware/validation.middleware';
 import { authenticate, requireRole } from '../../middleware/auth.middleware';
 import { validateUUID } from '../../middleware/uuid-validation.middleware';
 import { createTutorProfileSchema, updateAvailabilitySchema } from './tutor.validation';
+import { createTutorSessionSchema, rescheduleTutorSessionSchema } from '../sessions/sessions.validation';
 
 const router = Router();
 const tutorController = new TutorController();
@@ -18,5 +19,9 @@ router.get('/tutor-profile', authenticate, requireRole('TUTOR'), tutorController
 router.get('/students', authenticate, requireRole('TUTOR'), tutorController.getAssignedStudents);
 router.get('/students/:studentId', authenticate, requireRole('TUTOR'), validateUUID('studentId'), tutorController.getStudentDetail);
 router.get('/sessions', authenticate, requireRole('TUTOR'), tutorController.getTutorSessions);
+
+// /tutor/sessions (tutor-only session management)
+router.post('/sessions', authenticate, requireRole('TUTOR'), validate(createTutorSessionSchema), tutorController.createTutorSession);
+router.patch('/sessions/:id/reschedule', authenticate, requireRole('TUTOR'), validateUUID('id'), validate(rescheduleTutorSessionSchema), tutorController.rescheduleTutorSession);
 
 export default router;

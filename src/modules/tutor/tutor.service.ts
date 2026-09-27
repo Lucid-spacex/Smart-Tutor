@@ -1,5 +1,6 @@
 import prisma from '../../config/database';
 import { CreateTutorProfileInput, UpdateAvailabilityInput } from './tutor.validation';
+import { AppError } from '../../middleware/error-handler.middleware';
 
 export class TutorService {
   async createTutorProfile(tutorId: string, data: CreateTutorProfileInput) {
@@ -9,7 +10,7 @@ export class TutorService {
     });
 
     if (existingProfile) {
-      throw new Error('Tutor profile already exists');
+      throw new AppError(409, 'Tutor profile already exists');
     }
 
     return prisma.tutorProfile.create({
@@ -30,7 +31,7 @@ export class TutorService {
     });
 
     if (!profile) {
-      throw new Error('Tutor profile not found');
+      throw new AppError(404, 'Tutor profile not found');
     }
 
     return prisma.tutorProfile.update({
@@ -122,7 +123,7 @@ export class TutorService {
     });
 
     if (!profile) {
-      throw new Error('Tutor profile not found');
+      throw new AppError(404, 'Tutor profile not found');
     }
 
     return profile;
@@ -143,7 +144,7 @@ export class TutorService {
     });
 
     if (enrollments.length === 0) {
-      throw new Error('Not authorized to view this student');
+      throw new AppError(403, 'Not authorized to view this student');
     }
 
     // Get the first active enrollment (the one this request is about)
@@ -167,7 +168,7 @@ export class TutorService {
     });
 
     if (!student) {
-      throw new Error('Student not found');
+      throw new AppError(404, 'Student not found');
     }
 
     // Get upcoming sessions for this enrollment

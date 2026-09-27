@@ -1,12 +1,16 @@
 import { Request, Response, NextFunction } from 'express';
 import { TutorService } from './tutor.service';
 import { CreateTutorProfileInput, UpdateAvailabilityInput } from './tutor.validation';
+import { SessionsService } from '../sessions/sessions.service';
+import { CreateTutorSessionInput, RescheduleTutorSessionInput } from '../sessions/sessions.validation';
 
 export class TutorController {
   private tutorService: TutorService;
+  private sessionsService: SessionsService;
 
   constructor() {
     this.tutorService = new TutorService();
+    this.sessionsService = new SessionsService();
   }
 
   createTutorProfile = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -97,6 +101,39 @@ export class TutorController {
       const { studentId } = req.params;
       const studentDetail = await this.tutorService.getStudentDetail(tutorId, studentId);
       res.status(200).json(studentDetail);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  createTutorSession = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const tutorId = (req as any).user?.userId;
+      if (!tutorId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const data: CreateTutorSessionInput = req.body;
+      const session = await this.sessionsService.createTutorSession(tutorId, data);
+      res.status(201).json(session);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  rescheduleTutorSession = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const tutorId = (req as any).user?.userId;
+      if (!tutorId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id } = req.params;
+      const data: RescheduleTutorSessionInput = req.body;
+      const session = await this.sessionsService.rescheduleTutorSession(id, tutorId, data);
+      res.status(200).json(session);
     } catch (error) {
       next(error);
     }

@@ -26,11 +26,11 @@ export const errorHandler = (
       statusCode: err.statusCode,
       path: req.path,
       method: req.method,
+      ...(config.NODE_ENV === 'development' && { stack: err.stack }),
     }, 'Operational error');
 
     res.status(err.statusCode).json({
       error: err.message,
-      ...(config.NODE_ENV === 'development' && { stack: err.stack }),
     });
     return;
   }
@@ -45,6 +45,5 @@ export const errorHandler = (
 
   res.status(500).json({
     error: 'Internal server error',
-    ...(config.NODE_ENV === 'development' && { stack: err.stack }),
   });
 };

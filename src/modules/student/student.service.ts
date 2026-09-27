@@ -1,4 +1,5 @@
 import prisma from '../../config/database';
+import { AppError } from '../../middleware/error-handler.middleware';
 
 export class StudentService {
   async getStudentProfile(userId: string) {
@@ -17,7 +18,7 @@ export class StudentService {
     });
 
     if (!student) {
-      throw new Error('Student profile not found');
+      throw new AppError(404, 'Student profile not found');
     }
 
     // Fetch parent details separately (Student has no parent relation, only parentId scalar)
@@ -37,7 +38,7 @@ export class StudentService {
     });
 
     if (!student) {
-      throw new Error('Student profile not found');
+      throw new AppError(404, 'Student profile not found');
     }
 
     // Get upcoming sessions via session participants
@@ -93,7 +94,7 @@ export class StudentService {
     });
 
     if (!student) {
-      throw new Error('Student profile not found');
+      throw new AppError(404, 'Student profile not found');
     }
 
     const assignments = await prisma.assignment.findMany({
@@ -123,7 +124,7 @@ export class StudentService {
     });
 
     if (!student) {
-      throw new Error('Student profile not found');
+      throw new AppError(404, 'Student profile not found');
     }
 
     const grades = await prisma.grade.findMany({
@@ -160,7 +161,7 @@ export class StudentService {
     });
 
     if (!student) {
-      throw new Error('Student profile not found');
+      throw new AppError(404, 'Student profile not found');
     }
 
     const progressReports = await prisma.progressReport.findMany({
@@ -208,7 +209,7 @@ export class StudentService {
     });
 
     if (!student) {
-      throw new Error('Student profile not found');
+      throw new AppError(404, 'Student profile not found');
     }
 
     // Find the nearest upcoming SCHEDULED session
@@ -288,7 +289,7 @@ export class StudentService {
     });
 
     if (!student) {
-      throw new Error('Student profile not found');
+      throw new AppError(404, 'Student profile not found');
     }
 
     // Get all active enrollments with assigned tutors

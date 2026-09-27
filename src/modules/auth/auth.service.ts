@@ -6,6 +6,7 @@ import { generateOTP, storeOTP, verifyOTP } from '../../utils/otp.util';
 import { RegisterData, VerifyData, LoginData, StudentLoginData, RefreshData, ChangePasswordData, AuthResponse } from './types';
 import crypto from 'crypto';
 import { logger } from '../../config/logger';
+import { AppError } from '../../middleware/error-handler.middleware';
 
 export class AuthService {
   async register(data: RegisterData): Promise<{ message: string; userId: string }> {
@@ -14,7 +15,7 @@ export class AuthService {
     });
 
     if (existingUser) {
-      throw new Error('User with this email already exists');
+      throw new AppError(409, 'User with this email already exists');
     }
 
     const passwordHash = await hashPassword(data.password);
@@ -51,7 +52,7 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new Error('User not found');
+      throw new AppError(404, 'User not found');
     }
 
     // Verify OTP against stored value
@@ -59,7 +60,7 @@ export class AuthService {
 
     if (!isValidOTP) {
       logger.warn({ email: data.email }, 'Invalid OTP verification attempt');
-      throw new Error('Invalid or expired OTP');
+      throw new AppError(400, 'Invalid or expired OTP');
     }
 
     // Update user status based on role
@@ -95,26 +96,26 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new Error('Invalid credentials');
+      throw new AppError(401, 'Invalid credentials');
     }
 
     const isValidPassword = await comparePassword(data.password, user.passwordHash);
 
     if (!isValidPassword) {
       logger.warn({ email: data.email }, 'Failed login attempt - invalid password');
-      throw new Error('Invalid credentials');
+      throw new AppError(401, 'Invalid credentials');
     }
 
     if (user.status === 'UNVERIFIED') {
-      throw new Error('Please verify your email first');
+      throw new AppError(403, 'Please verify your email first');
     }
 
     if (user.status === 'SUSPENDED' || user.status === 'REJECTED') {
-      throw new Error('Account is not active');
+      throw new AppError(403, 'Account is not active');
     }
 
     if (user.role === 'TUTOR' && user.status === 'PENDING_VETTING') {
-      throw new Error('Your account is pending admin approval');
+      throw new AppError(403, 'Your account is pending admin approval');
     }
 
     const accessToken = generateAccessToken({
@@ -160,7 +161,7 @@ export class AuthService {
 
     if (!studentUser) {
       logger.warn({ studentCode: data.studentCode }, 'Failed student login - student not found');
-      throw new Error('Invalid credentials');
+      throw new AppError(401, 'Invalid credentials');
     }
 
     // Verify parent email matches (case-insensitive)
@@ -172,19 +173,19 @@ export class AuthService {
 
     if (!parentUser || parentUser.email?.toLowerCase() !== data.parentEmail.toLowerCase()) {
       logger.warn({ studentCode: data.studentCode, parentEmail: data.parentEmail }, 'Failed student login - parent email mismatch');
-      throw new Error('Invalid credentials');
+      throw new AppError(401, 'Invalid credentials');
     }
 
     // Verify PIN
     const isValidPin = await comparePassword(data.studentPin, studentUser.passwordHash);
     if (!isValidPin) {
       logger.warn({ studentCode: data.studentCode }, 'Failed student login - invalid PIN');
-      throw new Error('Invalid credentials');
+      throw new AppError(401, 'Invalid credentials');
     }
 
     // Check student status
     if (studentUser.status === 'SUSPENDED') {
-      throw new Error('Account is suspended. Please contact your parent or admin.');
+      throw new AppError(403, 'Account is suspended. Please contact your parent or admin.');
     }
 
     const accessToken = generateAccessToken({
@@ -227,12 +228,12 @@ export class AuthService {
       });
 
       if (!storedToken || storedToken.userId !== payload.userId) {
-        throw new Error('Invalid refresh token');
+        throw new AppError(401, 'Invalid refresh token');
       }
 
       if (storedToken.expiresAt < new Date()) {
         await prisma.refreshToken.delete({ where: { id: storedToken.id } });
-        throw new Error('Refresh token expired');
+        throw new AppError(401, 'Refresh token expired');
       }
 
       // Reuse detection: if the token has been revoked, delete the entire family (potential theft)
@@ -240,7 +241,7 @@ export class AuthService {
         await prisma.refreshToken.deleteMany({
           where: { tokenFamily: storedToken.tokenFamily },
         });
-        throw new Error('Refresh token revoked due to suspicious activity. Please login again.');
+        throw new AppError(401, 'Refresh token revoked due to suspicious activity. Please login again.');
       }
 
       const user = await prisma.user.findUnique({
@@ -248,7 +249,7 @@ export class AuthService {
       });
 
       if (!user) {
-        throw new Error('User not found');
+        throw new AppError(404, 'User not found');
       }
 
       const newAccessToken = generateAccessToken({
@@ -282,7 +283,7 @@ export class AuthService {
         refreshToken: newRefreshToken,
       };
     } catch (error) {
-      throw new Error('Invalid or expired refresh token');
+      throw new AppError(401, 'Invalid or expired refresh token');
     }
   }
 
@@ -300,7 +301,7 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new Error('User not found');
+      throw new AppError(404, 'User not found');
     }
 
     return this.sanitizeUser(user);
@@ -312,12 +313,12 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new Error('User not found');
+      throw new AppError(404, 'User not found');
     }
 
     const isValidPassword = await comparePassword(data.currentPassword, user.passwordHash);
     if (!isValidPassword) {
-      throw new Error('Current password is incorrect');
+      throw new AppError(401, 'Current password is incorrect');
     }
 
     const newPasswordHash = await hashPassword(data.newPassword);
@@ -342,7 +343,7 @@ export class AuthService {
       // Validate IANA timezone string using Intl API
       Intl.DateTimeFormat(undefined, { timeZone: timezone });
     } catch {
-      throw new Error('Invalid timezone format. Expected IANA format (e.g., "Africa/Lagos", "America/New_York", "UTC")');
+      throw new AppError(400, 'Invalid timezone format. Expected IANA format (e.g., "Africa/Lagos", "America/New_York", "UTC")');
     }
 
     await prisma.user.update({
@@ -361,11 +362,11 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new Error('User not found');
+      throw new AppError(404, 'User not found');
     }
 
     if (user.status !== 'UNVERIFIED') {
-      throw new Error('Account is already verified');
+      throw new AppError(400, 'Account is already verified');
     }
 
     const otp = generateOTP();

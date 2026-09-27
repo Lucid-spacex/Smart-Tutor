@@ -252,20 +252,20 @@ export class EnrollmentsService {
     });
 
     if (!enrollment) {
-      throw new Error('Enrollment not found');
+      throw new AppError(404, 'Enrollment not found');
     }
 
     // Check authorization based on role
     if (userRole === 'PARENT') {
       if (enrollment.student.parentId !== userId) {
-        throw new Error('Not authorized to access this enrollment');
+        throw new AppError(403, 'Not authorized to access this enrollment');
       }
     } else if (userRole === 'TUTOR') {
       if (enrollment.tutorId !== userId) {
-        throw new Error('Not authorized to access this enrollment');
+        throw new AppError(403, 'Not authorized to access this enrollment');
       }
     } else if (userRole !== 'ADMIN') {
-      throw new Error('Not authorized to access this enrollment');
+      throw new AppError(403, 'Not authorized to access this enrollment');
     }
 
     return enrollment;
@@ -278,7 +278,7 @@ export class EnrollmentsService {
     });
 
     if (!enrollment) {
-      throw new Error('Enrollment not found');
+      throw new AppError(404, 'Enrollment not found');
     }
 
     return prisma.enrollment.update({
@@ -317,7 +317,7 @@ export class EnrollmentsService {
     });
 
     if (!enrollment) {
-      throw new Error('Enrollment not found');
+      throw new AppError(404, 'Enrollment not found');
     }
 
     // Calculate current amount based on billing frequency

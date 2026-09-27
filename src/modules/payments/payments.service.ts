@@ -3,6 +3,7 @@ import { logger } from '../../config/logger';
 import { PaystackProvider } from './providers/paystack.provider';
 import { PaymentProvider } from './providers/payment-provider.interface';
 import { InitiatePaymentInput } from './payments.validation';
+import { AppError } from '../../middleware/error-handler.middleware';
 
 export class PaymentsService {
   private paymentProvider: PaymentProvider;
@@ -29,13 +30,13 @@ export class PaymentsService {
       });
 
       if (!enrollments || enrollments.length === 0) {
-        throw new Error('Enrollment group not found');
+        throw new AppError(404, 'Enrollment group not found');
       }
 
       // Verify all enrollments belong to the requesting parent
       const unauthorized = enrollments.find((e) => e.student.parentId !== parentId);
       if (unauthorized) {
-        throw new Error('Not authorized to make payment for this enrollment group');
+        throw new AppError(403, 'Not authorized to make payment for this enrollment group');
       }
 
       let totalComputedAmountNGN = 0;
@@ -69,7 +70,8 @@ export class PaymentsService {
             yearlyPriceUSD = Number(enrollment.yearlyPrice);
             yearlyPriceNGN = Number(enrollment.yearlyPrice);
           } else {
-            throw new Error(
+            throw new AppError(
+              400,
               `No pricing configured for enrollment ${enrollment.id} (${enrollment.subject.name}). Please contact admin.`
             );
           }
@@ -110,7 +112,7 @@ export class PaymentsService {
       totalComputedAmountUSD = Math.round(totalComputedAmountUSD * 100) / 100;
 
       if (totalComputedAmountNGN <= 0 || totalComputedAmountUSD <= 0) {
-        throw new Error('Invalid payment amount. Please contact admin to set pricing for these enrollments.');
+        throw new AppError(400, 'Invalid payment amount. Please contact admin to set pricing for these enrollments.');
       }
 
       const parent = await prisma.user.findUnique({
@@ -118,7 +120,7 @@ export class PaymentsService {
       });
 
       if (!parent || !parent.email) {
-        throw new Error('Parent not found or missing email');
+        throw new AppError(404, 'Parent not found or missing email');
       }
 
       // Use the requested currency (default to NGN) and corresponding amount
@@ -179,11 +181,11 @@ export class PaymentsService {
     });
 
     if (!enrollment) {
-      throw new Error('Enrollment not found');
+      throw new AppError(404, 'Enrollment not found');
     }
 
     if (enrollment.student.parentId !== parentId) {
-      throw new Error('Not authorized to make payment for this enrollment');
+      throw new AppError(403, 'Not authorized to make payment for this enrollment');
     }
 
     // SECURITY: Compute amount server-side from tiered pricing
@@ -208,7 +210,7 @@ export class PaymentsService {
         yearlyPriceUSD = Number(enrollment.yearlyPrice);
         yearlyPriceNGN = Number(enrollment.yearlyPrice);
       } else {
-        throw new Error('No pricing configured for this enrollment. Please contact admin.');
+        throw new AppError(400, 'No pricing configured for this enrollment. Please contact admin.');
       }
     }
 
@@ -234,7 +236,7 @@ export class PaymentsService {
     computedAmountUSD = Math.round(computedAmountUSD * 100) / 100;
 
     if (computedAmountNGN <= 0 || computedAmountUSD <= 0) {
-      throw new Error('Invalid payment amount. Please contact admin to set pricing for this enrollment.');
+      throw new AppError(400, 'Invalid payment amount. Please contact admin to set pricing for this enrollment.');
     }
 
     const parent = await prisma.user.findUnique({
@@ -242,7 +244,7 @@ export class PaymentsService {
     });
 
     if (!parent || !parent.email) {
-      throw new Error('Parent not found or missing email');
+      throw new AppError(404, 'Parent not found or missing email');
     }
 
     // Use the requested currency (default to NGN) and corresponding amount
@@ -290,7 +292,7 @@ export class PaymentsService {
     const webhookResult = await this.paymentProvider.processWebhook(data, signature, rawBody);
 
     if (!webhookResult.valid) {
-      throw new Error('Invalid webhook signature');
+      throw new AppError(400, 'Invalid webhook signature');
     }
 
     // Find payment by reference
@@ -301,7 +303,7 @@ export class PaymentsService {
     });
 
     if (!payment) {
-      throw new Error('Payment not found');
+      throw new AppError(404, 'Payment not found');
     }
 
     const isSuccess = webhookResult.status === 'success';
@@ -377,7 +379,7 @@ export class PaymentsService {
     });
 
     if (!payment) {
-      throw new Error('Payment not found');
+      throw new AppError(404, 'Payment not found');
     }
 
     // If payment is still pending, verify with Paystack directly
