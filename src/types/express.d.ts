@@ -9,3 +9,11 @@ declare module 'express' {
     };
   }
 }
+
+export interface AuthRequest extends Omit<Request, 'user'> {
+  user?: {
+    userId: string;
+    role: string;
+    status: string;
+  };
+}

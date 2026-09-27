@@ -1,5 +1,5 @@
 import { Response, NextFunction } from 'express';
-import { AuthRequest } from '../../middleware/auth.middleware';
+import { AuthRequest } from '../../types/express';
 import { MessagesService } from './messages.service';
 
 export class MessagesController {

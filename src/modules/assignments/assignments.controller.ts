@@ -1,6 +1,6 @@
 import { Response, NextFunction } from 'express';
 import { AssignmentsService } from './assignments.service';
-import { AuthRequest } from '../../middleware/auth.middleware';
+import { AuthRequest } from '../../types/express';
 
 export class AssignmentsController {
   private assignmentsService: AssignmentsService;

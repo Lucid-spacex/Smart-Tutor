@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { SessionsService } from './sessions.service';
 import { UpdateSessionInput, GetSessionsQuery, CreateSessionInput, CreateTutorSessionInput, RescheduleSessionInput } from './sessions.validation';
-import { AuthRequest } from '../../middleware/auth.middleware';
+import { AuthRequest } from '../../types/express';
 
 export class SessionsController {
   private sessionsService: SessionsService;

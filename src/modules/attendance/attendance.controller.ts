@@ -1,6 +1,6 @@
 import { Response, NextFunction } from 'express';
 import { AttendanceService } from './attendance.service';
-import { AuthRequest } from '../../middleware/auth.middleware';
+import { AuthRequest } from '../../types/express';
 
 export class AttendanceController {
   private attendanceService: AttendanceService;

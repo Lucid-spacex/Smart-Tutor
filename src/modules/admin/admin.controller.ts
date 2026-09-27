@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { AdminService } from './admin.service';
 import { UpdateTutorVettingInput, AssignTutorInput, GetTutorsQuery, GetStudentsQuery, UpdateEnrollmentPricingInput, UpdatePricingTierInput, UpdateEnrollmentPricingOverrideInput, GetUnmatchedEnrollmentsQuery } from './admin.validation';
-import { AuthRequest } from '../../middleware/auth.middleware';
+import { AuthRequest } from '../../types/express';
 
 export class AdminController {
   private adminService: AdminService;

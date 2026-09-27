@@ -1,4 +1,4 @@
-import { AuthRequest } from './auth.middleware';
+import { AuthRequest } from '../types/express';
 import prisma from '../config/database';
 
 // Resource ownership lookup functions for use with requireOwnership middleware

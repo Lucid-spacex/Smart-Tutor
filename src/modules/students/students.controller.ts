@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { StudentsService } from './students.service';
 import { CreateStudentInput } from './students.validation';
-import { AuthRequest } from '../../middleware/auth.middleware';
+import { AuthRequest } from '../../types/express';
 
 export class StudentsController {
   private studentsService: StudentsService;

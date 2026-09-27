@@ -1,6 +1,6 @@
 import { Response, NextFunction } from 'express';
 import { ComplaintsService } from './complaints.service';
-import { AuthRequest } from '../../middleware/auth.middleware';
+import { AuthRequest } from '../../types/express';
 
 export class ComplaintsController {
   private complaintsService: ComplaintsService;

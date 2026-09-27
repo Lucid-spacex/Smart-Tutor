@@ -1,14 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyAccessToken } from '../utils/token.util';
 import prisma from '../config/database';
+import { AuthRequest } from '../types/express';
 
-export interface AuthRequest extends Request {
-  user?: {
-    userId: string;
-    role: string;
-    status: string;
-  };
-}
+// Re-export for backward compatibility
+export type { AuthRequest };
 
 export const authenticate = async (
   req: AuthRequest,

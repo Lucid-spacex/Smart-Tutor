@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthService } from './auth.service';
 import { RegisterData, VerifyData, LoginData, StudentLoginData, RefreshData, ChangePasswordData } from './types';
-import { AuthRequest } from '../../middleware/auth.middleware';
+import { AuthRequest } from '../../types/express';
 
 export class AuthController {
   private authService: AuthService;

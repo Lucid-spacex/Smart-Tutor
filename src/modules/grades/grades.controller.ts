@@ -1,6 +1,6 @@
 import { Response, NextFunction } from 'express';
 import { GradesService } from './grades.service';
-import { AuthRequest } from '../../middleware/auth.middleware';
+import { AuthRequest } from '../../types/express';
 
 export class GradesController {
   private gradesService: GradesService;

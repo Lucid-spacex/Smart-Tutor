@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { QuizService } from './quiz.service';
 import { CreateQuizQuestionInput, SubmitQuizAnswerInput, StartQuizInput, CompleteQuizInput } from './quiz.validation';
-import { AuthRequest } from '../../middleware/auth.middleware';
+import { AuthRequest } from '../../types/express';
 
 export class QuizController {
   private quizService: QuizService;
