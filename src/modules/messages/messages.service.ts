@@ -9,9 +9,9 @@ export class MessagesService {
    * Evaluates whether sender is permitted to message recipient.
    * Strictly enforced permission matrix:
    * 1. Student <-> Assigned Tutor (via ACTIVE enrollment where tutor is assigned)
-   * 2. Tutor <-> Admin
-   * 3. Parent <-> Admin
-   * All other pairs (e.g. Student <-> Admin, Student <-> Parent, Parent <-> Tutor) are rejected.
+   * 2. Parent <-> Child (via parent-child relationship)
+   * 3. Admin <-> Any user
+   * All other pairs are rejected (including Parent <-> Tutor).
    */
   async canMessage(senderId: string, recipientId: string): Promise<boolean> {
     if (senderId === recipientId) {
@@ -50,7 +50,12 @@ export class MessagesService {
     const senderRole = sender.role;
     const recipientRole = recipient.role;
 
-    // Rule 1: Student <-> assigned Tutor
+    // Rule 1: Admin can message anyone, and anyone can message admin
+    if (senderRole === 'ADMIN' || recipientRole === 'ADMIN') {
+      return true;
+    }
+
+    // Rule 2: Student <-> assigned Tutor
     if (senderRole === 'STUDENT' && recipientRole === 'TUTOR') {
       // Look up student profile for sender
       const studentProfile = await prisma.student.findUnique({
@@ -86,24 +91,61 @@ export class MessagesService {
       return !!activeEnrollment;
     }
 
-    // Rule 2: Tutor <-> Admin
-    if ((senderRole === 'TUTOR' && recipientRole === 'ADMIN') || (senderRole === 'ADMIN' && recipientRole === 'TUTOR')) {
-      return true;
+    // Rule 3: Parent <-> Child (parent-child relationship)
+    if (senderRole === 'PARENT' && recipientRole === 'STUDENT') {
+      const studentProfile = await prisma.student.findUnique({
+        where: { userId: recipientId },
+        select: { parentId: true },
+      });
+      if (!studentProfile) return false;
+      return studentProfile.parentId === senderId;
     }
 
-    // Rule 3: Parent <-> Admin
-    if ((senderRole === 'PARENT' && recipientRole === 'ADMIN') || (senderRole === 'ADMIN' && recipientRole === 'PARENT')) {
-      return true;
+    if (senderRole === 'STUDENT' && recipientRole === 'PARENT') {
+      const studentProfile = await prisma.student.findUnique({
+        where: { userId: senderId },
+        select: { parentId: true },
+      });
+      if (!studentProfile) return false;
+      return studentProfile.parentId === recipientId;
     }
 
-    // All other combinations are disallowed (Student <-> Admin, Student <-> Parent, Parent <-> Tutor)
+    // All other combinations are disallowed (Parent <-> Tutor, Student <-> Student, Tutor <-> Tutor, etc.)
     return false;
   }
 
   async sendMessage(senderId: string, data: CreateMessageInput) {
     const isAllowed = await this.canMessage(senderId, data.recipientId);
     if (!isAllowed) {
-      throw new AppError(403, 'You are not permitted to message this user');
+      // Get user roles for better error message
+      const [sender, recipient] = await Promise.all([
+        prisma.user.findUnique({
+          where: { id: senderId },
+          select: { role: true },
+        }),
+        prisma.user.findUnique({
+          where: { id: data.recipientId },
+          select: { role: true },
+        }),
+      ]);
+
+      let errorMessage = 'You are not permitted to message this user';
+
+      if (sender?.role === 'TUTOR' && recipient?.role === 'STUDENT') {
+        errorMessage = 'You can only message students assigned to your active enrollments';
+      } else if (sender?.role === 'STUDENT' && recipient?.role === 'TUTOR') {
+        errorMessage = 'You can only message tutors assigned to your active enrollments';
+      } else if (sender?.role === 'PARENT' && recipient?.role === 'TUTOR') {
+        errorMessage = 'Parents cannot message tutors directly. Please contact admin for assistance.';
+      } else if (sender?.role === 'TUTOR' && recipient?.role === 'PARENT') {
+        errorMessage = 'Tutors cannot message parents directly. Please contact admin for assistance.';
+      } else if (sender?.role === 'PARENT' && recipient?.role === 'STUDENT') {
+        errorMessage = 'You can only message your own children';
+      } else if (sender?.role === 'STUDENT' && recipient?.role === 'PARENT') {
+        errorMessage = 'You can only message your own parent';
+      }
+
+      throw new AppError(403, errorMessage);
     }
 
     // Look for existing thread between these two users

@@ -1,4 +1,5 @@
 import prisma from '../../config/database';
+import { AppError } from '../../middleware/error-handler.middleware';
 
 export class AssignmentsService {
   async createAssignment(tutorId: string, data: any) {
@@ -12,11 +13,11 @@ export class AssignmentsService {
     });
 
     if (!enrollment) {
-      throw new Error('Enrollment not found');
+      throw new AppError(404, 'Enrollment not found');
     }
 
     if (enrollment.tutorId !== tutorId) {
-      throw new Error('Not authorized to create assignment for this enrollment');
+      throw new AppError(403, 'You are not assigned to this enrollment and cannot create assignments for it');
     }
 
     return prisma.assignment.create({
@@ -40,33 +41,89 @@ export class AssignmentsService {
     });
   }
 
-  async getAssignments(userId: string, userRole: string, filters?: { enrollmentId?: string }) {
+  async getAssignments(userId: string, userRole: string, filters?: { enrollmentId?: string; status?: string }) {
     const where: any = {};
 
-    if (filters?.enrollmentId) {
-      where.enrollmentId = filters.enrollmentId;
+    // Add status filter if provided
+    if (filters?.status) {
+      where.status = filters.status;
     }
 
-    // Filter based on user role
+    // Filter based on user role using proper enrollment ID filtering
     if (userRole === 'TUTOR') {
-      // Tutors see assignments for enrollments they're assigned to
-      where.enrollment = {
-        tutorId: userId,
-      };
+      // Get tutor's enrollment IDs
+      const enrollments = await prisma.enrollment.findMany({
+        where: { tutorId: userId },
+        select: { id: true },
+      });
+
+      const enrollmentIds = enrollments.map(e => e.id);
+
+      if (enrollmentIds.length > 0) {
+        where.enrollmentId = { in: enrollmentIds };
+      } else {
+        return []; // No enrollments, no assignments
+      }
     } else if (userRole === 'PARENT') {
-      // Parents see assignments for their children's enrollments
-      where.enrollment = {
-        student: {
-          parentId: userId,
-        },
-      };
+      // Get parent's children's enrollment IDs
+      const children = await prisma.student.findMany({
+        where: { parentId: userId },
+        select: { id: true },
+      });
+
+      const childIds = children.map(c => c.id);
+
+      if (childIds.length === 0) {
+        return []; // No children, no assignments
+      }
+
+      const enrollments = await prisma.enrollment.findMany({
+        where: { studentId: { in: childIds } },
+        select: { id: true },
+      });
+
+      const enrollmentIds = enrollments.map(e => e.id);
+
+      if (enrollmentIds.length > 0) {
+        where.enrollmentId = { in: enrollmentIds };
+      } else {
+        return []; // No enrollments, no assignments
+      }
     } else if (userRole === 'STUDENT') {
-      // Students see assignments for their own enrollments
-      where.enrollment = {
-        student: {
-          userId,
-        },
-      };
+      // Get student's enrollment IDs
+      const student = await prisma.student.findUnique({
+        where: { userId },
+        select: { id: true },
+      });
+
+      if (!student) {
+        throw new AppError(404, 'Student profile not found');
+      }
+
+      const enrollments = await prisma.enrollment.findMany({
+        where: { studentId: student.id },
+        select: { id: true },
+      });
+
+      const enrollmentIds = enrollments.map(e => e.id);
+
+      if (enrollmentIds.length > 0) {
+        where.enrollmentId = { in: enrollmentIds };
+      } else {
+        return []; // No enrollments, no assignments
+      }
+    }
+
+    // If enrollmentId is specified, verify it belongs to the user
+    if (filters?.enrollmentId) {
+      if (where.enrollmentId && Array.isArray(where.enrollmentId.in)) {
+        if (!where.enrollmentId.in.includes(filters.enrollmentId)) {
+          throw new AppError(403, 'You do not have permission to access assignments for this enrollment');
+        }
+        where.enrollmentId = filters.enrollmentId;
+      } else {
+        where.enrollmentId = filters.enrollmentId;
+      }
     }
 
     return prisma.assignment.findMany({
@@ -100,12 +157,12 @@ export class AssignmentsService {
     });
 
     if (!assignment) {
-      throw new Error('Assignment not found');
+      throw new AppError(404, 'Assignment not found');
     }
 
     // Only the creator (tutor) can update the assignment
     if (assignment.createdBy !== tutorId) {
-      throw new Error('Not authorized to update this assignment');
+      throw new AppError(403, 'Not authorized to update this assignment');
     }
 
     return prisma.assignment.update({

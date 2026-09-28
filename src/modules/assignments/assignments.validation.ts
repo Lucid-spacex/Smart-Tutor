@@ -4,16 +4,17 @@ export const createAssignmentSchema = z.object({
   enrollmentId: z.string().uuid('Invalid enrollment ID'),
   title: z.string().min(1, 'Title is required').max(200, 'Title must be less than 200 characters'),
   description: z.string().optional(),
-  type: z.enum(['ASSIGNMENT', 'CLASSWORK', 'TEST']),
+  type: z.enum(['ASSIGNMENT', 'CLASSWORK', 'TEST', 'HOMEWORK', 'PROJECT', 'QUIZ']),
   dueDate: z.string().refine((val) => !isNaN(Date.parse(val)), 'Invalid due date'),
 });
 
 export const updateAssignmentSchema = z.object({
-  status: z.enum(['PENDING', 'COMPLETED']),
+  status: z.enum(['PENDING', 'COMPLETED', 'SUBMITTED', 'GRADED', 'CANCELLED']),
 });
 
 export const getAssignmentsQuerySchema = z.object({
   enrollmentId: z.string().uuid('Invalid enrollment ID').optional(),
+  status: z.enum(['PENDING', 'COMPLETED', 'SUBMITTED', 'GRADED', 'CANCELLED']).optional(),
 });
 
 export type CreateAssignmentInput = z.infer<typeof createAssignmentSchema>;
