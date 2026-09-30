@@ -50,15 +50,18 @@ const assignmentUpload = multer({
 });
 
 // Error handling middleware for multer
-export const handleUploadError = (err: Error, req: Request, res: Response, next: NextFunction) => {
+export const handleUploadError = (err: Error, req: Request, res: Response, next: NextFunction): void => {
   if (err instanceof multer.MulterError) {
     if (err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({ error: 'File size exceeds limit' });
+      res.status(400).json({ error: 'File size exceeds limit' });
+      return;
     }
-    return res.status(400).json({ error: err.message });
+    res.status(400).json({ error: err.message });
+    return;
   }
   if (err.message.includes('Only image files are allowed') || err.message.includes('Only image and PDF files are allowed')) {
-    return res.status(400).json({ error: err.message });
+    res.status(400).json({ error: err.message });
+    return;
   }
   next(err);
 };

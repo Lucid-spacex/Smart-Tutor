@@ -33,6 +33,7 @@ export const updateSessionSchema = z.object({
   status: z.enum(['COMPLETED', 'MISSED', 'CANCELLED']).optional(),
   tutorNotes: z.string().optional(),
   homeworkAssigned: z.string().optional(),
+  durationMinutes: z.number().int().positive('Duration must be positive').optional(),
   participants: z.array(z.object({
     enrollmentId: z.string().uuid('Invalid enrollment ID'),
     attended: z.boolean(),

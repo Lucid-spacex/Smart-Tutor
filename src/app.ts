@@ -38,9 +38,6 @@ const app: Application = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve static files from uploads directory
-app.use('/uploads', express.static('uploads'));
-
 // Tiered rate limiting applied centrally.
 //
 // Tier 1 (Strict / 7 req per 15 min) is applied at the route level for:

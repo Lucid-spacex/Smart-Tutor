@@ -337,19 +337,19 @@ export class SessionsService {
 
     // SECURITY: Tutors cannot change scheduledAt or zoomLink
     // These are admin-only operations
-    const allowedFields: any = {};
-    if (data.status !== undefined) {
-      allowedFields.status = data.status;
-    }
-    if (data.tutorNotes !== undefined) {
-      allowedFields.tutorNotes = data.tutorNotes;
-    }
-    if (data.homeworkAssigned !== undefined) {
-      allowedFields.homeworkAssigned = data.homeworkAssigned;
-    }
-    if (data.durationMinutes !== undefined) {
-      allowedFields.durationMinutes = data.durationMinutes;
-    }
+    const allowedFields: any = {
+      status: data.status !== undefined ? data.status : undefined,
+      tutorNotes: data.tutorNotes !== undefined ? data.tutorNotes : undefined,
+      homeworkAssigned: data.homeworkAssigned !== undefined ? data.homeworkAssigned : undefined,
+      durationMinutes: data.durationMinutes !== undefined ? data.durationMinutes : undefined,
+    };
+
+    // Remove undefined values
+    Object.keys(allowedFields).forEach(key => {
+      if (allowedFields[key] === undefined) {
+        delete allowedFields[key];
+      }
+    });
 
     // Handle participant attendance marking
     if (data.participants && data.participants.length > 0) {

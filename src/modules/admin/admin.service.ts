@@ -9,6 +9,7 @@ import { SessionsService } from '../sessions/sessions.service';
 import { GradesService } from '../grades/grades.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { GradeBandTier } from '@prisma/client';
+import { CreateSessionInput, RescheduleSessionInput } from '../sessions/sessions.validation';
 
 export class AdminService {
   private enrollmentsService: EnrollmentsService;
@@ -355,11 +356,11 @@ export class AdminService {
     return this.enrollmentsService.updateEnrollmentPricing(enrollmentId, data);
   }
 
-  async createSession(data: any) {
-    return this.sessionsService.createSession(data);
+  async createSession(data: CreateSessionInput, adminId: string) {
+    return this.sessionsService.createSession(data, adminId);
   }
 
-  async rescheduleSession(sessionId: string, data: any) {
+  async rescheduleSession(sessionId: string, data: RescheduleSessionInput) {
     return this.sessionsService.rescheduleSession(sessionId, data);
   }
 
