@@ -51,7 +51,11 @@ export class MessagesService {
     const recipientRole = recipient.role;
 
     // Rule 1: Admin can message anyone, and anyone can message admin
-    if (senderRole === 'ADMIN' || recipientRole === 'ADMIN') {
+    // Special case: Admins can reply to any parent/tutor thread (shared inbox)
+    if (senderRole === 'ADMIN' && (recipientRole === 'PARENT' || recipientRole === 'TUTOR')) {
+      return true;
+    }
+    if (recipientRole === 'ADMIN' && (senderRole === 'PARENT' || senderRole === 'TUTOR')) {
       return true;
     }
 
@@ -191,11 +195,47 @@ export class MessagesService {
   }
 
   async getThreads(userId: string) {
-    // Find all messages involving the user
-    const messages = await prisma.message.findMany({
-      where: {
+    // Get user's role to determine shared admin inbox behavior
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    });
+
+    if (!user) {
+      throw new AppError(404, 'User not found');
+    }
+
+    let whereClause: any;
+
+    // Shared admin inbox: admins see all threads with parents and tutors
+    if (user.role === 'ADMIN') {
+      // Get all thread IDs where the other participant is a parent or tutor
+      const adminThreadIds = await prisma.message.findMany({
+        where: {
+          OR: [
+            { senderId: userId, recipient: { role: { in: ['PARENT', 'TUTOR'] } } },
+            { recipientId: userId, sender: { role: { in: ['PARENT', 'TUTOR'] } } },
+          ],
+        },
+        select: { threadId: true },
+        distinct: ['threadId'],
+      });
+
+      const threadIds = adminThreadIds.map(m => m.threadId);
+
+      whereClause = {
+        threadId: { in: threadIds },
+      };
+    } else {
+      // Non-admin users: only see their own threads
+      whereClause = {
         OR: [{ senderId: userId }, { recipientId: userId }],
-      },
+      };
+    }
+
+    // Find all messages based on the where clause
+    const messages = await prisma.message.findMany({
+      where: whereClause,
       include: {
         sender: {
           select: {
@@ -231,10 +271,18 @@ export class MessagesService {
 
     for (const msg of messages) {
       const otherUser = msg.senderId === userId ? msg.recipient : msg.sender;
+      
+      // For admins, normalize the other participant display to "Admin" if it's another admin
+      let displayParticipant = otherUser;
+      if (user.role === 'ADMIN' && otherUser.role === 'ADMIN') {
+        // Admin-to-admin threads show as "Admin" consistently
+        displayParticipant = { ...otherUser, fullName: 'Admin' };
+      }
+      
       if (!threadsMap.has(msg.threadId)) {
         threadsMap.set(msg.threadId, {
           threadId: msg.threadId,
-          otherParticipant: otherUser,
+          otherParticipant: displayParticipant,
           lastMessage: {
             id: msg.id,
             body: msg.body,
@@ -315,5 +363,28 @@ export class MessagesService {
     });
 
     return { message: 'Messages marked as read' };
+  }
+
+  async getAdminContact() {
+    // Get an active admin user for parents and tutors to message
+    const admin = await prisma.user.findFirst({
+      where: {
+        role: 'ADMIN',
+        status: 'ACTIVE',
+      },
+      select: {
+        id: true,
+        fullName: true,
+      },
+    });
+
+    if (!admin) {
+      throw new AppError(404, 'No active admin user found');
+    }
+
+    return {
+      adminUserId: admin.id,
+      adminName: admin.fullName,
+    };
   }
 }

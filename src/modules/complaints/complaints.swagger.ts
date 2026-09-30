@@ -9,7 +9,10 @@
  * @swagger
  * /complaints:
  *   post:
- *     summary: File a complaint (Parent or Tutor)
+ *     summary: File a complaint (Parent only)
+ *     description: |
+ *       Parents can file complaints about tutors, students, or general issues.
+ *       Tutors no longer file complaints - they use messaging to contact admin.
  *     tags: [Complaints]
  *     security:
  *       - bearerAuth: []
@@ -38,15 +41,19 @@
  *       201:
  *         description: Complaint filed successfully
  *       403:
- *         description: Only parents and tutors can file complaints
+ *         description: Only parents can file complaints (tutors use messaging)
  *   get:
- *     summary: List complaints (Admin sees all, Parent/Tutor sees own filed complaints)
+ *     summary: List complaints (Admin sees all, Parent sees own filed complaints, Tutor sees empty list)
+ *     description: |
+ *       Admins see all complaints.
+ *       Parents see only their own filed complaints.
+ *       Tutors no longer have access to complaints (they use messaging).
  *     tags: [Complaints]
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: List of complaints
+ *         description: List of complaints (empty list for tutors)
  *       403:
  *         description: Forbidden
  */

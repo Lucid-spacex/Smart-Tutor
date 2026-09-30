@@ -44,4 +44,13 @@ export class MessagesController {
       next(error);
     }
   };
+
+  getAdminContact = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const adminContact = await this.messagesService.getAdminContact();
+      res.json(adminContact);
+    } catch (error) {
+      next(error);
+    }
+  };
 }

@@ -121,37 +121,39 @@ enum PaymentStatus {
 }
 
 model User {
-  id           String       @id @default(uuid())
-  fullName     String
-  email        String?      @unique
-  phone        String?
-  passwordHash String
-  role         UserRole
-  status       UserStatus   @default(UNVERIFIED)
-  studentCode  String?      @unique
-  parentId     String?
-  parent       User?        @relation("StudentParent", fields: [parentId], references: [id], onDelete: Cascade)
-  students     User[]       @relation("StudentParent")
-  timezone     String?
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  id             String     @id @default(uuid())
+  fullName       String
+  email          String?    @unique
+  phone          String?
+  passwordHash   String
+  role           UserRole
+  status         UserStatus @default(UNVERIFIED)
+  studentCode    String?    @unique
+  parentId       String?
+  parent         User?      @relation("StudentParent", fields: [parentId], references: [id], onDelete: Cascade)
+  students       User[]     @relation("StudentParent")
+  timezone       String?
+  profilePicture String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
 
-  tutorProfile      TutorProfile?
-  studentProfile    Student?
-  enrollmentsAsTutor Enrollment[] @relation("TutorEnrollments")
-  sessions          Session[]      @relation("SessionTutor")
-  payments          Payment[]
-  progressReports   ProgressReport[]
-  refreshTokens     RefreshToken[]
-  sentMessages      Message[]      @relation("MessageSender")
-  receivedMessages  Message[]      @relation("MessageRecipient")
-  filedComplaints   Complaint[]
-  resolvedComplaints Complaint[]   @relation("ComplaintResolver")
-  createdAssignments Assignment[]  @relation("AssignmentCreator")
-  createdGrades     Grade[]       @relation("GradeGrader")
-  approvedGrades    Grade[]       @relation("GradeApprover")
+  tutorProfile        TutorProfile?
+  studentProfile      Student?
+  enrollmentsAsTutor  Enrollment[]     @relation("TutorEnrollments")
+  sessions            Session[]        @relation("SessionTutor")
+  createdSessions     Session[]        @relation("SessionCreator")
+  payments            Payment[]
+  progressReports     ProgressReport[]
+  refreshTokens       RefreshToken[]
+  sentMessages        Message[]        @relation("MessageSender")
+  receivedMessages    Message[]        @relation("MessageRecipient")
+  filedComplaints     Complaint[]
+  resolvedComplaints  Complaint[]      @relation("ComplaintResolver")
+  createdAssignments  Assignment[]     @relation("AssignmentCreator")
+  createdGrades       Grade[]          @relation("GradeGrader")
+  approvedGrades      Grade[]          @relation("GradeApprover")
   pricingTiersUpdated PricingTier[]
-  notifications     Notification[]
+  notifications       Notification[]
 
   @@index([email])
   @@index([role])
@@ -204,8 +206,9 @@ model Student {
   deletedAt          DateTime?
   createdAt          DateTime      @default(now())
 
-  enrollments        Enrollment[]
-  quizAttempts       QuizAttempt[]
+  enrollments  Enrollment[]
+  quizAttempts QuizAttempt[]
+  submissions  AssignmentSubmission[]
 
   @@index([parentId])
   @@index([userId])
@@ -215,11 +218,11 @@ model Student {
 }
 
 model Subject {
-  id         String          @id @default(uuid())
-  name       String          @unique
-  gradeBand  String
-  category   SubjectCategory
-  createdAt  DateTime        @default(now())
+  id        String          @id @default(uuid())
+  name      String          @unique
+  gradeBand String
+  category  SubjectCategory
+  createdAt DateTime        @default(now())
 
   enrollments Enrollment[]
 
@@ -227,41 +230,41 @@ model Subject {
 }
 
 model Enrollment {
-  id                String           @id @default(uuid())
+  id                 String           @id @default(uuid())
   // Shared across all subjects enrolled in one sitting.
   // null for single-subject enrollments created outside a batch.
-  enrollmentGroupId String?          @db.Uuid
-  studentId         String
-  student           Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  subjectId         String
-  subject           Subject          @relation(fields: [subjectId], references: [id])
-  tutorId           String?
-  tutor             User?            @relation("TutorEnrollments", fields: [tutorId], references: [id])
-  sessionFrequency  SessionFrequency
+  enrollmentGroupId  String?          @db.Uuid
+  studentId          String
+  student            Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subjectId          String
+  subject            Subject          @relation(fields: [subjectId], references: [id])
+  tutorId            String?
+  tutor              User?            @relation("TutorEnrollments", fields: [tutorId], references: [id])
+  sessionFrequency   SessionFrequency
   // Days the parent is available, subset of MON|TUE|WED|THU|FRI|SAT|SUN.
   // Count must match sessionFrequency: 2 for TWICE_WEEKLY, 3 for THRICE_WEEKLY,
   // 5 for FIVE_TIMES_WEEKLY. Validated at the service layer.
-  availableDays     String[]
+  availableDays      String[]
   // Preferred session window in parent's OWN local timezone (stored as raw hours).
   // DO NOT store a pre-converted "Nigeria time" copy — convert on demand using
   // the parent's User.timezone to avoid stale values across DST changes.
   preferredStartHour Int?
   preferredEndHour   Int?
-  billingFrequency BillingFrequency @default(YEARLY)
-  yearlyPrice       Decimal?         @db.Decimal(10, 2) // Legacy field, made optional
-  yearlyPriceNGN    Decimal?         @db.Decimal(10, 2) // Override price in NGN
-  yearlyPriceUSD    Decimal?         @db.Decimal(10, 2) // Override price in USD
-  status            EnrollmentStatus @default(ACTIVE)
-  startDate         DateTime
-  endDate           DateTime?
-  deletedAt         DateTime?
-  createdAt         DateTime         @default(now())
+  billingFrequency   BillingFrequency @default(YEARLY)
+  yearlyPrice        Decimal?         @db.Decimal(10, 2) // Legacy field, made optional
+  yearlyPriceNGN     Decimal?         @db.Decimal(10, 2) // Override price in NGN
+  yearlyPriceUSD     Decimal?         @db.Decimal(10, 2) // Override price in USD
+  status             EnrollmentStatus @default(ACTIVE)
+  startDate          DateTime
+  endDate            DateTime?
+  deletedAt          DateTime?
+  createdAt          DateTime         @default(now())
 
   sessionParticipants SessionParticipant[]
-  payments           Payment[]
-  progressReports    ProgressReport[]
-  assignments        Assignment[]
-  grades             Grade[]
+  payments            Payment[]
+  progressReports     ProgressReport[]
+  assignments         Assignment[]
+  grades              Grade[]
 
   @@index([studentId])
   @@index([subjectId])
@@ -272,59 +275,62 @@ model Enrollment {
 }
 
 model Session {
-  id              String       @id @default(uuid())
-  tutorId         String
-  tutor           User         @relation("SessionTutor", fields: [tutorId], references: [id], onDelete: Cascade)
-  scheduledAt     DateTime
-  durationMinutes Int
-  zoomLink        String?
-  zoomMeetingId   String?
-  recordingUrl    String?
-  recordingStatus RecordingStatus @default(NONE)
-  status          SessionStatus @default(SCHEDULED)
-  tutorNotes      String?
+  id               String          @id @default(uuid())
+  tutorId          String
+  tutor            User            @relation("SessionTutor", fields: [tutorId], references: [id], onDelete: Cascade)
+  createdBy        String
+  creator          User            @relation("SessionCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  scheduledAt      DateTime
+  durationMinutes  Int
+  zoomLink         String?
+  zoomMeetingId    String?
+  recordingUrl     String?
+  recordingStatus  RecordingStatus @default(NONE)
+  status           SessionStatus   @default(SCHEDULED)
+  tutorNotes       String?
   homeworkAssigned String?
-  createdAt       DateTime     @default(now())
+  createdAt        DateTime        @default(now())
 
   participants SessionParticipant[]
 
   @@index([tutorId])
+  @@index([createdBy])
   @@index([scheduledAt])
   @@index([status])
   @@index([zoomMeetingId])
 }
 
 model SessionParticipant {
-  id           String    @id @default(uuid())
+  id           String     @id @default(uuid())
   sessionId    String
-  session      Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  session      Session    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   enrollmentId String
   enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
   attended     Boolean?
-  createdAt    DateTime  @default(now())
+  createdAt    DateTime   @default(now())
 
   @@index([sessionId])
   @@index([enrollmentId])
 }
 
 model Payment {
-  id               String        @id @default(uuid())
-  parentId         String
-  parent           User          @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  id                String          @id @default(uuid())
+  parentId          String
+  parent            User            @relation(fields: [parentId], references: [id], onDelete: Cascade)
   // Populated for single-enrollment payments. null for group payments.
-  enrollmentId     String?
-  enrollment       Enrollment?   @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  enrollmentId      String?
+  enrollment        Enrollment?     @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
   // Populated for multi-subject batch payments. null for single-enrollment payments.
   // Exactly one of enrollmentId / enrollmentGroupId is non-null on any given row.
-  enrollmentGroupId String?      @db.Uuid
-  amount           Decimal       @db.Decimal(10, 2)
-  currency         String        @default("USD")
-  provider         PaymentProvider
+  enrollmentGroupId String?         @db.Uuid
+  amount            Decimal         @db.Decimal(10, 2)
+  currency          String          @default("USD")
+  provider          PaymentProvider
   providerReference String?
-  status           PaymentStatus @default(PENDING)
-  paidAt           DateTime?
-  deletedAt        DateTime?
-  createdAt        DateTime      @default(now())
+  status            PaymentStatus   @default(PENDING)
+  paidAt            DateTime?
+  deletedAt         DateTime?
+  createdAt         DateTime        @default(now())
 
   @@index([parentId])
   @@index([enrollmentId])
@@ -335,7 +341,7 @@ model Payment {
 }
 
 model ProgressReport {
-  id             String   @id @default(uuid())
+  id             String     @id @default(uuid())
   enrollmentId   String
   enrollment     Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
   period         String
@@ -343,23 +349,23 @@ model ProgressReport {
   strengths      String
   areasToImprove String
   createdBy      String
-  creator        User     @relation(fields: [createdBy], references: [id])
-  createdAt      DateTime @default(now())
+  creator        User       @relation(fields: [createdBy], references: [id])
+  createdAt      DateTime   @default(now())
 
   @@index([enrollmentId])
   @@index([createdBy])
 }
 
 model Message {
-  id         String   @id @default(uuid())
-  senderId   String
-  sender     User     @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  id          String    @id @default(uuid())
+  senderId    String
+  sender      User      @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
   recipientId String
-  recipient  User     @relation("MessageRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
-  threadId   String
-  body       String
-  readAt     DateTime?
-  createdAt  DateTime @default(now())
+  recipient   User      @relation("MessageRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  threadId    String
+  body        String
+  readAt      DateTime?
+  createdAt   DateTime  @default(now())
 
   @@index([senderId])
   @@index([recipientId])
@@ -367,22 +373,25 @@ model Message {
 }
 
 model Assignment {
-  id           String        @id @default(uuid())
-  enrollmentId String
-  enrollment   Enrollment    @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
-  createdBy    String
-  creator      User         @relation("AssignmentCreator", fields: [createdBy], references: [id], onDelete: Cascade)
-  title        String
-  description  String
-  type         AssignmentType
-  dueDate      DateTime
-  status       AssignmentStatus @default(PENDING)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id             String           @id @default(uuid())
+  enrollmentId   String
+  enrollment     Enrollment       @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  createdBy      String
+  creator        User             @relation("AssignmentCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  title          String
+  description    String
+  type           AssignmentType
+  dueDate        DateTime
+  status         AssignmentStatus @default(PENDING)
+  attachmentUrl  String?
+  attachmentName String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 
-  grades Grade[]
+  grades        Grade[]
   quizQuestions QuizQuestion[]
-  quizAttempts QuizAttempt[]
+  quizAttempts  QuizAttempt[]
+  submissions   AssignmentSubmission[]
 
   @@index([enrollmentId])
   @@index([createdBy])
@@ -394,29 +403,59 @@ enum AssignmentType {
   ASSIGNMENT
   CLASSWORK
   TEST
+  HOMEWORK
+  PROJECT
+  QUIZ
 }
 
 enum AssignmentStatus {
   PENDING
+  SUBMITTED
   COMPLETED
+  GRADED
+  CANCELLED
+}
+
+model AssignmentSubmission {
+  id                     String     @id @default(uuid())
+  assignmentId           String
+  assignment             Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  studentId              String
+  student                Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  textAnswer             String?
+  attachmentUrl          String?
+  attachmentName         String?
+  submittedAt            DateTime   @default(now())
+  feedbackText           String?
+  feedbackAttachmentUrl  String?
+  feedbackAttachmentName String?
+  gradedAt               DateTime?
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+
+  @@index([assignmentId])
+  @@index([studentId])
+  @@index([submittedAt])
 }
 
 model Grade {
-  id           String       @id @default(uuid())
-  enrollmentId String
-  enrollment   Enrollment   @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
-  assignmentId String?
-  assignment   Assignment?  @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
-  gradedBy     String
-  grader       User         @relation("GradeGrader", fields: [gradedBy], references: [id], onDelete: Cascade)
-  score        Decimal      @db.Decimal(10, 2)
-  comments     String
-  status       GradeStatus  @default(PENDING_APPROVAL)
-  approvedBy   String?
-  approver     User?        @relation("GradeApprover", fields: [approvedBy], references: [id], onDelete: SetNull)
-  approvedAt   DateTime?
-  visibleToStudent Boolean @default(false)
-  createdAt    DateTime     @default(now())
+  id               String      @id @default(uuid())
+  enrollmentId     String
+  enrollment       Enrollment  @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  assignmentId     String?
+  assignment       Assignment? @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  gradedBy         String
+  grader           User        @relation("GradeGrader", fields: [gradedBy], references: [id], onDelete: Cascade)
+  score            Decimal     @db.Decimal(10, 2)
+  comments         String
+  attachmentUrl    String?
+  attachmentName   String?
+  status           GradeStatus @default(PENDING_APPROVAL)
+  approvedBy       String?
+  approver         User?       @relation("GradeApprover", fields: [approvedBy], references: [id], onDelete: SetNull)
+  approvedAt       DateTime?
+  visibleToStudent Boolean     @default(false)
+  createdAt        DateTime    @default(now())
 
   @@index([enrollmentId])
   @@index([assignmentId])
@@ -457,19 +496,19 @@ enum NotificationType {
 }
 
 model Complaint {
-  id          String       @id @default(uuid())
+  id          String             @id @default(uuid())
   filedBy     String
-  filer       User         @relation(fields: [filedBy], references: [id], onDelete: Cascade)
+  filer       User               @relation(fields: [filedBy], references: [id], onDelete: Cascade)
   aboutType   ComplaintAboutType
   aboutId     String?
   subject     String
   description String
-  status      ComplaintStatus @default(OPEN)
+  status      ComplaintStatus    @default(OPEN)
   adminReply  String?
   resolvedBy  String?
-  resolver    User?        @relation("ComplaintResolver", fields: [resolvedBy], references: [id], onDelete: SetNull)
+  resolver    User?              @relation("ComplaintResolver", fields: [resolvedBy], references: [id], onDelete: SetNull)
   resolvedAt  DateTime?
-  createdAt   DateTime     @default(now())
+  createdAt   DateTime           @default(now())
 
   @@index([filedBy])
   @@index([status])
@@ -488,14 +527,14 @@ enum ComplaintStatus {
 }
 
 model RefreshToken {
-  id           String   @id @default(uuid())
-  userId       String
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash    String   @unique
-  tokenFamily  String   // Track token family for rotation detection (not unique - multiple tokens can share a family)
-  expiresAt    DateTime
-  createdAt    DateTime @default(now())
-  revokedAt    DateTime? // Set when token is revoked due to reuse detection
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash   String    @unique
+  tokenFamily String // Track token family for rotation detection (not unique - multiple tokens can share a family)
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+  revokedAt   DateTime? // Set when token is revoked due to reuse detection
 
   @@index([userId])
   @@index([tokenHash])
@@ -515,23 +554,23 @@ model Otp {
 }
 
 model PricingTier {
-  id              String       @id @default(uuid())
-  gradeBandTier   GradeBandTier @unique
-  yearlyPriceNGN  Decimal      @db.Decimal(10, 2)
-  yearlyPriceUSD  Decimal      @db.Decimal(10, 2)
-  updatedAt       DateTime     @updatedAt
-  updatedBy       String
-  updater         User         @relation(fields: [updatedBy], references: [id], onDelete: SetNull)
+  id             String        @id @default(uuid())
+  gradeBandTier  GradeBandTier @unique
+  yearlyPriceNGN Decimal       @db.Decimal(10, 2)
+  yearlyPriceUSD Decimal       @db.Decimal(10, 2)
+  updatedAt      DateTime      @updatedAt
+  updatedBy      String
+  updater        User          @relation(fields: [updatedBy], references: [id], onDelete: SetNull)
 
   @@index([gradeBandTier])
 }
 
 model ExchangeRate {
-  id         String   @id @default(uuid())
+  id           String   @id @default(uuid())
   fromCurrency String
-  toCurrency String
-  rate       Decimal  @db.Decimal(10, 6)
-  fetchedAt  DateTime @default(now())
+  toCurrency   String
+  rate         Decimal  @db.Decimal(10, 6)
+  fetchedAt    DateTime @default(now())
 
   @@unique([fromCurrency, toCurrency])
   @@index([fromCurrency])
@@ -539,15 +578,15 @@ model ExchangeRate {
 }
 
 model QuizQuestion {
-  id                String   @id @default(uuid())
-  assignmentId      String
-  assignment        Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  questionText      String
-  options           Json     // Array of strings
+  id                 String     @id @default(uuid())
+  assignmentId       String
+  assignment         Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  questionText       String
+  options            Json // Array of strings
   correctOptionIndex Int
-  points            Decimal  @db.Decimal(10, 2)
-  orderIndex        Int
-  createdAt         DateTime @default(now())
+  points             Decimal    @db.Decimal(10, 2)
+  orderIndex         Int
+  createdAt          DateTime   @default(now())
 
   responses QuizResponse[]
 
@@ -555,15 +594,15 @@ model QuizQuestion {
 }
 
 model QuizAttempt {
-  id          String          @id @default(uuid())
+  id           String            @id @default(uuid())
   assignmentId String
-  assignment  Assignment      @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
-  studentId   String
-  student     Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  status      QuizAttemptStatus @default(IN_PROGRESS)
-  totalScore  Decimal?        @db.Decimal(10, 2)
-  startedAt   DateTime        @default(now())
-  completedAt DateTime?
+  assignment   Assignment        @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  studentId    String
+  student      Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  status       QuizAttemptStatus @default(IN_PROGRESS)
+  totalScore   Decimal?          @db.Decimal(10, 2)
+  startedAt    DateTime          @default(now())
+  completedAt  DateTime?
 
   responses QuizResponse[]
 
@@ -573,16 +612,16 @@ model QuizAttempt {
 }
 
 model QuizResponse {
-  id                  String   @id @default(uuid())
+  id                  String       @id @default(uuid())
   attemptId           String
-  attempt             QuizAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  attempt             QuizAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   questionId          String
   question            QuizQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
   selectedOptionIndex Int
   isCorrect           Boolean
   timeTakenSeconds    Int
-  pointsAwarded       Decimal  @db.Decimal(10, 2)
-  createdAt           DateTime @default(now())
+  pointsAwarded       Decimal      @db.Decimal(10, 2)
+  createdAt           DateTime     @default(now())
 
   @@index([attemptId])
   @@index([questionId])

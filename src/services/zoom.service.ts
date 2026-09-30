@@ -265,4 +265,40 @@ export class ZoomService {
     logger.info({ checked: sessions.length, updated }, 'Zoom recording poll completed');
     return { checked: sessions.length, updated };
   }
+
+  /**
+   * Delete/cancel a Zoom meeting
+   */
+  async deleteMeeting(meetingId: string): Promise<void> {
+    if (!this.zoomAccountId || !this.zoomClientId || !this.zoomClientSecret) {
+      logger.warn('Zoom credentials not configured, meeting deletion disabled');
+      return;
+    }
+
+    try {
+      const accessToken = await this.getAccessToken();
+
+      const response = await fetch(`${this.zoomBaseUrl}/meetings/${meetingId}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      if (!response.ok && response.status !== 404) {
+        // 404 means meeting doesn't exist, which is fine
+        const errorText = await response.text();
+        logger.error({ status: response.status, errorText }, 'Zoom meeting deletion failed');
+        throw new AppError(502, 'Failed to delete Zoom meeting. Please try again later.');
+      }
+
+      logger.info({ meetingId }, 'Zoom meeting deleted successfully');
+    } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
+      logger.error({ error, meetingId }, 'Failed to delete Zoom meeting');
+      throw new AppError(502, 'Failed to delete Zoom meeting. Please try again later.');
+    }
+  }
 }

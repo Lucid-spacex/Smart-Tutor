@@ -85,7 +85,7 @@
  * /tutor/sessions/{id}/reschedule:
  *   patch:
  *     summary: Reschedule session (TUTOR only)
- *     description: Tutors can reschedule sessions they created. Ownership check ensures tutors cannot reschedule sessions created by others.
+ *     description: Tutors can reschedule sessions they created. Ownership check ensures tutors cannot reschedule sessions created by others (even if assigned to them).
  *     tags: [Sessions]
  *     security:
  *       - bearerAuth: []
@@ -109,6 +109,11 @@
  *                 type: string
  *                 format: date-time
  *                 description: New scheduled time
+ *               durationMinutes:
+ *                 type: integer
+ *                 minimum: 15
+ *                 maximum: 180
+ *                 description: Optional new duration in minutes
  *     responses:
  *       200:
  *         description: Session rescheduled successfully
@@ -118,6 +123,35 @@
  *               $ref: '#/components/schemas/Session'
  *       400:
  *         description: Validation error or session not in SCHEDULED status
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized - user is not a tutor or session not created by them
+ *       404:
+ *         description: Session not found
+ */
+
+/**
+ * @swagger
+ * /tutor/sessions/{id}:
+ *   delete:
+ *     summary: Delete session (TUTOR only)
+ *     description: Tutors can delete sessions they created. Ownership check ensures tutors cannot delete admin-created sessions even if assigned to them. Only SCHEDULED sessions can be deleted. Cancels the Zoom meeting if it exists.
+ *     tags: [Sessions]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Session deleted successfully, Zoom meeting cancelled
+ *       400:
+ *         description: Session not in SCHEDULED status
  *       401:
  *         description: Not authenticated
  *       403:

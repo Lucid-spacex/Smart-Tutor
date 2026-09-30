@@ -7,8 +7,15 @@ import { RegisterData, VerifyData, LoginData, StudentLoginData, RefreshData, Cha
 import crypto from 'crypto';
 import { logger } from '../../config/logger';
 import { AppError } from '../../middleware/error-handler.middleware';
+import { CloudinaryService } from '../../services/cloudinary.service';
 
 export class AuthService {
+  private cloudinaryService: CloudinaryService;
+
+  constructor() {
+    this.cloudinaryService = new CloudinaryService();
+  }
+
   async register(data: RegisterData): Promise<{ message: string; userId: string }> {
     const existingUser = await prisma.user.findUnique({
       where: { email: data.email },
@@ -298,6 +305,20 @@ export class AuthService {
   async getCurrentUser(userId: string): Promise<any> {
     const user = await prisma.user.findUnique({
       where: { id: userId },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        phone: true,
+        role: true,
+        status: true,
+        studentCode: true,
+        parentId: true,
+        timezone: true,
+        profilePicture: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     });
 
     if (!user) {
@@ -380,6 +401,102 @@ export class AuthService {
     return {
       message: 'OTP sent successfully',
     };
+  }
+
+  async updateProfilePicture(userId: string, fileBase64: string): Promise<{ message: string; profilePicture: string }> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new AppError(404, 'User not found');
+    }
+
+    // Delete old profile picture from Cloudinary if it exists
+    if (user.profilePicture) {
+      // Extract public ID from URL (Cloudinary URLs follow a pattern)
+      const publicId = this.extractPublicIdFromUrl(user.profilePicture);
+      if (publicId) {
+        await this.cloudinaryService.deleteFile(publicId);
+      }
+    }
+
+    // Upload new profile picture to Cloudinary
+    const uploadResult = await this.cloudinaryService.uploadFile(
+      fileBase64,
+      'profile-pictures',
+      'image'
+    );
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { profilePicture: uploadResult.url },
+    });
+
+    logger.info({ userId }, 'Profile picture updated successfully');
+
+    return {
+      message: 'Profile picture updated successfully',
+      profilePicture: updatedUser.profilePicture || '',
+    };
+  }
+
+  async deleteProfilePicture(userId: string): Promise<{ message: string }> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new AppError(404, 'User not found');
+    }
+
+    // Delete profile picture from Cloudinary if it exists
+    if (user.profilePicture) {
+      const publicId = this.extractPublicIdFromUrl(user.profilePicture);
+      if (publicId) {
+        await this.cloudinaryService.deleteFile(publicId);
+      }
+    }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { profilePicture: null },
+    });
+
+    logger.info({ userId }, 'Profile picture deleted successfully');
+
+    return {
+      message: 'Profile picture deleted successfully',
+    };
+  }
+
+  /**
+   * Extract Cloudinary public ID from URL
+   * Example: https://res.cloudinary.com/cloud-name/image/upload/v1234567890/folder/public_id.jpg
+   * Returns: folder/public_id
+   */
+  private extractPublicIdFromUrl(url: string): string | null {
+    try {
+      const urlObj = new URL(url);
+      const pathParts = urlObj.pathname.split('/');
+      
+      // Find the upload/version folder and get everything after it
+      const uploadIndex = pathParts.indexOf('upload');
+      if (uploadIndex === -1 || uploadIndex === pathParts.length - 1) {
+        return null;
+      }
+
+      // Skip the version number (starts with v)
+      const startIndex = uploadIndex + 2;
+      const publicIdWithExtension = pathParts.slice(startIndex).join('/');
+      
+      // Remove file extension
+      const publicId = publicIdWithExtension.replace(/\.[^/.]+$/, '');
+      
+      return publicId;
+    } catch {
+      return null;
+    }
   }
 
   private sanitizeUser(user: any) {

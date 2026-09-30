@@ -51,6 +51,10 @@ export const timezoneSchema = z.object({
   timezone: z.string().regex(/^[A-Za-z]+\/[A-Za-z_]+$/, 'Invalid timezone format. Expected IANA format (e.g., "Africa/Lagos")'),
 });
 
+export const profilePictureSchema = z.object({
+  profilePicture: z.string().url('Invalid profile picture URL').optional(),
+});
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type VerifyInput = z.infer<typeof verifySchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
@@ -59,3 +63,4 @@ export type RefreshInput = z.infer<typeof refreshSchema>;
 export type ResendOtpInput = z.infer<typeof resendOtpSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 export type TimezoneInput = z.infer<typeof timezoneSchema>;
+export type ProfilePictureInput = z.infer<typeof profilePictureSchema>;

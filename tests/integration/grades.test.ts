@@ -167,4 +167,89 @@ describe('Grades Workflow & Visibility Integration Tests', () => {
 
     expect(parentRes.body.some((g: any) => g.id === gradeId)).toBe(true);
   });
+
+  describe('Tutor Grade Edit/Delete Guardrails', () => {
+    let pendingGradeId = '';
+    let approvedGradeId = '';
+
+    beforeAll(async () => {
+      // Create a pending grade
+      const pendingRes = await request(app)
+        .post('/grades')
+        .set('Authorization', `Bearer ${tutorToken}`)
+        .send({
+          enrollmentId,
+          score: 85,
+          comments: 'Good work',
+        });
+      pendingGradeId = pendingRes.body.id;
+
+      // Create and approve another grade
+      const toApproveRes = await request(app)
+        .post('/grades')
+        .set('Authorization', `Bearer ${tutorToken}`)
+        .send({
+          enrollmentId,
+          score: 90,
+          comments: 'Excellent',
+        });
+      approvedGradeId = toApproveRes.body.id;
+
+      await request(app)
+        .patch(`/admin/grades/${approvedGradeId}/approve`)
+        .set('Authorization', `Bearer ${adminToken}`);
+    });
+
+    it('Tutor can edit their own pending grade', async () => {
+      const res = await request(app)
+        .patch(`/grades/${pendingGradeId}`)
+        .set('Authorization', `Bearer ${tutorToken}`)
+        .send({
+          score: 88,
+          comments: 'Updated comments',
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.score).toBe(88);
+      expect(res.body.comments).toBe('Updated comments');
+    });
+
+    it('Tutor cannot edit an approved grade', async () => {
+      const res = await request(app)
+        .patch(`/grades/${approvedGradeId}`)
+        .set('Authorization', `Bearer ${tutorToken}`)
+        .send({
+          score: 100,
+          comments: 'Trying to change approved grade',
+        });
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toContain('Cannot update approved grades');
+    });
+
+    it('Tutor can delete their own pending grade', async () => {
+      const res = await request(app)
+        .delete(`/grades/${pendingGradeId}`)
+        .set('Authorization', `Bearer ${tutorToken}`);
+
+      expect(res.status).toBe(200);
+
+      // Verify it's deleted
+      const checkRes = await request(app)
+        .get('/grades')
+        .set('Authorization', `Bearer ${tutorToken}`)
+        .query({ enrollmentId });
+
+      expect(checkRes.body.find((g: any) => g.id === pendingGradeId)).toBeUndefined();
+    });
+
+    it('Tutor cannot delete an approved grade', async () => {
+      const res = await request(app)
+        .delete(`/grades/${approvedGradeId}`)
+        .set('Authorization', `Bearer ${tutorToken}`);
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toContain('Cannot delete approved grades');
+    });
+  });
 });

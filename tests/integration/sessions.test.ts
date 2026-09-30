@@ -215,6 +215,7 @@ describe('Sessions & Attendance Lock Integration Tests', () => {
       expect(res.status).toBe(201);
       expect(res.body.tutorId).toBe(tutorId);
       expect(res.body.status).toBe('SCHEDULED');
+      expect(res.body.createdBy).toBe(tutorId);
       tutorSessionId = res.body.id;
     });
 
@@ -316,6 +317,71 @@ describe('Sessions & Attendance Lock Integration Tests', () => {
         .set('Authorization', `Bearer ${parentToken}`);
 
       expect(res.status).toBe(403);
+    });
+  });
+
+  describe('Tutor Session Ownership Guardrails', () => {
+    let adminSessionId = '';
+
+    it('Admin creates a session assigned to tutor', async () => {
+      const scheduledAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const res = await request(app)
+        .post('/admin/sessions')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          tutorId,
+          scheduledAt,
+          durationMinutes: 60,
+          participantEnrollmentIds: [enrollmentId],
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.tutorId).toBe(tutorId);
+      expect(res.body.createdBy).toBe(adminId);
+      adminSessionId = res.body.id;
+    });
+
+    it('Tutor cannot delete admin-created session even though assigned', async () => {
+      const res = await request(app)
+        .delete(`/tutor/sessions/${adminSessionId}`)
+        .set('Authorization', `Bearer ${tutorToken}`);
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toContain('only delete sessions you created');
+    });
+
+    it('Tutor cannot reschedule admin-created session even though assigned', async () => {
+      const newTime = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+      const res = await request(app)
+        .patch(`/tutor/sessions/${adminSessionId}/reschedule`)
+        .set('Authorization', `Bearer ${tutorToken}`)
+        .send({
+          scheduledAt: newTime,
+        });
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toContain('only reschedule sessions you created');
+    });
+
+    it('Tutor can delete their own created session', async () => {
+      const scheduledAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const createRes = await request(app)
+        .post('/tutor/sessions')
+        .set('Authorization', `Bearer ${tutorToken}`)
+        .send({
+          enrollmentId,
+          scheduledAt,
+          durationMinutes: 60,
+        });
+
+      expect(createRes.status).toBe(201);
+      const tutorCreatedSessionId = createRes.body.id;
+
+      const deleteRes = await request(app)
+        .delete(`/tutor/sessions/${tutorCreatedSessionId}`)
+        .set('Authorization', `Bearer ${tutorToken}`);
+
+      expect(deleteRes.status).toBe(200);
     });
   });
 });

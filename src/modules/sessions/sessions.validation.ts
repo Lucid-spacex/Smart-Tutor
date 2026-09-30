@@ -23,9 +23,10 @@ export const rescheduleSessionSchema = z.object({
   zoomLink: z.string().url('Invalid zoom link').optional(),
 });
 
-// Tutor-only: Reschedule session (time only, no zoom link changes)
+// Tutor-only: Reschedule session (time and duration)
 export const rescheduleTutorSessionSchema = z.object({
   scheduledAt: z.string().refine((val) => !isNaN(Date.parse(val)), 'Invalid scheduled date'),
+  durationMinutes: z.number().int().positive('Duration must be positive').optional(),
 });
 
 export const updateSessionSchema = z.object({

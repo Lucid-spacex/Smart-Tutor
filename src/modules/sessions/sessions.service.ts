@@ -40,6 +40,7 @@ export class SessionsService {
       const newSession = await tx.session.create({
         data: {
           tutorId,
+          createdBy: tutorId, // Track that this session was created by the tutor
           scheduledAt: new Date(data.scheduledAt),
           durationMinutes: data.durationMinutes,
           zoomLink,
@@ -72,9 +73,9 @@ export class SessionsService {
       throw new AppError(404, 'Session not found');
     }
 
-    // CRITICAL OWNERSHIP CHECK: Verify session belongs to this tutor
-    if (session.tutorId !== tutorId) {
-      throw new AppError(403, 'You can only reschedule sessions you created');
+    // CRITICAL OWNERSHIP CHECK: Verify session was created by this tutor (not just assigned to them)
+    if (session.createdBy !== tutorId) {
+      throw new AppError(403, 'You can only reschedule sessions you created yourself');
     }
 
     // Only allow rescheduling scheduled sessions
@@ -82,16 +83,23 @@ export class SessionsService {
       throw new AppError(400, 'Can only reschedule scheduled sessions');
     }
 
+    const updateData: any = {
+      scheduledAt: new Date(data.scheduledAt),
+    };
+
+    // Allow updating duration if provided
+    if (data.durationMinutes !== undefined) {
+      updateData.durationMinutes = data.durationMinutes;
+    }
+
     return prisma.session.update({
       where: { id: sessionId },
-      data: {
-        scheduledAt: new Date(data.scheduledAt),
-      },
+      data: updateData,
     });
   }
 
   // Admin-only: Create a new session with multiple participants
-  async createSession(data: CreateSessionInput) {
+  async createSession(data: CreateSessionInput, adminId: string) {
     // Verify tutor exists and is approved
     const tutor = await prisma.user.findUnique({
       where: { id: data.tutorId },
@@ -146,6 +154,7 @@ export class SessionsService {
       const newSession = await tx.session.create({
         data: {
           tutorId: data.tutorId,
+          createdBy: adminId, // Track that this session was created by admin
           scheduledAt: new Date(data.scheduledAt),
           durationMinutes: data.durationMinutes,
           zoomLink,
@@ -338,6 +347,9 @@ export class SessionsService {
     if (data.homeworkAssigned !== undefined) {
       allowedFields.homeworkAssigned = data.homeworkAssigned;
     }
+    if (data.durationMinutes !== undefined) {
+      allowedFields.durationMinutes = data.durationMinutes;
+    }
 
     // Handle participant attendance marking
     if (data.participants && data.participants.length > 0) {
@@ -410,6 +422,35 @@ export class SessionsService {
           },
         },
       },
+    });
+  }
+
+  async deleteSession(id: string, tutorId: string) {
+    const session = await prisma.session.findUnique({
+      where: { id },
+    });
+
+    if (!session) {
+      throw new AppError(404, 'Session not found');
+    }
+
+    // Only the tutor who created the session can delete it (not just the assigned tutor)
+    if (session.createdBy !== tutorId) {
+      throw new AppError(403, 'You can only delete sessions you created yourself');
+    }
+
+    // Only allow deletion of scheduled sessions (prevent deleting past/active sessions)
+    if (session.status !== 'SCHEDULED') {
+      throw new AppError(400, 'Can only delete scheduled sessions');
+    }
+
+    // Cancel the Zoom meeting if it exists
+    if (session.zoomMeetingId) {
+      await this.zoomService.deleteMeeting(session.zoomMeetingId);
+    }
+
+    await prisma.session.delete({
+      where: { id },
     });
   }
 }

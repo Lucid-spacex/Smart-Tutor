@@ -23,5 +23,6 @@ router.get('/sessions', authenticate, requireRole('TUTOR'), tutorController.getT
 // /tutor/sessions (tutor-only session management)
 router.post('/sessions', authenticate, requireRole('TUTOR'), validate(createTutorSessionSchema), tutorController.createTutorSession);
 router.patch('/sessions/:id/reschedule', authenticate, requireRole('TUTOR'), validateUUID('id'), validate(rescheduleTutorSessionSchema), tutorController.rescheduleTutorSession);
+router.delete('/sessions/:id', authenticate, requireRole('TUTOR'), validateUUID('id'), tutorController.deleteTutorSession);
 
 export default router;

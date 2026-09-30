@@ -5,6 +5,15 @@ export const createGradeSchema = z.object({
   assignmentId: z.string().uuid('Invalid assignment ID').optional(),
   score: z.number().min(0, 'Score must be non-negative').max(100, 'Score must not exceed 100'),
   comments: z.string().optional(),
+  attachmentUrl: z.string().url('Invalid attachment URL').optional(),
+  attachmentName: z.string().optional(),
+});
+
+export const updateGradeSchema = z.object({
+  score: z.number().min(0, 'Score must be non-negative').max(100, 'Score must not exceed 100').optional(),
+  comments: z.string().optional(),
+  attachmentUrl: z.string().url('Invalid attachment URL').optional(),
+  attachmentName: z.string().optional(),
 });
 
 export const approveGradeSchema = z.object({});
@@ -19,6 +28,7 @@ export const getGradesQuerySchema = z.object({
 });
 
 export type CreateGradeInput = z.infer<typeof createGradeSchema>;
+export type UpdateGradeInput = z.infer<typeof updateGradeSchema>;
 export type ApproveGradeInput = z.infer<typeof approveGradeSchema>;
 export type RejectGradeInput = z.infer<typeof rejectGradeSchema>;
 export type GetGradesQuery = z.infer<typeof getGradesQuerySchema>;

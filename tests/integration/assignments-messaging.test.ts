@@ -581,4 +581,125 @@ describe('Assignments & Messaging Permissions Integration Tests', () => {
       expect(tutorThread).toBeUndefined();
     });
   });
+
+  describe('Tutor Assignment Edit/Delete Guardrails', () => {
+    let assignmentWithSubmissionId = '';
+    let assignmentWithoutSubmissionId = '';
+
+    beforeAll(async () => {
+      // Create an assignment without submission
+      const createRes = await request(app)
+        .post('/assignments')
+        .set('Authorization', `Bearer ${tutorToken}`)
+        .send({
+          enrollmentId,
+          title: 'Assignment without submission',
+          description: 'Test assignment',
+          type: 'ASSIGNMENT',
+          dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        });
+      assignmentWithoutSubmissionId = createRes.body.id;
+
+      // Create an assignment with submission
+      const withSubRes = await request(app)
+        .post('/assignments')
+        .set('Authorization', `Bearer ${tutorToken}`)
+        .send({
+          enrollmentId,
+          title: 'Assignment with submission',
+          description: 'Test assignment with submission',
+          type: 'ASSIGNMENT',
+          dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        });
+      assignmentWithSubmissionId = withSubRes.body.id;
+
+      // Student submits the assignment
+      await request(app)
+        .post(`/assignments/${assignmentWithSubmissionId}/submit`)
+        .set('Authorization', `Bearer ${studentToken}`)
+        .send({
+          textAnswer: 'Here is my submission',
+        });
+    });
+
+    it('Tutor can edit their own assignment (title, description, dueDate)', async () => {
+      const res = await request(app)
+        .patch(`/assignments/${assignmentWithoutSubmissionId}`)
+        .set('Authorization', `Bearer ${tutorToken}`)
+        .send({
+          title: 'Updated title',
+          description: 'Updated description',
+          dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.title).toBe('Updated title');
+      expect(res.body.description).toBe('Updated description');
+    });
+
+    it('Tutor can delete assignment without submissions', async () => {
+      const res = await request(app)
+        .delete(`/assignments/${assignmentWithoutSubmissionId}`)
+        .set('Authorization', `Bearer ${tutorToken}`);
+
+      expect(res.status).toBe(200);
+
+      // Verify it's deleted
+      const checkRes = await request(app)
+        .get('/assignments')
+        .set('Authorization', `Bearer ${tutorToken}`)
+        .query({ enrollmentId });
+
+      expect(checkRes.body.find((a: any) => a.id === assignmentWithoutSubmissionId)).toBeUndefined();
+    });
+
+    it('Tutor cannot delete assignment with student submissions', async () => {
+      const res = await request(app)
+        .delete(`/assignments/${assignmentWithSubmissionId}`)
+        .set('Authorization', `Bearer ${tutorToken}`);
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('Cannot delete assignment - student has already submitted work');
+    });
+
+    it('Tutor cannot edit another tutor\'s assignment', async () => {
+      // Create another tutor
+      const otherTutor = await prisma.user.create({
+        data: {
+          fullName: 'Other Tutor',
+          email: `other_tutor_${Date.now()}@test.com`,
+          passwordHash: await hashPassword(testPassword),
+          role: 'TUTOR',
+          status: 'APPROVED',
+        },
+      });
+      await prisma.tutorProfile.create({
+        data: {
+          userId: otherTutor.id,
+          subjects: ['Math'],
+          bio: 'Bio',
+          hourlyRate: 50,
+          availability: {},
+          vettingStatus: 'APPROVED',
+        },
+      });
+
+      const otherTutorRes = await request(app)
+        .post('/auth/login')
+        .send({ email: otherTutor.email, password: testPassword });
+
+      const otherTutorToken = otherTutorRes.body.accessToken;
+
+      // Try to edit the first tutor's assignment
+      const res = await request(app)
+        .patch(`/assignments/${assignmentWithSubmissionId}`)
+        .set('Authorization', `Bearer ${otherTutorToken}`)
+        .send({
+          title: 'Malicious edit',
+        });
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toContain('Not authorized to update this assignment');
+    });
+  });
 });

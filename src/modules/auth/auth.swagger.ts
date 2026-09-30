@@ -374,3 +374,78 @@
  *       401:
  *         description: Not authenticated
  */
+
+/**
+ * @swagger
+ * /auth/me/profile-picture:
+ *   patch:
+ *     summary: Update profile picture
+ *     description: |
+ *       Upload a profile picture to Cloudinary cloud storage.
+ *       Supported formats: JPEG, PNG, GIF, WebP. Maximum size: 5MB.
+ *       Available to all roles (Parent, Tutor, Admin, Student).
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - profilePicture
+ *             properties:
+ *               profilePicture:
+ *                 type: string
+ *                 format: binary
+ *                 description: Image file (JPEG, PNG, GIF, WebP, max 5MB)
+ *     responses:
+ *       200:
+ *         description: Profile picture updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Profile picture updated successfully"
+ *                 profilePicture:
+ *                   type: string
+ *                   example: "https://res.cloudinary.com/cloud-name/image/upload/v1234567890/profile-pictures/abc123.jpg"
+ *       400:
+ *         description: Invalid file type or file too large
+ *       401:
+ *         description: Not authenticated
+ *       503:
+ *         description: Cloudinary not configured
+ */
+
+/**
+ * @swagger
+ * /auth/me/profile-picture:
+ *   delete:
+ *     summary: Delete profile picture
+ *     description: |
+ *       Remove the user's profile picture from Cloudinary and clear the field.
+ *       Available to all roles (Parent, Tutor, Admin, Student).
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Profile picture deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Profile picture deleted successfully"
+ *       401:
+ *         description: Not authenticated
+ *       404:
+ *         description: User not found
+ */

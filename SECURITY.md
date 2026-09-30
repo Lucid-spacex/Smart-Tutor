@@ -59,7 +59,7 @@ Students do not authenticate with standard email/password. Instead, students aut
 | Set/override pricing | ❌ | ❌ | ✅ | ❌ |
 | View pricing tiers & exchange rates | ❌ | ❌ | ✅ | ❌ |
 | Approve/reject tutors | ❌ | ❌ | ✅ | ❌ |
-| File a complaint | ✅ | ✅ | — | ❌ |
+| File a complaint | ✅ | ❌ | — | ❌ |
 | Resolve a complaint | ❌ | ❌ | ✅ | ❌ |
 | Regenerate a student's password | ✅ (own child) | ❌ | ✅ (support) | ❌ |
 | Reactivate a suspended parent | ❌ | ❌ | ✅ | — |
@@ -71,6 +71,14 @@ Students do not authenticate with standard email/password. Instead, students aut
 | **Quiz Mode** (explicit RBAC carve-out) | ❌ | ✅ (create questions for own assignments) | ✅ | ✅ (start/answer/complete own quiz only) |
 | View detailed student info (single student) | — | ✅ (own assigned students only, no parent info) | ✅ | — |
 | View assigned tutor profiles | — | — | — | ✅ (own assigned tutors only) |
+| Edit own assignments (title, description, dueDate) | ❌ | ✅ (own only) | ✅ | ❌ |
+| Delete own assignments (no submissions) | ❌ | ✅ (own only, blocked if submissions exist) | ✅ | ❌ |
+| Edit own grades (PENDING_APPROVAL or REJECTED only) | ❌ | ✅ (own only, not APPROVED) | ✅ | ❌ |
+| Delete own grades (PENDING_APPROVAL or REJECTED only) | ❌ | ✅ (own only, not APPROVED) | ✅ | ❌ |
+| Delete own sessions (SCHEDULED only, must be createdBy) | ❌ | ✅ (own created only, not admin-created) | ✅ | ❌ |
+| Reschedule own sessions (must be createdBy) | ❌ | ✅ (own created only, not admin-created) | ✅ | ❌ |
+| Upload/change profile picture | ✅ | ✅ | ✅ | ✅ |
+| View profile pictures (any user's) | ✅ (own children's tutors) | ✅ (own assigned students) | ✅ (all) | ✅ (own assigned tutors) |
 
 ---
 
@@ -78,6 +86,16 @@ Students do not authenticate with standard email/password. Instead, students aut
 - Tutors can now schedule/reschedule sessions for their own assigned students only
 - Tutors can view detailed student info for their assigned students (excluding parent info)
 - Students can view their assigned tutors' profiles
+
+**Note**: Additional RBAC changes added 2026-09-30:
+- Tutors can no longer file complaints (they now use messaging to contact admin)
+- Admin inbox is now shared: any admin can see and reply to parent/tutor threads
+- Admin can message any parent or tutor, and vice versa
+- Tutors can edit/delete their own assignments (blocked if submissions exist)
+- Tutors can edit/delete their own grades (only while PENDING_APPROVAL or REJECTED, not APPROVED)
+- Tutors can delete/reschedule only sessions they created (not admin-created sessions)
+- All roles can upload/change profile pictures via Cloudinary
+- Profile picture URLs are included in user info responses throughout the app
 
 ## 4. IDOR Defense & Resource-Level Authorization
 
@@ -94,13 +112,20 @@ Every endpoint with an `:id` parameter verifies resource-level ownership:
 The platform enforces communication isolation via the single `canMessage(senderId, recipientId)` function:
 - **Allowed**:
   - `Student <-> Assigned Tutor` (verified against an ACTIVE enrollment at send time)
-  - `Tutor <-> Admin`
-  - `Parent <-> Admin`
+  - `Tutor <-> Admin` (shared inbox - any admin can reply)
+  - `Parent <-> Admin` (shared inbox - any admin can reply)
 - **Strictly Blocked**:
   - `Student <-> Admin` (403 Forbidden)
   - `Student <-> Parent` (403 Forbidden - handled outside platform)
   - `Parent <-> Tutor` (403 Forbidden in both directions - must route through Admin)
   - `Student <-> Unassigned Tutor` (403 Forbidden)
+
+**Shared Admin Inbox (2026-09-30)**:
+- Parents and tutors message "Admin" as a shared team inbox, not individual admins
+- `GET /messages/admin-contact` returns any active admin's ID for starting new threads
+- Admins see all threads with parents and tutors in their thread list, regardless of which specific admin was the original recipient
+- Any admin can reply to any parent/tutor thread (shared reply rights)
+- This provides a unified "Admin" conversation experience for parents and tutors
 
 ---
 
@@ -194,6 +219,77 @@ Students are otherwise fully read-only, but quiz mode provides a **deliberate, n
 - The ownership check (`enrollmentId` must belong to the requesting tutor) is the single most important security constraint
 - This change is additive to admin capabilities, not a replacement
 - Tutors still cannot modify `scheduledAt` or `zoomLink` when logging session notes (only status, notes, homework, attendance)
+
+---
+
+## 13. Tutor Content Management (2026-09-30)
+
+**Policy Change Notice**: As of 2026-09-30, tutors are permitted to edit and delete their own assignments, grades, and sessions they created. This provides tutors with necessary autonomy while maintaining admin oversight.
+
+### Assignment Management:
+- **Tutors**: Can edit (`PATCH /assignments/:id`) and delete (`DELETE /assignments/:id`) assignments they created
+- **Guardrails**: 
+  - Deletion is blocked if a student has already submitted work for the assignment
+  - Only the assignment creator (tutor) can edit or delete their own assignments
+  - Tutors cannot edit/delete assignments created by other tutors or admins
+- **Scope**: Title, description, type, due date, and attachments can be edited
+
+### Grade Management:
+- **Tutors**: Can edit (`PATCH /grades/:id`) and delete (`DELETE /grades/:id`) grades they submitted
+- **Guardrails**:
+  - Edit/delete is only allowed while grade status is `PENDING_APPROVAL` or `REJECTED`
+  - Once `APPROVED` by admin, grades are locked and cannot be modified by tutors
+  - Only the grade creator (tutor) can edit or delete their own grades
+- **Scope**: Score, comments, and attachments can be edited
+
+### Session Management:
+- **Tutors**: Can delete (`DELETE /tutor/sessions/:id`) sessions they created
+- **Guardrails**:
+  - Only the session creator (tracked via `createdBy` field) can delete
+  - Tutors cannot delete admin-created sessions, even if they're the assigned tutor
+  - Only `SCHEDULED` sessions can be deleted (past/active sessions are protected)
+  - Deleting a session cancels the actual Zoom meeting via Zoom API
+- **Reschedule Enhancement**: `PATCH /tutor/sessions/:id/reschedule` now accepts both `scheduledAt` and `durationMinutes`
+
+### Security Considerations:
+- The `createdBy` field on Session model is critical for distinguishing tutor-created vs admin-created sessions
+- Approved grades are immutable by design to maintain audit trail and prevent grade tampering
+- Zoom meeting cancellation on session delete prevents orphaned live meetings
+
+---
+
+## 14. File Storage and Profile Pictures (2026-09-30)
+
+**Implementation Notice**: As of 2026-09-30, all file storage uses Cloudinary cloud storage instead of local filesystem. This includes profile pictures, assignment attachments, grade attachments, and student submissions.
+
+### Cloudinary Integration:
+- **Storage Provider**: Cloudinary (configured via `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`)
+- **File Types**: Images (JPEG, PNG, GIF, WebP) and PDFs only
+- **Size Limits**: 
+  - Profile pictures: 5MB
+  - Attachments (assignments, grades, submissions): 10MB
+- **Validation**: Client-side and server-side validation of file type and size before upload
+- **Folder Structure**: Organized by type (profile-pictures, assignments, assignment-submissions, assignment-feedback, grades)
+
+### Profile Pictures:
+- **All Roles**: Every role (Parent, Tutor, Admin, Student) can upload, change, and remove their profile picture
+- **Endpoints**:
+  - `PATCH /auth/me/profile-picture` (multipart) → uploads to Cloudinary, stores URL
+  - `DELETE /auth/me/profile-picture` → removes Cloudinary asset, clears field
+- **Display**: Profile picture URL included in `GET /auth/me` and user info responses (tutor lists, student cards, etc.)
+- **Default Avatars**: Frontend should display sensible defaults (initials on colored circle) when no picture is set
+
+### Attachment Management:
+- **Assignments**: Tutors can attach files when creating/editing assignments
+- **Grades**: Tutors can attach files when submitting/editing grades
+- **Submissions**: Students can attach files when submitting assignments
+- **Cleanup**: When attachments are replaced or resources deleted, Cloudinary assets are deleted to prevent storage bloat
+
+### Security Considerations:
+- Files are validated for type and size before reaching Cloudinary (fail fast with clear errors)
+- Only authenticated users can upload files (role-specific endpoints)
+- Cloudinary URLs are public but unguessable (secure random public IDs)
+- Profile picture URL is included in user responses - no sensitive data exposure
 
 ---
 

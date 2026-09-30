@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { MessagesController } from './messages.controller';
-import { authenticate } from '../../middleware/auth.middleware';
+import { authenticate, requireRole } from '../../middleware/auth.middleware';
 import { validate } from '../../middleware/validation.middleware';
 import { validateUUID } from '../../middleware/uuid-validation.middleware';
 import { createMessageSchema } from './messages.validation';
@@ -19,5 +19,8 @@ router.get('/threads/:threadId', authenticate, validateUUID('threadId'), message
 
 // Mark thread messages as read
 router.patch('/threads/:threadId/read', authenticate, validateUUID('threadId'), messagesController.markThreadAsRead);
+
+// Get admin contact for messaging (PARENT and TUTOR only)
+router.get('/admin-contact', authenticate, requireRole('PARENT', 'TUTOR'), messagesController.getAdminContact);
 
 export default router;

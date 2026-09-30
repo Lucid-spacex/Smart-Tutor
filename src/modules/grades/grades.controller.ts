@@ -9,7 +9,7 @@ export class GradesController {
     this.gradesService = new GradesService();
   }
 
-  createGrade = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  createGrade = async (req: any, res: Response, next: NextFunction): Promise<void> => {
     try {
       const tutorId = req.user?.userId;
       if (!tutorId) {
@@ -18,6 +18,12 @@ export class GradesController {
       }
 
       const data = req.body;
+      
+      // Handle file attachment if present (convert to base64 for Cloudinary)
+      if (req.file) {
+        data.attachmentBase64 = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+      }
+
       const grade = await this.gradesService.createGrade(tutorId, data);
       res.status(201).json(grade);
     } catch (error) {
@@ -79,6 +85,45 @@ export class GradesController {
       const { reason } = req.body;
       const grade = await this.gradesService.rejectGrade(id, adminId, reason);
       res.status(200).json(grade);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  updateGrade = async (req: any, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const tutorId = req.user?.userId;
+      if (!tutorId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id } = req.params;
+      const data = req.body;
+      
+      // Handle file attachment if present (convert to base64 for Cloudinary)
+      if (req.file) {
+        data.attachmentBase64 = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+      }
+
+      const grade = await this.gradesService.updateGrade(id, tutorId, data);
+      res.status(200).json(grade);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  deleteGrade = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const tutorId = req.user?.userId;
+      if (!tutorId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id } = req.params;
+      await this.gradesService.deleteGrade(id, tutorId);
+      res.status(200).json({ message: 'Grade deleted successfully' });
     } catch (error) {
       next(error);
     }

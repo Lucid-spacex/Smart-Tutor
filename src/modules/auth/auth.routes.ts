@@ -4,6 +4,7 @@ import { validate } from '../../middleware/validation.middleware';
 import { authenticate } from '../../middleware/auth.middleware';
 import { tier1AuthRateLimit, studentLoginRateLimit } from '../../middleware/rate-limit.middleware';
 import { registerSchema, verifySchema, loginSchema, studentLoginSchema, refreshSchema, resendOtpSchema, changePasswordSchema, timezoneSchema } from './auth.validation';
+import { uploadProfilePicture, handleUploadError } from '../../middleware/upload.middleware';
 
 const router = Router();
 const authController = new AuthController();
@@ -25,5 +26,7 @@ router.post('/logout', authenticate, authController.logout);
 router.get('/me', authenticate, authController.getCurrentUser);
 router.patch('/change-password', authenticate, validate(changePasswordSchema), authController.changePassword);
 router.patch('/me/timezone', authenticate, validate(timezoneSchema), authController.updateTimezone);
+router.patch('/me/profile-picture', authenticate, uploadProfilePicture, handleUploadError, authController.updateProfilePicture);
+router.delete('/me/profile-picture', authenticate, authController.deleteProfilePicture);
 
 export default router;

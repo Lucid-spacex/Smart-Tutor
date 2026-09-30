@@ -118,6 +118,44 @@ export class AuthController {
     }
   };
 
+  updateProfilePicture = async (req: any, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const userId = req.user?.userId;
+      if (!userId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+      
+      // Handle file upload (multer will add file to req.file)
+      if (!req.file) {
+        res.status(400).json({ error: 'No file uploaded' });
+        return;
+      }
+
+      // Convert file buffer to base64 for Cloudinary upload
+      const fileBase64 = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+      
+      const result = await this.authService.updateProfilePicture(userId, fileBase64);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  deleteProfilePicture = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const userId = req.user?.userId;
+      if (!userId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+      const result = await this.authService.deleteProfilePicture(userId);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
   resendOtp = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { email } = req.body;

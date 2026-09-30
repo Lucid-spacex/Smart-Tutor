@@ -1,12 +1,17 @@
 import prisma from '../../config/database';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AppError } from '../../middleware/error-handler.middleware';
+import { CloudinaryService } from '../../services/cloudinary.service';
 
 export class GradesService {
   private notificationsService: NotificationsService;
+  private cloudinaryService: CloudinaryService;
 
   constructor() {
     this.notificationsService = new NotificationsService();
+    this.cloudinaryService = new CloudinaryService();
   }
+
   async createGrade(tutorId: string, data: any) {
     // Verify enrollment exists and tutor is assigned
     const enrollment = await prisma.enrollment.findUnique({
@@ -18,11 +23,11 @@ export class GradesService {
     });
 
     if (!enrollment) {
-      throw new Error('Enrollment not found');
+      throw new AppError(404, 'Enrollment not found');
     }
 
     if (enrollment.tutorId !== tutorId) {
-      throw new Error('Not authorized to grade this enrollment');
+      throw new AppError(403, 'Not authorized to grade this enrollment');
     }
 
     // If assignmentId is provided, verify it exists and belongs to the enrollment
@@ -31,8 +36,22 @@ export class GradesService {
         where: { id: data.assignmentId },
       });
       if (!assignment || assignment.enrollmentId !== data.enrollmentId) {
-        throw new Error('Assignment not found or does not belong to this enrollment');
+        throw new AppError(400, 'Assignment not found or does not belong to this enrollment');
       }
+    }
+
+    let attachmentUrl = null;
+    let attachmentName = null;
+
+    // Upload attachment to Cloudinary if provided
+    if (data.attachmentBase64) {
+      const uploadResult = await this.cloudinaryService.uploadFile(
+        data.attachmentBase64,
+        'grades',
+        'raw'
+      );
+      attachmentUrl = uploadResult.url;
+      attachmentName = uploadResult.filename;
     }
 
     // Grade always starts as PENDING_APPROVAL
@@ -43,6 +62,8 @@ export class GradesService {
         gradedBy: tutorId,
         score: data.score,
         comments: data.comments,
+        attachmentUrl,
+        attachmentName,
         status: 'PENDING_APPROVAL',
         visibleToStudent: false, // Not visible until approved
       },
@@ -61,6 +82,135 @@ export class GradesService {
           },
         },
       },
+    });
+  }
+
+  async updateGrade(gradeId: string, tutorId: string, data: any) {
+    const grade = await prisma.grade.findUnique({
+      where: { id: gradeId },
+    });
+
+    if (!grade) {
+      throw new AppError(404, 'Grade not found');
+    }
+
+    // Only the grader (tutor) can update the grade
+    if (grade.gradedBy !== tutorId) {
+      throw new AppError(403, 'Not authorized to update this grade');
+    }
+
+    // Only allow updates when grade is PENDING_APPROVAL or REJECTED
+    if (grade.status === 'APPROVED') {
+      throw new AppError(403, 'Cannot update approved grades');
+    }
+
+    const updateData: any = {};
+    if (data.score !== undefined) updateData.score = data.score;
+    if (data.comments !== undefined) updateData.comments = data.comments;
+
+    // Handle attachment update
+    if (data.attachmentBase64) {
+      // Delete old attachment from Cloudinary if it exists
+      if (grade.attachmentUrl) {
+        const publicId = this.extractPublicIdFromUrl(grade.attachmentUrl);
+        if (publicId) {
+          await this.cloudinaryService.deleteFile(publicId);
+        }
+      }
+
+      // Upload new attachment
+      const uploadResult = await this.cloudinaryService.uploadFile(
+        data.attachmentBase64,
+        'grades',
+        'raw'
+      );
+      updateData.attachmentUrl = uploadResult.url;
+      updateData.attachmentName = uploadResult.filename;
+    } else if (data.removeAttachment === true) {
+      // Remove attachment
+      if (grade.attachmentUrl) {
+        const publicId = this.extractPublicIdFromUrl(grade.attachmentUrl);
+        if (publicId) {
+          await this.cloudinaryService.deleteFile(publicId);
+        }
+      }
+      updateData.attachmentUrl = null;
+      updateData.attachmentName = null;
+    }
+
+    return prisma.grade.update({
+      where: { id: gradeId },
+      data: updateData,
+      include: {
+        enrollment: {
+          include: {
+            student: true,
+            subject: true,
+          },
+        },
+        assignment: true,
+        grader: {
+          select: {
+            id: true,
+            fullName: true,
+          },
+        },
+      },
+    });
+  }
+
+  /**
+   * Extract Cloudinary public ID from URL
+   */
+  private extractPublicIdFromUrl(url: string): string | null {
+    try {
+      const urlObj = new URL(url);
+      const pathParts = urlObj.pathname.split('/');
+      
+      const uploadIndex = pathParts.indexOf('upload');
+      if (uploadIndex === -1 || uploadIndex === pathParts.length - 1) {
+        return null;
+      }
+
+      const startIndex = uploadIndex + 2;
+      const publicIdWithExtension = pathParts.slice(startIndex).join('/');
+      const publicId = publicIdWithExtension.replace(/\.[^/.]+$/, '');
+      
+      return publicId;
+    } catch {
+      return null;
+    }
+  }
+
+  async deleteGrade(gradeId: string, tutorId: string) {
+    const grade = await prisma.grade.findUnique({
+      where: { id: gradeId },
+    });
+
+    if (!grade) {
+      throw new AppError(404, 'Grade not found');
+    }
+
+    // Only the grader (tutor) can delete the grade
+    if (grade.gradedBy !== tutorId) {
+      throw new AppError(403, 'Not authorized to delete this grade');
+    }
+
+    // Only allow deletion when grade is PENDING_APPROVAL or REJECTED
+    if (grade.status === 'APPROVED') {
+      throw new AppError(403, 'Cannot delete approved grades');
+    }
+
+    // Delete attachment from Cloudinary if it exists
+    if (grade.attachmentUrl) {
+      const publicId = this.extractPublicIdFromUrl(grade.attachmentUrl);
+      if (publicId) {
+        await this.cloudinaryService.deleteFile(publicId);
+      }
+    }
+
+    await prisma.grade.delete({
+      where: { id: gradeId },
     });
   }
 
@@ -96,11 +246,11 @@ export class GradesService {
     });
 
     if (!grade) {
-      throw new Error('Grade not found');
+      throw new AppError(404, 'Grade not found');
     }
 
     if (grade.status !== 'PENDING_APPROVAL') {
-      throw new Error('Grade is not in pending approval status');
+      throw new AppError(400, 'Grade is not in pending approval status');
     }
 
     const updatedGrade = await prisma.grade.update({
@@ -146,11 +296,11 @@ export class GradesService {
     });
 
     if (!grade) {
-      throw new Error('Grade not found');
+      throw new AppError(404, 'Grade not found');
     }
 
     if (grade.status !== 'PENDING_APPROVAL') {
-      throw new Error('Grade is not in pending approval status');
+      throw new AppError(400, 'Grade is not in pending approval status');
     }
 
     return prisma.grade.update({

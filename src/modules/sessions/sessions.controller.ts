@@ -63,8 +63,14 @@ export class SessionsController {
   // Admin-only: Create session with multiple participants
   createSession = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
+      const adminId = req.user?.userId;
+      if (!adminId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
       const data: CreateSessionInput = req.body;
-      const session = await this.sessionsService.createSession(data);
+      const session = await this.sessionsService.createSession(data, adminId);
       res.status(201).json(session);
     } catch (error) {
       next(error);

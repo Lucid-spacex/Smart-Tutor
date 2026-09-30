@@ -8,8 +8,8 @@ import { createComplaintSchema, resolveComplaintSchema } from './complaints.vali
 const router = Router();
 const complaintsController = new ComplaintsController();
 
-// Parents and tutors can file complaints
-router.post('/', authenticate, requireRole('PARENT', 'TUTOR'), validate(createComplaintSchema), complaintsController.createComplaint);
+// Only parents can file complaints (tutors now use messaging)
+router.post('/', authenticate, requireRole('PARENT'), validate(createComplaintSchema), complaintsController.createComplaint);
 
 // Admins and filers can view complaints
 router.get('/', authenticate, complaintsController.getComplaints);

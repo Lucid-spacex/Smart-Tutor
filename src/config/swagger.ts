@@ -136,7 +136,7 @@ const options = {
             },
             role: {
               type: 'string',
-              enum: ['PARENT', 'TUTOR', 'ADMIN'],
+              enum: ['PARENT', 'TUTOR', 'ADMIN', 'STUDENT'],
             },
             status: {
               type: 'string',
@@ -145,6 +145,12 @@ const options = {
             timezone: {
               type: 'string',
               nullable: true,
+            },
+            profilePicture: {
+              type: 'string',
+              format: 'uri',
+              nullable: true,
+              description: 'Cloudinary URL for profile picture',
             },
             createdAt: {
               type: 'string',
@@ -288,9 +294,14 @@ const options = {
               type: 'string',
               format: 'uuid',
             },
-            enrollmentId: {
+            tutorId: {
               type: 'string',
               format: 'uuid',
+            },
+            createdBy: {
+              type: 'string',
+              format: 'uuid',
+              description: 'User ID of who created the session (tutor or admin)',
             },
             scheduledAt: {
               type: 'string',
@@ -504,7 +515,7 @@ const options = {
             },
             type: {
               type: 'string',
-              enum: ['ASSIGNMENT', 'CLASSWORK', 'TEST'],
+              enum: ['ASSIGNMENT', 'CLASSWORK', 'TEST', 'HOMEWORK', 'PROJECT', 'QUIZ'],
             },
             dueDate: {
               type: 'string',
@@ -512,9 +523,24 @@ const options = {
             },
             status: {
               type: 'string',
-              enum: ['PENDING', 'COMPLETED'],
+              enum: ['PENDING', 'SUBMITTED', 'COMPLETED', 'GRADED', 'CANCELLED'],
+            },
+            attachmentUrl: {
+              type: 'string',
+              format: 'uri',
+              nullable: true,
+              description: 'Cloudinary URL for assignment attachment',
+            },
+            attachmentName: {
+              type: 'string',
+              nullable: true,
+              description: 'Original filename of attachment',
             },
             createdAt: {
+              type: 'string',
+              format: 'date-time',
+            },
+            updatedAt: {
               type: 'string',
               format: 'date-time',
             },
@@ -548,6 +574,17 @@ const options = {
             },
             visibleToStudent: {
               type: 'boolean',
+            },
+            attachmentUrl: {
+              type: 'string',
+              format: 'uri',
+              nullable: true,
+              description: 'Cloudinary URL for grade attachment',
+            },
+            attachmentName: {
+              type: 'string',
+              nullable: true,
+              description: 'Original filename of attachment',
             },
             createdAt: {
               type: 'string',

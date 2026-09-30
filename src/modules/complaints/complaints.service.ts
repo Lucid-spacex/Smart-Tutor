@@ -9,8 +9,8 @@ export class ComplaintsService {
   }
 
   async createComplaint(userId: string, userRole: string, data: any) {
-    // Only parents and tutors can file complaints
-    if (userRole !== 'PARENT' && userRole !== 'TUTOR') {
+    // Only parents can file complaints (tutors now use messaging)
+    if (userRole !== 'PARENT') {
       throw new Error('Not authorized to file complaints');
     }
 
@@ -41,9 +41,12 @@ export class ComplaintsService {
 
     if (userRole === 'ADMIN') {
       // Admins see all complaints
-    } else if (userRole === 'PARENT' || userRole === 'TUTOR') {
-      // Parents and tutors see only their own complaints
+    } else if (userRole === 'PARENT') {
+      // Parents see only their own complaints
       where.filedBy = userId;
+    } else if (userRole === 'TUTOR') {
+      // Tutors no longer have access to complaints (they use messaging)
+      return [];
     } else {
       throw new Error('Not authorized to view complaints');
     }

@@ -64,7 +64,7 @@
  * @swagger
  * /assignments/{id}:
  *   patch:
- *     summary: Update assignment status (Tutor creator only)
+ *     summary: Update assignment (Tutor creator only - title, description, dueDate, attachment)
  *     tags: [Assignments]
  *     security:
  *       - bearerAuth: []
@@ -76,20 +76,47 @@
  *           type: string
  *           format: uuid
  *     requestBody:
- *       required: true
+ *       required: false
  *       content:
  *         application/json:
  *           schema:
  *             type: object
- *             required:
- *               - status
  *             properties:
- *               status:
+ *               title:
  *                 type: string
- *                 enum: [COMPLETED]
+ *               description:
+ *                 type: string
+ *               type:
+ *                 type: string
+ *                 enum: [ASSIGNMENT, CLASSWORK, TEST, HOMEWORK, PROJECT, QUIZ]
+ *               dueDate:
+ *                 type: string
+ *                 format: date-time
+ *               removeAttachment:
+ *                 type: boolean
+ *                 description: Set to true to remove the attachment
  *     responses:
  *       200:
  *         description: Assignment updated
+ *       403:
+ *         description: Not authorized
+ *   delete:
+ *     summary: Delete assignment (Tutor creator only - blocked if student has submitted)
+ *     tags: [Assignments]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Assignment deleted
+ *       400:
+ *         description: Cannot delete - student has already submitted work
  *       403:
  *         description: Not authorized
  */

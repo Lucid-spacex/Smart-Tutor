@@ -126,3 +126,56 @@
  *       403:
  *         description: Admin only
  */
+
+/**
+ * @swagger
+ * /grades/{id}:
+ *   patch:
+ *     summary: Update grade (Tutor grader only - allowed while PENDING_APPROVAL or REJECTED)
+ *     tags: [Grades]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               score:
+ *                 type: number
+ *               comments:
+ *                 type: string
+ *               removeAttachment:
+ *                 type: boolean
+ *                 description: Set to true to remove the attachment
+ *     responses:
+ *       200:
+ *         description: Grade updated
+ *       403:
+ *         description: Not authorized or grade is approved (locked)
+ *   delete:
+ *     summary: Delete grade (Tutor grader only - allowed while PENDING_APPROVAL or REJECTED)
+ *     tags: [Grades]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Grade deleted
+ *       403:
+ *         description: Not authorized or grade is approved (locked)
+ */
