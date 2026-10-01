@@ -34,6 +34,24 @@ export interface EmailData {
 }
 
 /**
+ * Parse EMAIL_FROM to extract email and name
+ * Supports formats: "email@example.com" or "Name <email@example.com>"
+ */
+const parseEmailFrom = (emailFrom: string): { email: string; name: string } => {
+  const match = emailFrom.match(/^(.*?)<(.*?)>$/);
+  if (match) {
+    return {
+      name: match[1].trim(),
+      email: match[2].trim(),
+    };
+  }
+  return {
+    name: 'TeachMeHub',
+    email: emailFrom.trim(),
+  };
+};
+
+/**
  * Centralized email sending function
  * Handles all email delivery through Brevo API
  */
@@ -44,6 +62,8 @@ export const sendEmail = async (data: EmailData): Promise<void> => {
   }
 
   try {
+    const sender = parseEmailFrom(config.EMAIL_FROM || 'noreply@teachmehub.com');
+
     const response = await fetch(BREVO_API_URL, {
       method: 'POST',
       headers: {
@@ -53,8 +73,8 @@ export const sendEmail = async (data: EmailData): Promise<void> => {
       },
       body: JSON.stringify({
         sender: {
-          email: config.EMAIL_FROM || 'noreply@teachmehub.com',
-          name: 'TeachMeHub',
+          email: sender.email,
+          name: sender.name,
         },
         to: [{ email: data.to }],
         subject: data.subject,
