@@ -267,7 +267,9 @@ export class SessionsService {
       // Filter sessions by enrollment IDs
       if (enrollmentIds.length > 0) {
         where.participants = {
-          enrollmentId: { in: enrollmentIds },
+          some: {
+            enrollmentId: { in: enrollmentIds },
+          },
         };
       } else {
         return []; // No enrollments, no sessions

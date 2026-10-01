@@ -36,12 +36,21 @@ export class CloudinaryService {
         throw new AppError(503, 'Cloudinary is not configured. File uploads are disabled.');
       }
 
-      const result = await cloudinary.uploader.upload(fileBase64, {
+      const uploadOptions: any = {
         folder,
         resource_type: resourceType,
         allowed_formats: resourceType === 'image' ? ['jpg', 'jpeg', 'png', 'gif', 'webp'] : ['pdf'],
         max_file_size: 10 * 1024 * 1024, // 10MB limit
-      });
+      };
+
+      // Use upload preset if configured (for unsigned uploads)
+      if (process.env.CLOUDINARY_UPLOAD_PRESET) {
+        uploadOptions.upload_preset = process.env.CLOUDINARY_UPLOAD_PRESET;
+      }
+
+      logger.info({ folder, resourceType, hasPreset: !!uploadOptions.upload_preset }, 'Attempting Cloudinary upload');
+
+      const result = await cloudinary.uploader.upload(fileBase64, uploadOptions);
 
       logger.info({ publicId: result.public_id, folder }, 'File uploaded to Cloudinary successfully');
 
@@ -53,12 +62,22 @@ export class CloudinaryService {
         type: result.format || 'unknown',
       };
     } catch (error: any) {
-      logger.error({ error }, 'Failed to upload file to Cloudinary');
-      
+      logger.error({
+        error: error.message,
+        httpCode: error.http_code,
+        cloudinaryError: error,
+        folder,
+        resourceType,
+      }, 'Failed to upload file to Cloudinary');
+
       if (error.http_code === 400) {
         throw new AppError(400, 'Invalid file type or file too large. Only images (jpg, jpeg, png, gif, webp) and PDFs up to 10MB are allowed.');
       }
-      
+
+      if (error.http_code === 403) {
+        throw new AppError(403, 'Cloudinary authentication failed. Please check your API credentials or upload preset.');
+      }
+
       throw new AppError(502, 'Failed to upload file. Please try again later.');
     }
   }
