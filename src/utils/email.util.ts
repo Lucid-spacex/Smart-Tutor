@@ -1,9 +1,10 @@
 import nodemailer from 'nodemailer';
+import type { Transporter } from 'nodemailer';
 import { logger } from '../config/logger';
 import { config } from '../config/env.config';
 
 // Initialize Nodemailer transporter
-let transporter: nodemailer.Transporter | null = null;
+let transporter: Transporter | null = null;
 
 if (config.SMTP_HOST && config.SMTP_PORT && config.SMTP_USER && config.SMTP_PASS) {
   transporter = nodemailer.createTransport({
