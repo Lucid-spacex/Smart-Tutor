@@ -219,6 +219,7 @@ async function main() {
   const session = await prisma.session.create({
     data: {
       tutorId: tutor.id,
+      createdBy: admin.id,
       scheduledAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // Tomorrow
       durationMinutes: 60,
       zoomLink: 'https://zoom.us/j/123456789',
