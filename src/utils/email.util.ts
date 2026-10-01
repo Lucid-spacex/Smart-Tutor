@@ -33,7 +33,7 @@ export const sendEmail = async (data: EmailData): Promise<void> => {
 
   try {
     await resend.emails.send({
-      from: config.EMAIL_FROM || 'Smart-Tutor <noreply@smarttutor.com>',
+      from: config.EMAIL_FROM || 'TeachMeHub <onboarding@resend.dev>',
       to: data.to,
       subject: data.subject,
       html: data.html,

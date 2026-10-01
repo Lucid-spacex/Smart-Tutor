@@ -25,7 +25,7 @@ const envSchema = z.object({
 
   // Email (Resend)
   RESEND_API_KEY: z.string().optional(),
-  EMAIL_FROM: z.string().default('Smart-Tutor <noreply@smarttutor.com>'),
+  EMAIL_FROM: z.string().default('TeachMeHub <onboarding@resend.dev>'),
 
   // Exchange Rate API
   EXCHANGERATE_API_KEY: z.string().optional(),
