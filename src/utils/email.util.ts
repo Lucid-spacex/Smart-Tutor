@@ -1,9 +1,24 @@
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 import { logger } from '../config/logger';
 import { config } from '../config/env.config';
 
-// Initialize Resend client
-const resend = config.RESEND_API_KEY ? new Resend(config.RESEND_API_KEY) : null;
+// Initialize Nodemailer transporter
+let transporter: nodemailer.Transporter | null = null;
+
+if (config.SMTP_HOST && config.SMTP_PORT && config.SMTP_USER && config.SMTP_PASS) {
+  transporter = nodemailer.createTransport({
+    host: config.SMTP_HOST,
+    port: parseInt(config.SMTP_PORT),
+    secure: config.SMTP_SECURE === 'true', // true for 465, false for other ports
+    auth: {
+      user: config.SMTP_USER,
+      pass: config.SMTP_PASS,
+    },
+  });
+  logger.info('Nodemailer transporter initialized successfully');
+} else {
+  logger.warn('SMTP credentials not configured - email sending is disabled');
+}
 
 // Email templates
 const EMAIL_TEMPLATES = {
@@ -23,17 +38,17 @@ export interface EmailData {
 
 /**
  * Centralized email sending function
- * Handles all email delivery through Resend
+ * Handles all email delivery through Nodemailer
  */
 export const sendEmail = async (data: EmailData): Promise<void> => {
-  if (!resend) {
-    logger.warn({ to: data.to }, 'Email not sent - RESEND_API_KEY not configured');
+  if (!transporter) {
+    logger.warn({ to: data.to }, 'Email not sent - SMTP not configured');
     return;
   }
 
   try {
-    await resend.emails.send({
-      from: config.EMAIL_FROM || 'TeachMeHub <onboarding@resend.dev>',
+    await transporter.sendMail({
+      from: config.EMAIL_FROM || 'TeachMeHub <noreply@teachmehub.com>',
       to: data.to,
       subject: data.subject,
       html: data.html,
@@ -41,7 +56,7 @@ export const sendEmail = async (data: EmailData): Promise<void> => {
     });
     logger.info({ to: data.to, subject: data.subject }, 'Email sent successfully');
   } catch (error) {
-    logger.error({ to: data.to, error: 'Email sending failed' }, 'Email error');
+    logger.error({ to: data.to, subject: data.subject, error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined }, 'Email sending failed');
     // Don't throw - email failures shouldn't block the main flow
   }
 };
