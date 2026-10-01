@@ -23,13 +23,12 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   ALLOWED_ORIGINS: z.string().optional(),
 
-  // Email (SMTP - Nodemailer)
-  SMTP_HOST: z.string().optional(),
-  SMTP_PORT: z.string().optional(),
-  SMTP_SECURE: z.string().default('false'),
-  SMTP_USER: z.string().optional(),
-  SMTP_PASS: z.string().optional(),
+  // Email (Brevo API)
+  BREVO_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().default('TeachMeHub <noreply@teachmehub.com>'),
+
+  // Legacy support for API_KEY
+  API_KEY: z.string().optional(),
 
   // Exchange Rate API
   EXCHANGERATE_API_KEY: z.string().optional(),

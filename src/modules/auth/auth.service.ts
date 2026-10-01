@@ -269,27 +269,45 @@ export class AuthService {
         role: user.role,
       });
 
+      const newTokenHash = hashToken(newRefreshToken);
+
       // Rotate refresh token: mark old as revoked (for reuse detection), issue new one in same family
-      await prisma.$transaction([
-        prisma.refreshToken.update({
+      // Use a transaction with a retry mechanism to handle race conditions
+      await prisma.$transaction(async (tx) => {
+        // Re-check that the token hasn't been revoked within the transaction
+        const currentToken = await tx.refreshToken.findUnique({
+          where: { id: storedToken.id },
+        });
+
+        if (!currentToken || currentToken.revokedAt) {
+          throw new AppError(401, 'Refresh token was already used. Please login again.');
+        }
+
+        // Mark old token as revoked
+        await tx.refreshToken.update({
           where: { id: storedToken.id },
           data: { revokedAt: new Date() },
-        }),
-        prisma.refreshToken.create({
+        });
+
+        // Create new token
+        await tx.refreshToken.create({
           data: {
             userId: user.id,
-            tokenHash: hashToken(newRefreshToken),
+            tokenHash: newTokenHash,
             tokenFamily: storedToken.tokenFamily,
             expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
           },
-        }),
-      ]);
+        });
+      });
 
       return {
         accessToken: newAccessToken,
         refreshToken: newRefreshToken,
       };
     } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
       throw new AppError(401, 'Invalid or expired refresh token');
     }
   }

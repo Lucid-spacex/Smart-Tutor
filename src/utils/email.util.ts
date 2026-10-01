@@ -1,24 +1,20 @@
-import nodemailer from 'nodemailer';
-import type { Transporter } from 'nodemailer';
 import { logger } from '../config/logger';
 import { config } from '../config/env.config';
 
-// Initialize Nodemailer transporter
-let transporter: Transporter | null = null;
+// Brevo API client
+const BREVO_API_URL = 'https://api.brevo.com/v3/smtp/email';
 
-if (config.SMTP_HOST && config.SMTP_PORT && config.SMTP_USER && config.SMTP_PASS) {
-  transporter = nodemailer.createTransport({
-    host: config.SMTP_HOST,
-    port: parseInt(config.SMTP_PORT),
-    secure: config.SMTP_SECURE === 'true', // true for 465, false for other ports
-    auth: {
-      user: config.SMTP_USER,
-      pass: config.SMTP_PASS,
-    },
-  });
-  logger.info('Nodemailer transporter initialized successfully');
+let brevoApiKey: string | null = null;
+
+// Check for both BREVO_API_KEY and legacy API_KEY
+if (config.BREVO_API_KEY) {
+  brevoApiKey = config.BREVO_API_KEY;
+  logger.info('Brevo API client initialized successfully');
+} else if (config.API_KEY) {
+  brevoApiKey = config.API_KEY;
+  logger.info('Brevo API client initialized successfully (using API_KEY)');
 } else {
-  logger.warn('SMTP credentials not configured - email sending is disabled');
+  logger.warn('Brevo API key not configured - email sending is disabled');
 }
 
 // Email templates
@@ -39,22 +35,39 @@ export interface EmailData {
 
 /**
  * Centralized email sending function
- * Handles all email delivery through Nodemailer
+ * Handles all email delivery through Brevo API
  */
 export const sendEmail = async (data: EmailData): Promise<void> => {
-  if (!transporter) {
-    logger.warn({ to: data.to }, 'Email not sent - SMTP not configured');
+  if (!brevoApiKey) {
+    logger.warn({ to: data.to }, 'Email not sent - Brevo API not configured');
     return;
   }
 
   try {
-    await transporter.sendMail({
-      from: config.EMAIL_FROM || 'TeachMeHub <noreply@teachmehub.com>',
-      to: data.to,
-      subject: data.subject,
-      html: data.html,
-      text: data.text,
+    const response = await fetch(BREVO_API_URL, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'api-key': brevoApiKey,
+      },
+      body: JSON.stringify({
+        sender: {
+          email: config.EMAIL_FROM || 'noreply@teachmehub.com',
+          name: 'TeachMeHub',
+        },
+        to: [{ email: data.to }],
+        subject: data.subject,
+        htmlContent: data.html,
+        textContent: data.text,
+      }),
     });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Brevo API error: ${response.status} - ${error}`);
+    }
+
     logger.info({ to: data.to, subject: data.subject }, 'Email sent successfully');
   } catch (error) {
     logger.error({ to: data.to, subject: data.subject, error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined }, 'Email sending failed');
