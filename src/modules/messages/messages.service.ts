@@ -383,8 +383,7 @@ export class MessagesService {
     }
 
     return {
-      adminUserId: admin.id,
-      adminName: admin.fullName,
+      recipientId: admin.id,
     };
   }
 }

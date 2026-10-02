@@ -120,9 +120,9 @@
  *   get:
  *     summary: Get admin contact info for messaging
  *     description: |
- *       Returns an active admin user's ID and name for parents and tutors to start a conversation.
+ *       Returns an active admin user's ID for parents and tutors to start a conversation.
  *       This provides a "Message Admin" entry point without requiring knowledge of specific admin IDs.
- *       
+ *
  *       Shared Admin Inbox (2026-09-30):
  *       - Returns any active admin (who specifically doesn't matter)
  *       - Parents and tutors use this to get a recipientId for new admin conversations
@@ -138,13 +138,10 @@
  *             schema:
  *               type: object
  *               properties:
- *                 adminUserId:
+ *                 recipientId:
  *                   type: string
  *                   format: uuid
- *                   description: ID of an active admin user
- *                 adminName:
- *                   type: string
- *                   description: Full name of the admin
+ *                   description: ID of an active admin user to use as recipient
  *       401:
  *         description: Unauthorized
  *       403:
