@@ -97,7 +97,7 @@ const options = {
       },
       {
         name: 'Webhooks',
-        description: 'External webhook integrations (Zoom, etc.)',
+        description: 'External webhook integrations (Zoom - to be replaced with Google Meet)',
       },
     ],
     components: {
@@ -313,10 +313,12 @@ const options = {
             zoomLink: {
               type: 'string',
               nullable: true,
+              description: 'Zoom meeting link (to be replaced with Google Meet)',
             },
             zoomMeetingId: {
               type: 'string',
               nullable: true,
+              description: 'Zoom meeting ID (to be replaced with Google Calendar event ID)',
             },
             recordingUrl: {
               type: 'string',

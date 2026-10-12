@@ -3,6 +3,7 @@ import { runParentInactivityCheck } from './inactivity-check.job';
 import { runAssignmentDueNotifications } from './assignment-due.job';
 import { runExchangeRateCheck } from './exchange-rate-check.job';
 import { runZoomRecordingSync } from './zoom-recording-sync.job';
+import { runNotificationCleanup } from './notification-cleanup.job';
 import { logger } from '../config/logger';
 
 export function initializeScheduler(): void {
@@ -50,6 +51,16 @@ export function initializeScheduler(): void {
       await runZoomRecordingSync();
     } catch (error) {
       logger.error({ error }, 'Error in Zoom recording sync job');
+    }
+  });
+
+  // 5. Daily at 03:00 AM - Notification cleanup (delete read notifications older than 90 days)
+  cron.schedule('0 3 * * *', async () => {
+    logger.info('Running scheduled job: Notification Cleanup');
+    try {
+      await runNotificationCleanup();
+    } catch (error) {
+      logger.error({ error }, 'Error in notification cleanup job');
     }
   });
 

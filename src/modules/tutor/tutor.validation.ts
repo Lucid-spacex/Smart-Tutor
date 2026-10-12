@@ -12,5 +12,12 @@ export const updateAvailabilitySchema = z.object({
   availability: z.record(z.any()),
 });
 
+export const updateAvailabilityStatusSchema = z.object({
+  availabilityStatus: z.enum(['AVAILABLE', 'LIMITED', 'UNAVAILABLE']),
+  maxStudents: z.number().int().positive().optional(),
+  statusNote: z.string().max(500).optional(),
+});
+
 export type CreateTutorProfileInput = z.infer<typeof createTutorProfileSchema>;
 export type UpdateAvailabilityInput = z.infer<typeof updateAvailabilitySchema>;
+export type UpdateAvailabilityStatusInput = z.infer<typeof updateAvailabilityStatusSchema>;

@@ -6,6 +6,7 @@ export const updateTutorVettingSchema = z.object({
 
 export const assignTutorSchema = z.object({
   tutorId: z.string().uuid('Invalid tutor ID'),
+  force: z.boolean().optional(),
 });
 
 export const updateEnrollmentPricingSchema = z.object({
@@ -22,6 +23,7 @@ export const updateEnrollmentPricingOverrideSchema = z.object({
   yearlyPriceNGN: z.number().positive('NGN price must be positive').nullable().optional(),
   yearlyPriceUSD: z.number().positive('USD price must be positive').nullable().optional(),
   billingFrequency: z.enum(['WEEKLY', 'MONTHLY', 'YEARLY']).optional(),
+  note: z.string().optional(),
 });
 
 export const createSessionSchema = z.object({
@@ -41,10 +43,38 @@ export const rescheduleSessionSchema = z.object({
 
 export const getTutorsQuerySchema = z.object({
   status: z.enum(['APPROVED', 'PENDING_VETTING', 'REJECTED', 'SUSPENDED']).optional(),
+  availabilityStatus: z.enum(['AVAILABLE', 'LIMITED', 'UNAVAILABLE']).optional(),
+  subjectId: z.string().uuid().optional(),
+  hasCapacity: z.coerce.boolean().optional(),
 });
 
 export const getStudentsQuerySchema = z.object({
   parentId: z.string().uuid('Invalid parent ID').optional(),
+});
+
+export const createSubjectSchema = z.object({
+  name: z.string().min(1, 'Subject name is required'),
+  description: z.string().optional(),
+  category: z.enum(['CORE', 'ENRICHMENT', 'TEST_PREP']),
+  prices: z.array(z.object({
+    gradeBandTier: z.enum(['PRESCHOOL_TO_G1', 'G2_TO_G4', 'G5_TO_G8', 'G9_TO_G12']),
+    yearlyPriceNGN: z.number().positive('NGN price must be positive'),
+    yearlyPriceUSD: z.number().positive('USD price must be positive'),
+  })).min(1, 'At least one grade band price is required'),
+});
+
+export const updateSubjectSchema = z.object({
+  name: z.string().min(1, 'Subject name is required').optional(),
+  description: z.string().optional(),
+  category: z.enum(['CORE', 'ENRICHMENT', 'TEST_PREP']).optional(),
+  isActive: z.boolean().optional(),
+});
+
+export const upsertSubjectPriceSchema = z.object({
+  yearlyPriceNGN: z.number().positive('NGN price must be positive'),
+  yearlyPriceUSD: z.number().positive('USD price must be positive'),
+  isActive: z.boolean().optional(),
+  note: z.string().optional(),
 });
 
 export const getUnmatchedEnrollmentsQuerySchema = z.object({

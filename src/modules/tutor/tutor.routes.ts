@@ -12,7 +12,7 @@ const tutorController = new TutorController();
 // /tutor-profile endpoints
 router.post('/tutor-profile', authenticate, requireRole('TUTOR'), validate(createTutorProfileSchema), tutorController.createTutorProfile);
 router.patch('/tutor-profile', authenticate, requireRole('TUTOR'), validate(updateAvailabilitySchema), tutorController.updateAvailability);
-router.patch('/tutor-profile/availability', authenticate, requireRole('TUTOR'), validate(updateAvailabilitySchema), tutorController.updateAvailability);
+router.patch('/tutor-profile/availability-status', authenticate, requireRole('TUTOR'), tutorController.updateAvailabilityStatus);
 router.get('/tutor-profile', authenticate, requireRole('TUTOR'), tutorController.getTutorProfile);
 
 // /tutor/students & /tutor/sessions

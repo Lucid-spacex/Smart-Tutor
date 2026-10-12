@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AdminService } from './admin.service';
-import { UpdateTutorVettingInput, AssignTutorInput, GetTutorsQuery, GetStudentsQuery, UpdateEnrollmentPricingInput, UpdatePricingTierInput, UpdateEnrollmentPricingOverrideInput, GetUnmatchedEnrollmentsQuery } from './admin.validation';
+import { UpdateTutorVettingInput, AssignTutorInput, GetTutorsQuery, GetStudentsQuery, UpdateEnrollmentPricingInput, UpdateEnrollmentPricingOverrideInput, GetUnmatchedEnrollmentsQuery } from './admin.validation';
 import { AuthRequest } from '../../types/express';
 
 export class AdminController {
@@ -220,33 +220,6 @@ export class AdminController {
     }
   };
 
-  // Pricing Tier Management
-  getPricingTiers = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
-    try {
-      const tiers = await this.adminService.getPricingTiers();
-      res.status(200).json(tiers);
-    } catch (error) {
-      next(error);
-    }
-  };
-
-  updatePricingTier = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
-    try {
-      const adminId = req.user?.userId;
-      if (!adminId) {
-        res.status(401).json({ error: 'Not authenticated' });
-        return;
-      }
-
-      const { gradeBandTier } = req.params;
-      const data: UpdatePricingTierInput = req.body;
-      const tier = await this.adminService.updatePricingTier(gradeBandTier as any, data, adminId);
-      res.status(200).json(tier);
-    } catch (error) {
-      next(error);
-    }
-  };
-
   updateEnrollmentPricingOverride = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const adminId = req.user?.userId;
@@ -278,6 +251,86 @@ export class AdminController {
     try {
       const rate = await this.adminService.getCurrentExchangeRate();
       res.status(200).json(rate);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // Parent Directory
+  getParents = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const filters = {
+        search: req.query.search as string,
+        status: req.query.status as string,
+        page: req.query.page ? parseInt(req.query.page as string) : 1,
+        limit: req.query.limit ? parseInt(req.query.limit as string) : 20,
+      };
+      const result = await this.adminService.getParents(filters);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getParentById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const parent = await this.adminService.getParentById(id);
+      res.status(200).json(parent);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getSuggestedTutors = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const tutors = await this.adminService.getSuggestedTutors(id);
+      res.status(200).json(tutors);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // Admin Transactions
+  getPayments = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const filters = {
+        status: req.query.status as string,
+        currency: req.query.currency as string,
+        provider: req.query.provider as string,
+        parentId: req.query.parentId as string,
+        from: req.query.from as string,
+        to: req.query.to as string,
+        search: req.query.search as string,
+        page: req.query.page ? parseInt(req.query.page as string) : 1,
+        limit: req.query.limit ? parseInt(req.query.limit as string) : 20,
+      };
+      const result = await this.adminService.getPayments(filters);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getPaymentById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const payment = await this.adminService.getPaymentById(id);
+      res.status(200).json(payment);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getPaymentsSummary = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const filters = {
+        from: req.query.from as string,
+        to: req.query.to as string,
+      };
+      const summary = await this.adminService.getPaymentsSummary(filters);
+      res.status(200).json(summary);
     } catch (error) {
       next(error);
     }

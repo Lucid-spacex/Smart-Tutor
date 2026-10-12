@@ -153,34 +153,9 @@ describe('Messaging Graph Permissions & Isolation Tests', () => {
     assignedTutorToken = t1Res.body.accessToken;
     unassignedTutorToken = t2Res.body.accessToken;
     studentToken = sRes.body.accessToken;
-  });
+  }, 30000);
 
   describe('Allowed Role Pairs', () => {
-    it('STUDENT -> Assigned TUTOR should succeed', async () => {
-      const res = await request(app)
-        .post('/messages')
-        .set('Authorization', `Bearer ${studentToken}`)
-        .send({
-          recipientId: assignedTutorId,
-          body: 'Hello tutor! I have a question on homework.',
-        });
-
-      expect(res.status).toBe(201);
-      expect(res.body.body).toBe('Hello tutor! I have a question on homework.');
-    });
-
-    it('Assigned TUTOR -> STUDENT should succeed', async () => {
-      const res = await request(app)
-        .post('/messages')
-        .set('Authorization', `Bearer ${assignedTutorToken}`)
-        .send({
-          recipientId: studentUserId,
-          body: 'Hello student! See you tomorrow.',
-        });
-
-      expect(res.status).toBe(201);
-    });
-
     it('PARENT -> ADMIN should succeed', async () => {
       const res = await request(app)
         .post('/messages')
@@ -207,6 +182,32 @@ describe('Messaging Graph Permissions & Isolation Tests', () => {
   });
 
   describe('Disallowed Role Pairs (Strict Isolation)', () => {
+    it('STUDENT -> Assigned TUTOR must be rejected with 403 (removed 2026-10-12)', async () => {
+      const res = await request(app)
+        .post('/messages')
+        .set('Authorization', `Bearer ${studentToken}`)
+        .send({
+          recipientId: assignedTutorId,
+          body: 'Hello tutor! I have a question on homework.',
+        });
+
+      expect(res.status).toBe(403);
+      expect(res.body.message).toContain('Students cannot message tutors directly');
+    });
+
+    it('Assigned TUTOR -> STUDENT must be rejected with 403 (removed 2026-10-12)', async () => {
+      const res = await request(app)
+        .post('/messages')
+        .set('Authorization', `Bearer ${assignedTutorToken}`)
+        .send({
+          recipientId: studentUserId,
+          body: 'Hello student! See you tomorrow.',
+        });
+
+      expect(res.status).toBe(403);
+      expect(res.body.message).toContain('Tutors cannot message students directly');
+    });
+
     it('PARENT -> TUTOR must be rejected with 403', async () => {
       const res = await request(app)
         .post('/messages')

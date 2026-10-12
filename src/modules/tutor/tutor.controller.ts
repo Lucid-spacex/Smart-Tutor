@@ -45,6 +45,22 @@ export class TutorController {
     }
   };
 
+  updateAvailabilityStatus = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const tutorId = (req as any).user?.userId;
+      if (!tutorId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const data = req.body;
+      const profile = await this.tutorService.updateAvailabilityStatus(tutorId, data);
+      res.status(200).json(profile);
+    } catch (error) {
+      next(error);
+    }
+  };
+
   getAssignedStudents = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const tutorId = (req as any).user?.userId;

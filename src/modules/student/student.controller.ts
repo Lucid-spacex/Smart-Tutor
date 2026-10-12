@@ -84,20 +84,7 @@ export class StudentController {
     }
   };
 
-  getStudentNotifications = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
-    try {
-      const userId = req.user?.userId;
-      if (!userId) {
-        res.status(401).json({ error: 'Not authenticated' });
-        return;
-      }
 
-      const notifications = await this.studentService.getStudentNotifications(userId);
-      res.status(200).json(notifications);
-    } catch (error) {
-      next(error);
-    }
-  };
 
   getNextClass = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {

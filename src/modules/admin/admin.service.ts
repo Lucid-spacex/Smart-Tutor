@@ -46,7 +46,7 @@ export class AdminService {
     });
   }
 
-  async getTutors(filters?: { status?: string }) {
+  async getTutors(filters?: { status?: string; availabilityStatus?: string; subjectId?: string; hasCapacity?: boolean }) {
     const where: any = {
       role: 'TUTOR',
     };
@@ -58,15 +58,68 @@ export class AdminService {
       where.status = 'APPROVED';
     }
 
-    return prisma.user.findMany({
+    if (filters?.availabilityStatus) {
+      where.tutorProfile = {
+        availabilityStatus: filters.availabilityStatus,
+      };
+    }
+
+    if (filters?.subjectId) {
+      where.tutorProfile = {
+        ...where.tutorProfile,
+        tutorSubjects: {
+          some: {
+            subjectId: filters.subjectId,
+          },
+        },
+      };
+    }
+
+    const tutors = await prisma.user.findMany({
       where,
       include: {
-        tutorProfile: true,
+        tutorProfile: {
+          include: {
+            tutorSubjects: {
+              include: {
+                subject: true,
+              },
+            },
+          },
+        },
       },
       orderBy: {
         fullName: 'asc',
       },
     });
+
+    // Add current student count for each tutor
+    const enrichedTutors = await Promise.all(
+      tutors.map(async (tutor) => {
+        const currentStudentCount = await prisma.enrollment.count({
+          where: {
+            tutorId: tutor.id,
+            status: 'ACTIVE',
+          },
+        });
+
+        return {
+          ...tutor,
+          currentStudentCount,
+        };
+      })
+    );
+
+    // Filter by capacity if requested
+    if (filters?.hasCapacity) {
+      return enrichedTutors.filter(tutor => {
+        const maxStudents = tutor.tutorProfile?.maxStudents;
+        if (!maxStudents) return true; // No limit set
+        return tutor.currentStudentCount < maxStudents;
+      });
+    }
+
+    return enrichedTutors;
   }
 
   async updateTutorVetting(tutorId: string, data: UpdateTutorVettingInput) {
@@ -159,6 +212,25 @@ export class AdminService {
       throw new Error('Tutor is not approved for tutoring');
     }
 
+    // Check availability and capacity unless force is true
+    if (!data.force) {
+      if (tutor.tutorProfile?.availabilityStatus === 'UNAVAILABLE') {
+        throw new Error('Tutor is currently unavailable. Use force: true to override.');
+      }
+
+      const currentStudentCount = await prisma.enrollment.count({
+        where: {
+          tutorId: data.tutorId,
+          status: 'ACTIVE',
+        },
+      });
+
+      const maxStudents = tutor.tutorProfile?.maxStudents;
+      if (maxStudents && currentStudentCount >= maxStudents) {
+        throw new Error(`Tutor is at capacity (${currentStudentCount}/${maxStudents}). Use force: true to override.`);
+      }
+    }
+
     const updatedEnrollment = await prisma.enrollment.update({
       where: { id: enrollmentId },
       data: { tutorId: data.tutorId },
@@ -176,7 +248,7 @@ export class AdminService {
     });
 
     // Create notifications for both parent and student
-    await this.notificationsService.createTutorAssignedNotification(enrollmentId, data.tutorId, true);
+    await this.notificationsService.createTutorAssignedNotification(enrollmentId, data.tutorId);
 
     return updatedEnrollment;
   }
@@ -428,7 +500,8 @@ export class AdminService {
     return this.gradesService.rejectGrade(gradeId, adminId, reason);
   }
 
-  // Pricing Tier Management
+  // Pricing Tier Management (DEPRECATED - use Subject/SubjectPrice-based pricing instead)
+  // These methods are kept for backward compatibility but the routes have been removed
   async getPricingTiers() {
     const tiers = await prisma.pricingTier.findMany({
       include: {
@@ -461,10 +534,10 @@ export class AdminService {
     // Calculate drift for each tier
     return tiers.map(tier => {
       const impliedRate = Number(tier.yearlyPriceNGN) / Number(tier.yearlyPriceUSD);
-      const driftPercentage = marketRate 
-        ? Math.abs((impliedRate - marketRate) / marketRate) * 100 
+      const driftPercentage = marketRate
+        ? Math.abs((impliedRate - marketRate) / marketRate) * 100
         : null;
-      
+
       return {
         ...tier,
         impliedRate,
@@ -512,11 +585,42 @@ export class AdminService {
             user: true,
           },
         },
+        subject: true,
       },
     });
 
     if (!enrollment) {
       throw new Error('Enrollment not found');
+    }
+
+    // Log price change if prices are being modified
+    if (data.yearlyPriceNGN !== undefined || data.yearlyPriceUSD !== undefined) {
+      await prisma.priceChangeLog.create({
+        data: {
+          targetType: 'ENROLLMENT',
+          targetId: enrollmentId,
+          changedBy: adminId,
+          oldNGN: enrollment.yearlyPriceNGN,
+          oldUSD: enrollment.yearlyPriceUSD,
+          newNGN: data.yearlyPriceNGN !== undefined ? data.yearlyPriceNGN : enrollment.yearlyPriceNGN,
+          newUSD: data.yearlyPriceUSD !== undefined ? data.yearlyPriceUSD : enrollment.yearlyPriceUSD,
+          note: data.note,
+        },
+      });
+
+      // Send price update notification to parent
+      await this.notificationsService.createNotification({
+        userId: enrollment.student.parentId,
+        type: 'PRICE_UPDATED',
+        title: 'Price Updated',
+        message: `The price for ${enrollment.student.fullName}'s ${enrollment.subject.name} is now ₦${data.yearlyPriceNGN || enrollment.yearlyPriceNGN} / $${data.yearlyPriceUSD || enrollment.yearlyPriceUSD}`,
+        relatedType: 'ENROLLMENT',
+        relatedId: enrollmentId,
+        data: {
+          studentId: enrollment.studentId,
+          enrollmentId: enrollmentId,
+        },
+      });
     }
 
     return prisma.enrollment.update({
@@ -615,6 +719,577 @@ export class AdminService {
       toCurrency: latestRate.toCurrency,
       rate: Number(latestRate.rate),
       fetchedAt: latestRate.fetchedAt,
+    };
+  }
+
+  // Parent Directory
+  async getParents(filters?: { search?: string; status?: string; page?: number; limit?: number }) {
+    const { search, status, page = 1, limit = 20 } = filters || {};
+    const skip = (page - 1) * limit;
+
+    const where: any = {
+      role: 'PARENT',
+    };
+
+    if (status) {
+      where.status = status;
+    }
+
+    if (search) {
+      where.OR = [
+        { fullName: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+        { phone: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    const [parents, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+          phone: true,
+          status: true,
+          createdAt: true,
+          _count: {
+            select: {
+              students: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: Math.min(limit, 100),
+      }),
+      prisma.user.count({ where }),
+    ]);
+
+    // Fetch additional metrics for each parent
+    const enrichedParents = await Promise.all(
+      parents.map(async (parent) => {
+        const [activeEnrollments, pendingPaymentCount, totalPaidNGN, totalPaidUSD] = await Promise.all([
+          prisma.enrollment.count({
+            where: {
+              student: { parentId: parent.id },
+              status: 'ACTIVE',
+            },
+          }),
+          prisma.payment.count({
+            where: {
+              parentId: parent.id,
+              status: 'PENDING',
+            },
+          }),
+          prisma.payment.aggregate({
+            where: {
+              parentId: parent.id,
+              status: 'SUCCESS',
+              currency: 'NGN',
+            },
+            _sum: { amount: true },
+          }),
+          prisma.payment.aggregate({
+            where: {
+              parentId: parent.id,
+              status: 'SUCCESS',
+              currency: 'USD',
+            },
+            _sum: { amount: true },
+          }),
+        ]);
+
+        return {
+          ...parent,
+          childrenCount: parent._count.students,
+          activeEnrollments,
+          pendingPaymentCount,
+          totalPaidNGN: Number(totalPaidNGN._sum.amount || 0),
+          totalPaidUSD: Number(totalPaidUSD._sum.amount || 0),
+        };
+      })
+    );
+
+    return {
+      data: enrichedParents,
+      page,
+      limit,
+      total,
+    };
+  }
+
+  async getParentById(parentId: string) {
+    const parent = await prisma.user.findUnique({
+      where: { id: parentId, role: 'PARENT' },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        phone: true,
+        status: true,
+        timezone: true,
+        profilePicture: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    if (!parent) {
+      throw new Error('Parent not found');
+    }
+
+    // Get children with their enrollments
+    const children = await prisma.student.findMany({
+      where: { parentId },
+      include: {
+        user: {
+          select: {
+            studentCode: true,
+            status: true,
+          },
+        },
+        enrollments: {
+          where: { deletedAt: null },
+          include: {
+            subject: true,
+            tutor: {
+              select: {
+                id: true,
+                fullName: true,
+                profilePicture: true,
+              },
+            },
+            payments: {
+              where: { status: 'PENDING' },
+              take: 1,
+            },
+          },
+        },
+      },
+    });
+
+    // Get recent payments
+    const recentPayments = await prisma.payment.findMany({
+      where: { parentId },
+      include: {
+        enrollment: {
+          include: {
+            student: true,
+            subject: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+    });
+
+    // Get complaint count
+    const complaintCount = await prisma.complaint.count({
+      where: { filedBy: parentId },
+    });
+
+    // Enrich enrollments with effective pricing
+    const enrichedChildren = await Promise.all(
+      children.map(async (child) => {
+        const enrichedEnrollments = await Promise.all(
+          child.enrollments.map(async (enrollment) => {
+            let effectivePriceNGN: number | null = null;
+            let effectivePriceUSD: number | null = null;
+            let priceSource: string = 'error';
+
+            if (enrollment.yearlyPriceNGN && enrollment.yearlyPriceUSD) {
+              effectivePriceNGN = Number(enrollment.yearlyPriceNGN);
+              effectivePriceUSD = Number(enrollment.yearlyPriceUSD);
+              priceSource = 'override';
+            } else {
+              const subjectPrice = await prisma.subjectPrice.findUnique({
+                where: {
+                  subjectId_gradeBandTier: {
+                    subjectId: enrollment.subjectId,
+                    gradeBandTier: child.gradeBandTier,
+                  },
+                },
+              });
+
+              if (subjectPrice && subjectPrice.isActive) {
+                effectivePriceNGN = Number(subjectPrice.yearlyPriceNGN);
+                effectivePriceUSD = Number(subjectPrice.yearlyPriceUSD);
+                priceSource = 'subject_price';
+              }
+            }
+
+            return {
+              ...enrollment,
+              effectivePriceNGN,
+              effectivePriceUSD,
+              priceSource,
+              hasPendingPayment: enrollment.payments.length > 0,
+            };
+          })
+        );
+
+        return {
+          ...child,
+          enrollments: enrichedEnrollments,
+        };
+      })
+    );
+
+    return {
+      ...parent,
+      children: enrichedChildren,
+      recentPayments,
+      complaintCount,
+    };
+  }
+
+  async getSuggestedTutors(enrollmentId: string) {
+    const enrollment = await prisma.enrollment.findUnique({
+      where: { id: enrollmentId },
+      include: {
+        student: {
+          include: {
+            user: true,
+          },
+        },
+        subject: true,
+      },
+    });
+
+    if (!enrollment) {
+      throw new Error('Enrollment not found');
+    }
+
+    // Get APPROVED tutors who teach this subject
+    const tutors = await prisma.user.findMany({
+      where: {
+        role: 'TUTOR',
+        status: 'APPROVED',
+        tutorProfile: {
+          vettingStatus: 'APPROVED',
+          availabilityStatus: { not: 'UNAVAILABLE' },
+          tutorSubjects: {
+            some: {
+              subjectId: enrollment.subjectId,
+            },
+          },
+        },
+      },
+      include: {
+        tutorProfile: {
+          include: {
+            tutorSubjects: {
+              include: {
+                subject: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Calculate fit score for each tutor
+    const scoredTutors = await Promise.all(
+      tutors.map(async (tutor) => {
+        const currentStudentCount = await prisma.enrollment.count({
+          where: {
+            tutorId: tutor.id,
+            status: 'ACTIVE',
+          },
+        });
+
+        const maxStudents = tutor.tutorProfile?.maxStudents;
+        const hasCapacity = !maxStudents || currentStudentCount < maxStudents;
+
+        const reasons: string[] = [];
+        const warnings: string[] = [];
+
+        if (!hasCapacity) {
+          warnings.push('At capacity');
+        }
+
+        if (tutor.tutorProfile?.availabilityStatus === 'LIMITED') {
+          warnings.push('Limited availability');
+        }
+
+        // Check availability overlap (simplified - would need more complex logic in production)
+        if (enrollment.availableDays && enrollment.availableDays.length > 0) {
+          reasons.push('Availability may match');
+        }
+
+        // Base score calculation
+        let matchScore = 50; // Base score
+        if (hasCapacity) matchScore += 20;
+        if (tutor.tutorProfile?.availabilityStatus === 'AVAILABLE') matchScore += 15;
+        if (currentStudentCount < 5) matchScore += 10; // Prefer tutors with fewer students
+        if (enrollment.availableDays && enrollment.availableDays.length > 0) matchScore += 5;
+
+        return {
+          tutorId: tutor.id,
+          fullName: tutor.fullName,
+          profilePictureUrl: tutor.profilePicture,
+          subjects: tutor.tutorProfile?.tutorSubjects.map(ts => ts.subject.name) || [],
+          availabilityStatus: tutor.tutorProfile?.availabilityStatus,
+          currentStudentCount,
+          maxStudents,
+          matchScore,
+          reasons,
+          warnings,
+        };
+      })
+    );
+
+    // Sort by match score descending
+    scoredTutors.sort((a, b) => b.matchScore - a.matchScore);
+
+    return scoredTutors;
+  }
+
+  // Admin Transactions
+  async getPayments(filters?: {
+    status?: string;
+    currency?: string;
+    provider?: string;
+    parentId?: string;
+    from?: string;
+    to?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const { status, currency, provider, parentId, from, to, search, page = 1, limit = 20 } = filters || {};
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+
+    if (status) {
+      where.status = status;
+    }
+
+    if (currency) {
+      where.currency = currency;
+    }
+
+    if (provider) {
+      where.provider = provider;
+    }
+
+    if (parentId) {
+      where.parentId = parentId;
+    }
+
+    if (from || to) {
+      where.createdAt = {};
+      if (from) {
+        where.createdAt.gte = new Date(from);
+      }
+      if (to) {
+        where.createdAt.lte = new Date(to);
+      }
+    }
+
+    if (search) {
+      where.OR = [
+        { providerReference: { contains: search, mode: 'insensitive' } },
+        { parent: { fullName: { contains: search, mode: 'insensitive' } } },
+        { parent: { email: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
+
+    const [payments, total] = await Promise.all([
+      prisma.payment.findMany({
+        where,
+        include: {
+          parent: {
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+            },
+          },
+          enrollment: {
+            include: {
+              student: true,
+              subject: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: Math.min(limit, 100),
+      }),
+      prisma.payment.count({ where }),
+    ]);
+
+    // Enrich with NGN equivalent for USD payments
+    const enrichedPayments = await Promise.all(
+      payments.map(async (payment) => {
+        let chargedAmountNGN = Number(payment.amount);
+        if (payment.currency === 'USD') {
+          // Get latest exchange rate
+          const rate = await prisma.exchangeRate.findFirst({
+            where: {
+              fromCurrency: 'USD',
+              toCurrency: 'NGN',
+            },
+            orderBy: { fetchedAt: 'desc' },
+          });
+          if (rate) {
+            chargedAmountNGN = Number(payment.amount) * Number(rate.rate);
+          }
+        }
+
+        return {
+          ...payment,
+          chargedAmountNGN,
+        };
+      })
+    );
+
+    return {
+      data: enrichedPayments,
+      page,
+      limit,
+      total,
+    };
+  }
+
+  async getPaymentById(paymentId: string) {
+    const payment = await prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: {
+        parent: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            phone: true,
+          },
+        },
+        enrollment: {
+          include: {
+            student: true,
+            subject: true,
+          },
+        },
+      },
+    });
+
+    if (!payment) {
+      throw new Error('Payment not found');
+    }
+
+    // Get timeline events
+    const timeline = [
+      {
+        event: 'Initiated',
+        timestamp: payment.createdAt,
+      },
+    ];
+
+    if (payment.paidAt) {
+      timeline.push({
+        event: 'Paid',
+        timestamp: payment.paidAt,
+      });
+    }
+
+    // Calculate NGN equivalent
+    let chargedAmountNGN = Number(payment.amount);
+    if (payment.currency === 'USD') {
+      const rate = await prisma.exchangeRate.findFirst({
+        where: {
+          fromCurrency: 'USD',
+          toCurrency: 'NGN',
+        },
+        orderBy: { fetchedAt: 'desc' },
+      });
+      if (rate) {
+        chargedAmountNGN = Number(payment.amount) * Number(rate.rate);
+      }
+    }
+
+    return {
+      ...payment,
+      chargedAmountNGN,
+      timeline,
+    };
+  }
+
+  async getPaymentsSummary(filters?: { from?: string; to?: string }) {
+    const { from, to } = filters || {};
+
+    const where: any = {
+      status: 'SUCCESS',
+    };
+
+    if (from || to) {
+      where.paidAt = {};
+      if (from) {
+        where.paidAt.gte = new Date(from);
+      }
+      if (to) {
+        where.paidAt.lte = new Date(to);
+      }
+    }
+
+    // Total revenue by currency
+    const revenueByCurrency = await prisma.payment.groupBy({
+      by: ['currency'],
+      where,
+      _sum: {
+        amount: true,
+      },
+    });
+
+    // Counts by status
+    const countsByStatus = await prisma.payment.groupBy({
+      by: ['status'],
+      where: from || to ? { createdAt: {} } : undefined,
+      ...(from && { where: { ...where, createdAt: { gte: new Date(from) } } }),
+      ...(to && { where: { ...where, createdAt: { lte: new Date(to) } } }),
+      _count: true,
+    });
+
+    // Revenue per day (for chart)
+    const revenuePerDay = await prisma.$queryRaw<Array<{ date: string; amount: bigint }>>`
+      SELECT DATE("paidAt") as date, SUM(amount) as amount
+      FROM "Payment"
+      WHERE status = 'SUCCESS'
+      ${from ? `AND "paidAt" >= ${new Date(from).toISOString()}` : ''}
+      ${to ? `AND "paidAt" <= ${new Date(to).toISOString()}` : ''}
+      GROUP BY DATE("paidAt")
+      ORDER BY date DESC
+      LIMIT 30
+    `;
+
+    const totalRevenue = revenueByCurrency.reduce((sum, item) => {
+      return sum + Number(item._sum.amount || 0);
+    }, 0);
+
+    const totalPayments = countsByStatus.reduce((sum, item) => {
+      return sum + item._count;
+    }, 0);
+
+    const successPayments = countsByStatus.find(item => item.status === 'SUCCESS')?._count || 0;
+    const successRate = totalPayments > 0 ? (successPayments / totalPayments) * 100 : 0;
+
+    return {
+      totalRevenue,
+      revenueByCurrency: revenueByCurrency.map(item => ({
+        currency: item.currency,
+        amount: Number(item._sum.amount || 0),
+      })),
+      countsByStatus: countsByStatus.map(item => ({
+        status: item.status,
+        count: item._count,
+      })),
+      successRate: Math.round(successRate * 100) / 100,
+      revenuePerDay: revenuePerDay.map(item => ({
+        date: item.date,
+        amount: Number(item.amount),
+      })),
     };
   }
 }

@@ -63,7 +63,7 @@ Students do not authenticate with standard email/password. Instead, students aut
 | Resolve a complaint | ❌ | ❌ | ✅ | ❌ |
 | Regenerate a student's password | ✅ (own child) | ❌ | ✅ (support) | ❌ |
 | Reactivate a suspended parent | ❌ | ❌ | ✅ | — |
-| Message their assigned tutor / assigned student (student↔tutor) | ❌ | ✅ (assigned students only) | — | ✅ (own assigned tutor only) |
+| Message their assigned tutor / assigned student (student↔tutor) | ❌ | ❌ (removed 2026-10-12) | — | ❌ (removed 2026-10-12) |
 | Message Admin | ✅ | ✅ | — | ❌ |
 | Message a Tutor (parent) or a Parent (tutor) | ❌ | ❌ | — | — |
 | View a student's attendance | ✅ (own child) | ✅ (assigned students only) | ✅ (all) | ✅ (own only) |
@@ -111,10 +111,11 @@ Every endpoint with an `:id` parameter verifies resource-level ownership:
 
 The platform enforces communication isolation via the single `canMessage(senderId, recipientId)` function:
 - **Allowed**:
-  - `Student <-> Assigned Tutor` (verified against an ACTIVE enrollment at send time)
   - `Tutor <-> Admin` (shared inbox - any admin can reply)
   - `Parent <-> Admin` (shared inbox - any admin can reply)
+  - `Parent <-> Child` (parent-child relationship verification)
 - **Strictly Blocked**:
+  - `Student <-> Tutor` (403 Forbidden - removed 2026-10-12)
   - `Student <-> Admin` (403 Forbidden)
   - `Student <-> Parent` (403 Forbidden - handled outside platform)
   - `Parent <-> Tutor` (403 Forbidden in both directions - must route through Admin)
@@ -126,6 +127,8 @@ The platform enforces communication isolation via the single `canMessage(senderI
 - Admins see all threads with parents and tutors in their thread list, regardless of which specific admin was the original recipient
 - Any admin can reply to any parent/tutor thread (shared reply rights)
 - This provides a unified "Admin" conversation experience for parents and tutors
+
+**Note (2026-10-12)**: Students no longer have any messaging capability in the platform. Their sole prior messaging contact (their assigned tutor) has been removed.
 
 ---
 
@@ -359,4 +362,220 @@ Legacy `X-RateLimit-*` headers are **disabled** across all tiers.
 ### Known Limitation — In-Memory Store
 
 All three limiters currently use `express-rate-limit`'s default `MemoryStore`. This is correct and sufficient for a single-instance deployment. **If/when the app scales to multiple server instances, limits will NOT be consistent across nodes** — each instance maintains its own counter. At that point, replace the store with a shared Redis-backed implementation (`rate-limit-redis` or `@upstash/ratelimit`) passed as the `store` option to each limiter. No other code changes are required.
+
+---
+
+## 15. Messaging Graph Update (2026-10-12)
+
+**Policy Change Notice**: As of 2026-10-12, Student ↔ Tutor messaging has been removed from the platform.
+
+### Updated Messaging Rules:
+- **Removed**: Students can no longer message their assigned tutors
+- **Removed**: Tutors can no longer message their assigned students
+- **Still Allowed**: Parent ↔ Admin (shared inbox)
+- **Still Allowed**: Tutor ↔ Admin (shared inbox)
+- **Still Allowed**: Parent ↔ Child (parent-child relationship)
+
+### Rationale:
+This change simplifies the communication model and ensures all student-tutor communication flows through parents for oversight and safety. Students and tutors should now communicate session details, assignments, and feedback through the parent or admin channels.
+
+### RBAC Matrix Update:
+The RBAC matrix entry for "Message their assigned tutor / assigned student" has been updated to ❌ for both Tutor and Student roles.
+
+---
+
+## 16. Per-Grade Subject Pricing (2026-10-12)
+
+**Implementation Notice**: As of 2026-10-12, subjects support per-grade-band pricing instead of a single gradeBand field. The pricing model is now more granular and flexible.
+
+### Schema Changes:
+- **SubjectPrice model**: New table linking subjects to grade bands with specific prices (NGN and USD)
+- **PriceChangeLog model**: Tracks all price changes for audit trail
+- **Subject**: Deprecated `gradeBand` field (kept for migration compatibility), added `isActive` flag
+- **PricingTier**: Legacy table retained for backward compatibility, marked as deprecated
+
+### Pricing Resolution Order:
+1. **Enrollment override** (`Enrollment.yearlyPriceNGN/USD`) - highest priority
+2. **Subject price** for student's grade band - new standard
+3. **Legacy tier** - fallback only if above don't exist (being phased out)
+4. **Fail** - clear error if no pricing configured
+
+### Security Rules:
+- **Admin-only pricing management**: All subject/price endpoints require ADMIN role
+- **Price lock at payment initiation**: `POST /payments/initiate` locks the price at initiation time
+- **EXPIRED payment handling**: Earlier PENDING payments are marked EXPIRED when parent re-initiates
+- **Price visibility**: Students and tutors never see prices (only PARENT and ADMIN)
+- **Change notifications**: Parents receive PRICE_UPDATED notifications when prices change
+
+### Endpoints:
+- `GET /admin/subjects` - All subjects with per-grade pricing and drift info
+- `POST /admin/subjects` - Create subject with grade band prices
+- `PUT /admin/subjects/:id/prices/:gradeBandTier` - Upsert price for specific band
+- `PATCH /admin/subjects/:id` - Update subject metadata
+- `DELETE /admin/subjects/:id` - Soft delete if enrollments exist, hard delete otherwise
+- `GET /subjects?gradeBandTier=&category=` - Public subjects for parents/students (prices only for PARENT/ADMIN)
+- `GET /pricing/quote?studentId=&subjectIds=` - Get pricing quote for enrollment wizard
+
+---
+
+## 17. Tutor Availability & Subject Linking (2026-10-12)
+
+**Implementation Notice**: As of 2026-10-12, tutors can set availability status and are linked to subjects via structured relations instead of free text.
+
+### Schema Changes:
+- **TutorProfile**: Added `availabilityStatus` (AVAILABLE/LIMITED/UNAVAILABLE), `maxStudents`, `statusNote`, `statusUpdatedAt`
+- **TutorSubject**: New relation table linking tutors to subjects (replaces free-text `subjects` array)
+- **TutorAvailabilityStatus enum**: AVAILABLE, LIMITED, UNAVAILABLE
+
+### Availability Management:
+- **Tutors**: Can update their availability status via `PATCH /tutor-profile/availability-status`
+- **UNAVAILABLE with active students**: Triggers TUTOR_UNAVAILABLE notification to admin
+- **Capacity limits**: Admin can see tutor capacity in `GET /admin/tutors?hasCapacity=true`
+
+### Subject Linking:
+- **Migration**: Existing free-text subjects migrated to `TutorSubject` by name matching
+- **Selection**: Tutors pick from `GET /subjects` instead of entering free text
+- **Assignment**: Admin assigns tutors based on actual subject overlap via `TutorSubject`
+
+### Suggested Tutors:
+- **Endpoint**: `GET /admin/enrollments/:id/suggested-tutors` (ADMIN only)
+- **Ranking criteria**:
+  - Must teach the subject (via `TutorSubject`)
+  - Must not be UNAVAILABLE
+  - Has spare capacity (under `maxStudents`)
+  - Availability overlap with enrollment's preferred window
+  - Fewer current students preferred
+- **Force assignment**: `PATCH /admin/enrollments/:id/assign-tutor` accepts `force: true` to override capacity/availability warnings
+
+### Security Rules:
+- **Tutor-only availability updates**: Only tutors can set their own availability status
+- **Admin-only suggestion endpoint**: Only admins can see suggested tutors
+- **Capacity enforcement**: Assignments blocked unless `force: true` is provided
+
+---
+
+## 18. Admin Parent Directory (2026-10-12)
+
+**Implementation Notice**: As of 2026-10-12, admins have a comprehensive parent directory view with pricing and enrollment details.
+
+### Endpoints:
+- `GET /admin/parents?search=&status=&page=&limit=` - Paginated parent list with search by name/email/phone
+- `GET /admin/parents/:id` - Detailed parent profile with children, enrollments, effective pricing, payments, complaints
+
+### Parent Profile Includes:
+- **Children**: Student profiles with studentCode, grade, school
+- **Enrollments**: All enrollments with subject, tutor, status, effective price (NGN and USD) with source
+- **Recent payments**: Last 10 payments with student and subject details
+- **Metrics**: Children count, active enrollments, pending payment count, total paid (NGN and USD), complaint count
+
+### Pricing Visibility:
+- **Effective price**: Shown with source (override or subject_price)
+- **Override editing**: Via `PATCH /admin/enrollments/:id/pricing` with optional `note` field
+- **Change logging**: All price changes logged to `PriceChangeLog`
+- **Parent notifications**: Parents receive PRICE_UPDATED notifications on price changes
+
+### Security Rules:
+- **Admin-only**: All parent directory endpoints require ADMIN role
+- **No parent contact exposure**: Student details never expose parent contact info
+- **Ownership verification**: All parent operations verify the requesting user's role
+
+---
+
+## 19. Admin Transactions (2026-10-12)
+
+**Implementation Notice**: As of 2026-10-12, admins have comprehensive transaction management and reporting.
+
+### Endpoints:
+- `GET /admin/payments?status=&currency=&provider=&parentId=&from=&to=&search=&page=&limit=` - Paginated payment list with filters
+- `GET /admin/payments/:id` - Payment detail with timeline, enrollment info, NGN equivalent
+- `GET /admin/payments/summary?from=&to=` - Revenue totals, counts by status, success rate, daily revenue chart
+
+### Payment List Filters:
+- **Status**: PENDING, SUCCESS, FAILED, REFUNDED, EXPIRED
+- **Currency**: NGN, USD
+- **Provider**: PAYSTACK, STRIPE
+- **Parent**: Filter by specific parent
+- **Date range**: from/to timestamps
+- **Search**: Reference, parent name, or email
+
+### Payment Details:
+- **Timeline**: Initiated, Paid timestamps
+- **Enrollment info**: Student, subject covered
+- **Currency conversion**: NGN equivalent shown for USD payments
+- **Amount locked**: Price locked at initiation, never changes retroactively
+
+### Security Rules:
+- **Admin-only**: All transaction endpoints require ADMIN role
+- **No gateway secrets**: Never expose card or provider secrets in responses
+- **EXPIRED handling**: Webhook confirmation of EXPIRED payments still activates enrollment but notifies admin for review
+
+---
+
+## 20. Security Audit Fixes (2026-10-12)
+
+**Audit Notice**: Comprehensive security audit performed on 2026-10-12. The following critical issues were identified and fixed:
+
+### Fixed Issues:
+
+#### 1. Production Seeded Accounts (CRITICAL)
+**Problem**: Demo credentials (admin@smarttutor.com, parent@smarttutor.com, tutor@smarttutor.com) were published in README and actually worked in production, allowing unauthorized access.
+
+**Fix Applied**:
+- Modified `prisma/seed.ts` to skip creation of parent/tutor/student demo accounts in production
+- Production seed script now uses random passwords for any accounts created
+- Admin credentials must be provided via `ADMIN_SEED_EMAIL` and `ADMIN_SEED_PASSWORD` environment variables
+- Removed demo credentials section from README
+- Seed script refuses to run in production without `FORCE_SEED=true`
+
+**Evidence**:
+- Production login test confirmed admin@smarttutor.com/admin123456! worked before fix
+- Seed script now includes `NODE_ENV !== 'production'` checks before creating demo accounts
+
+#### 2. README Inaccuracies
+**Problem**: README incorrectly stated that OTP, Paystack, and email were "stubs" when they were fully implemented.
+
+**Fix Applied**:
+- Updated README to reflect actual implementation:
+  - OTP: Real implementation with SHA-256 hashing, 15-minute expiry, rate limiting
+  - Paystack: Real API integration with webhook signature verification
+  - Email: Real implementation using Brevo API
+- Removed all references to "stub" implementations
+- Updated environment variable documentation to include all required variables
+- Added production checklist section
+
+#### 3. Pricing Fallback Removal
+**Problem**: Legacy PricingTier fallback still existed in code paths, despite spec requiring removal.
+
+**Fix Applied**:
+- Removed `/admin/pricing-tiers` routes from `admin.routes.ts`
+- Removed pricing tier controller methods from active use (kept for backward compatibility in service layer)
+- Updated imports to remove unused schemas
+- All pricing now uses SubjectPrice-based resolution with clear 409 errors when no price exists
+- `SubjectsService.resolveEnrollmentPrice()` is the canonical pricing resolution method
+
+**Evidence**:
+- Payment flow uses `SubjectsService.resolveEnrollmentPrice()` which throws clear error if no SubjectPrice exists
+- Legacy tier endpoints removed from routes, service methods deprecated with comments
+
+#### 4. Environment Variable Documentation
+**Problem**: README was missing critical environment variables (CLOUDINARY, ALLOWED_ORIGINS, FRONTEND_URL, etc.)
+
+**Fix Applied**:
+- Added complete environment variable documentation in README
+- Included Cloudinary credentials for file storage
+- Added ALLOWED_ORIGINS and FRONTEND_URL for CORS configuration
+- Added ADMIN_SEED_EMAIL and ADMIN_SEED_PASSWORD for production seeding
+- Added placeholder values only (no real secrets)
+
+### Ongoing Recommendations:
+
+1. **Immediate Action Required**: Change or disable the demo accounts that exist in the production database. The seed script changes prevent future creation, but existing accounts may still be active.
+
+2. **Paystack Webhook Testing**: Implement automated tests for webhook signature rejection with invalid signatures.
+
+3. **Email Logging**: Set up Brevo send log monitoring to verify OTP delivery and redact OTP values from logs.
+
+4. **Node Version**: Consider pinning Node.js version in production environment (already specified in package.json as >=18.0.0).
+
+5. **Security.md Updates**: This section documents all security measures implemented. Keep it updated with any future changes.
 

@@ -185,18 +185,7 @@ export class StudentService {
     return progressReports;
   }
 
-  async getStudentNotifications(userId: string) {
-    const notifications = await prisma.notification.findMany({
-      where: {
-        userId,
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
 
-    return notifications;
-  }
 
   async getNextClass(userId: string) {
     const student = await prisma.student.findUnique({

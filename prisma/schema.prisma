@@ -35,6 +35,7 @@ enum VettingStatus {
 enum SubjectCategory {
   CORE
   ENRICHMENT
+  TEST_PREP
 }
 
 enum GradeBandTier {
@@ -118,6 +119,7 @@ enum PaymentStatus {
   SUCCESS
   FAILED
   REFUNDED
+  EXPIRED
 }
 
 model User {
@@ -154,6 +156,7 @@ model User {
   approvedGrades      Grade[]          @relation("GradeApprover")
   pricingTiersUpdated PricingTier[]
   notifications       Notification[]
+  subjectPricesUpdated SubjectPrice[]
 
   @@index([email])
   @@index([role])
@@ -163,18 +166,44 @@ model User {
 }
 
 model TutorProfile {
-  id             String        @id @default(uuid())
-  userId         String        @unique
-  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  subjects       String[]
-  bio            String?
-  credentialsUrl String?
-  vettingStatus  VettingStatus @default(PENDING)
-  hourlyRate     Decimal       @db.Decimal(10, 2)
-  availability   Json
-  createdAt      DateTime      @default(now())
+  id                 String                @id @default(uuid())
+  userId             String                @unique
+  user               User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjects           String[]
+  bio                String?
+  credentialsUrl     String?
+  vettingStatus      VettingStatus         @default(PENDING)
+  hourlyRate         Decimal               @db.Decimal(10, 2)
+  availability       Json
+  availabilityStatus  TutorAvailabilityStatus @default(AVAILABLE)
+  maxStudents        Int?
+  statusNote         String?
+  statusUpdatedAt     DateTime              @default(now())
+  createdAt          DateTime              @default(now())
+
+  tutorSubjects      TutorSubject[]
 
   @@index([vettingStatus])
+  @@index([availabilityStatus])
+}
+
+enum TutorAvailabilityStatus {
+  AVAILABLE
+  LIMITED
+  UNAVAILABLE
+}
+
+model TutorSubject {
+  id             String     @id @default(uuid())
+  tutorProfileId String
+  tutorProfile   TutorProfile @relation(fields: [tutorProfileId], references: [id], onDelete: Cascade)
+  subjectId      String
+  subject        Subject     @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  createdAt      DateTime   @default(now())
+
+  @@unique([tutorProfileId, subjectId])
+  @@index([tutorProfileId])
+  @@index([subjectId])
 }
 
 model Student {
@@ -218,15 +247,56 @@ model Student {
 }
 
 model Subject {
-  id        String          @id @default(uuid())
-  name      String          @unique
-  gradeBand String
-  category  SubjectCategory
-  createdAt DateTime        @default(now())
+  id          String          @id @default(uuid())
+  name        String          @unique
+  description String?
+  category    SubjectCategory
+  gradeBand   String?         // Deprecated - kept for migration compatibility
+  isActive    Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @default(now()) @updatedAt
 
-  enrollments Enrollment[]
+  enrollments   Enrollment[]
+  subjectPrices SubjectPrice[]
+  tutorSubjects TutorSubject[]
 
   @@index([category])
+  @@index([isActive])
+}
+
+model SubjectPrice {
+  id              String        @id @default(uuid())
+  subjectId       String
+  subject         Subject       @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  gradeBandTier   GradeBandTier
+  yearlyPriceNGN  Decimal       @db.Decimal(10, 2)
+  yearlyPriceUSD  Decimal       @db.Decimal(10, 2)
+  isActive        Boolean       @default(true)
+  updatedAt       DateTime      @updatedAt
+  updatedBy       String
+  updater         User          @relation(fields: [updatedBy], references: [id], onDelete: SetNull)
+
+  @@unique([subjectId, gradeBandTier])
+  @@index([subjectId])
+  @@index([gradeBandTier])
+  @@index([isActive])
+}
+
+model PriceChangeLog {
+  id           String   @id @default(uuid())
+  targetType   String
+  targetId     String
+  changedBy    String
+  oldNGN       Decimal? @db.Decimal(10, 2)
+  oldUSD       Decimal? @db.Decimal(10, 2)
+  newNGN       Decimal? @db.Decimal(10, 2)
+  newUSD       Decimal? @db.Decimal(10, 2)
+  note         String?
+  createdAt    DateTime @default(now())
+
+  @@index([targetType, targetId])
+  @@index([changedBy])
+  @@index([createdAt])
 }
 
 model Enrollment {
@@ -471,18 +541,22 @@ enum GradeStatus {
 }
 
 model Notification {
-  id        String           @id @default(uuid())
-  userId    String
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type      NotificationType
-  relatedId String?
-  message   String
-  isRead    Boolean          @default(false)
-  createdAt DateTime         @default(now())
+  id         String           @id @default(uuid())
+  userId     String
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       NotificationType
+  title      String
+  message    String
+  relatedType String?
+  relatedId  String?
+  data       Json?
+  readAt     DateTime?
+  deletedAt  DateTime?
+  createdAt  DateTime         @default(now())
 
-  @@index([userId])
+  @@index([userId, readAt, createdAt])
   @@index([type])
-  @@index([isRead])
+  @@index([deletedAt])
 }
 
 enum NotificationType {
@@ -493,6 +567,28 @@ enum NotificationType {
   GENERAL
   PRICING_DRIFT_ALERT
   TUTOR_ASSIGNED
+  STUDENT_ASSIGNED
+  ENROLLMENT_AWAITING_TUTOR
+  PAYMENT_SUCCESS
+  PAYMENT_FAILED
+  ENROLLMENT_ACTIVATED
+  SESSION_SCHEDULED
+  SESSION_RESCHEDULED
+  SESSION_CANCELLED
+  SESSION_REMINDER
+  ASSIGNMENT_POSTED
+  ASSIGNMENT_SUBMITTED
+  ASSIGNMENT_REVIEWED
+  GRADE_SUBMITTED
+  GRADE_REJECTED
+  NEW_TUTOR_APPLICATION
+  TUTOR_APPROVED
+  TUTOR_REJECTED
+  PRICE_UPDATED
+  TUTOR_UNAVAILABLE
+  NEW_MESSAGE
+  ACCOUNT_SUSPENDED
+  ACCOUNT_REACTIVATED
 }
 
 model Complaint {

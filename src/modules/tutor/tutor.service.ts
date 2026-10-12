@@ -42,6 +42,50 @@ export class TutorService {
     });
   }
 
+  async updateAvailabilityStatus(tutorId: string, data: {
+    availabilityStatus: 'AVAILABLE' | 'LIMITED' | 'UNAVAILABLE';
+    maxStudents?: number;
+    statusNote?: string;
+  }) {
+    const profile = await prisma.tutorProfile.findUnique({
+      where: { userId: tutorId },
+      include: {
+        user: true,
+      },
+    });
+
+    if (!profile) {
+      throw new AppError(404, 'Tutor profile not found');
+    }
+
+    // If setting to UNAVAILABLE while having active students, notify admin
+    if (data.availabilityStatus === 'UNAVAILABLE') {
+      const activeStudentCount = await prisma.enrollment.count({
+        where: {
+          tutorId,
+          status: 'ACTIVE',
+        },
+      });
+
+      if (activeStudentCount > 0) {
+        // Import here to avoid circular dependency
+        const { NotificationsService } = require('../notifications/notifications.service');
+        const notificationsService = new NotificationsService();
+        await notificationsService.createTutorUnavailableNotification(tutorId, activeStudentCount);
+      }
+    }
+
+    return prisma.tutorProfile.update({
+      where: { id: profile.id },
+      data: {
+        availabilityStatus: data.availabilityStatus,
+        maxStudents: data.maxStudents,
+        statusNote: data.statusNote,
+        statusUpdatedAt: new Date(),
+      },
+    });
+  }
+
   async getAssignedStudents(tutorId: string) {
     const enrollments = await prisma.enrollment.findMany({
       where: {

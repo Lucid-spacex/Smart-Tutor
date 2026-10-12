@@ -59,41 +59,8 @@ export class MessagesService {
       return true;
     }
 
-    // Rule 2: Student <-> assigned Tutor
-    if (senderRole === 'STUDENT' && recipientRole === 'TUTOR') {
-      // Look up student profile for sender
-      const studentProfile = await prisma.student.findUnique({
-        where: { userId: senderId },
-        select: { id: true },
-      });
-      if (!studentProfile) return false;
-
-      const activeEnrollment = await prisma.enrollment.findFirst({
-        where: {
-          studentId: studentProfile.id,
-          tutorId: recipientId,
-          status: 'ACTIVE',
-        },
-      });
-      return !!activeEnrollment;
-    }
-
-    if (senderRole === 'TUTOR' && recipientRole === 'STUDENT') {
-      const studentProfile = await prisma.student.findUnique({
-        where: { userId: recipientId },
-        select: { id: true },
-      });
-      if (!studentProfile) return false;
-
-      const activeEnrollment = await prisma.enrollment.findFirst({
-        where: {
-          studentId: studentProfile.id,
-          tutorId: senderId,
-          status: 'ACTIVE',
-        },
-      });
-      return !!activeEnrollment;
-    }
+    // Rule 2: Student <-> assigned Tutor - REMOVED
+    // Students and tutors can no longer message each other directly
 
     // Rule 3: Parent <-> Child (parent-child relationship)
     if (senderRole === 'PARENT' && recipientRole === 'STUDENT') {
@@ -136,9 +103,9 @@ export class MessagesService {
       let errorMessage = 'You are not permitted to message this user';
 
       if (sender?.role === 'TUTOR' && recipient?.role === 'STUDENT') {
-        errorMessage = 'You can only message students assigned to your active enrollments';
+        errorMessage = 'Tutors cannot message students directly. Please contact admin for assistance.';
       } else if (sender?.role === 'STUDENT' && recipient?.role === 'TUTOR') {
-        errorMessage = 'You can only message tutors assigned to your active enrollments';
+        errorMessage = 'Students cannot message tutors directly. Please contact admin for assistance.';
       } else if (sender?.role === 'PARENT' && recipient?.role === 'TUTOR') {
         errorMessage = 'Parents cannot message tutors directly. Please contact admin for assistance.';
       } else if (sender?.role === 'TUTOR' && recipient?.role === 'PARENT') {

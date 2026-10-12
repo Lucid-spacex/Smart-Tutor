@@ -53,6 +53,7 @@ export async function runAssignmentDueNotifications(): Promise<{ notificationsCr
         data: {
           userId: student.userId,
           type: notificationType,
+          title: isOverdue ? 'Assignment Overdue' : 'Assignment Due Soon',
           message,
           relatedId: assignment.id,
         },
@@ -75,6 +76,7 @@ export async function runAssignmentDueNotifications(): Promise<{ notificationsCr
           data: {
             userId: student.parentId,
             type: notificationType,
+            title: isOverdue ? 'Assignment Overdue' : 'Assignment Due Soon',
             message,
             relatedId: assignment.id,
           },

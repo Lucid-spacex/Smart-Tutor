@@ -20,6 +20,7 @@ import progressReportRoutes from './modules/progress-reports/progress-reports.ro
 import tutorRoutes from './modules/tutor/tutor.routes';
 import adminRoutes from './modules/admin/admin.routes';
 import subjectsRoutes from './modules/subjects/subjects.routes';
+import pricingRoutes from './modules/pricing/pricing.routes';
 import attendanceRoutes from './modules/attendance/attendance.routes';
 import assignmentRoutes from './modules/assignments/assignments.routes';
 import gradesRoutes from './modules/grades/grades.routes';
@@ -134,6 +135,7 @@ const mountRoutes = (prefix: string = '') => {
   app.use(`${prefix}/tutor-profile`, tutorRoutes);
   app.use(`${prefix}/admin`, adminRoutes);
   app.use(`${prefix}/subjects`, subjectsRoutes);
+  app.use(`${prefix}/pricing`, pricingRoutes);
   app.use(`${prefix}/attendance`, attendanceRoutes);
   app.use(`${prefix}/assignments`, assignmentRoutes);
   app.use(`${prefix}/grades`, gradesRoutes);

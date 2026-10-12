@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Tutoring platform backend MVP",
   "main": "dist/app.js",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/app.ts",
     "build": "npm install && prisma generate && tsc",

@@ -272,9 +272,9 @@ export class PricingService {
             data: {
               userId: admin.id,
               type: 'PRICING_DRIFT_ALERT',
+              title: 'Pricing Drift Alert',
               message: `Pricing tier ${tier.gradeBandTier} is ${driftPercentage.toFixed(1)}% off the current market exchange rate (${impliedRate.toFixed(2)} vs ${marketRate.toFixed(2)}). Consider reviewing pricing.`,
               relatedId: tier.id,
-              isRead: false,
             },
           });
         }
@@ -313,9 +313,9 @@ export class PricingService {
             data: {
               userId: admin.id,
               type: 'PRICING_DRIFT_ALERT',
+              title: 'Pricing Drift Alert',
               message: `Enrollment ${enrollment.id} for student ${enrollment.student.fullName} has custom pricing that is ${driftPercentage.toFixed(1)}% off market rate. Consider reviewing.`,
               relatedId: enrollment.id,
-              isRead: false,
             },
           });
         }

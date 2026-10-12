@@ -37,7 +37,7 @@
  * /tutor/sessions:
  *   post:
  *     summary: Create session for assigned student (TUTOR only)
- *     description: Tutors can create sessions for their own assigned students only. Single-student sessions only. Ownership check ensures tutors cannot create sessions for students they don't teach. Zoom meeting is auto-generated.
+ *     description: Tutors can create sessions for their own assigned students only. Single-student sessions only. Ownership check ensures tutors cannot create sessions for students they don't teach. Zoom meeting is auto-generated (to be replaced with Google Meet).
  *     tags: [Sessions]
  *     security:
  *       - bearerAuth: []
@@ -67,7 +67,7 @@
  *                 description: Session duration in minutes
  *     responses:
  *       201:
- *         description: Session created successfully with auto-generated Zoom meeting
+ *         description: Session created successfully with auto-generated Zoom meeting (to be replaced with Google Meet)
  *         content:
  *           application/json:
  *             schema:
@@ -136,7 +136,7 @@
  * /tutor/sessions/{id}:
  *   delete:
  *     summary: Delete session (TUTOR only)
- *     description: Tutors can delete sessions they created. Ownership check ensures tutors cannot delete admin-created sessions even if assigned to them. Only SCHEDULED sessions can be deleted. Cancels the Zoom meeting if it exists.
+ *     description: Tutors can delete sessions they created. Ownership check ensures tutors cannot delete admin-created sessions even if assigned to them. Only SCHEDULED sessions can be deleted. Cancels the Zoom meeting if it exists (to be replaced with Google Calendar event deletion).
  *     tags: [Sessions]
  *     security:
  *       - bearerAuth: []
@@ -149,7 +149,7 @@
  *           format: uuid
  *     responses:
  *       200:
- *         description: Session deleted successfully, Zoom meeting cancelled
+ *         description: Session deleted successfully, Zoom meeting cancelled (to be replaced with Google Calendar event deletion)
  *       400:
  *         description: Session not in SCHEDULED status
  *       401:
@@ -208,7 +208,7 @@
  * /admin/sessions:
  *   post:
  *     summary: Create session with multiple participants (admin only)
- *     description: Admins can create sessions with multiple participants (shared sessions). Zoom meeting is auto-generated if not provided.
+ *     description: Admins can create sessions with multiple participants (shared sessions). Zoom meeting is auto-generated if not provided (to be replaced with Google Meet).
  *     tags: [Sessions]
  *     security:
  *       - bearerAuth: []
@@ -244,10 +244,10 @@
  *               zoomLink:
  *                 type: string
  *                 format: uri
- *                 description: Optional Zoom link (auto-generated if not provided)
+ *                 description: Optional Zoom link (auto-generated if not provided, to be replaced with Google Meet)
  *               zoomMeetingId:
  *                 type: string
- *                 description: Optional Zoom meeting ID (auto-generated if not provided)
+ *                 description: Optional Zoom meeting ID (auto-generated if not provided, to be replaced with Google Calendar event ID)
  *               sharedSessionConfirmed:
  *                 type: boolean
  *                 description: Confirmation that this is a shared session

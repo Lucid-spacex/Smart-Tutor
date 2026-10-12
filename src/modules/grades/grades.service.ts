@@ -284,8 +284,8 @@ export class GradesService {
       },
     });
 
-    // Create notification for student and parent (with email)
-    await this.notificationsService.createGradeApprovedNotification(gradeId, true);
+    // Create notification for student and parent
+    await this.notificationsService.createGradeApprovedNotification(gradeId);
 
     return updatedGrade;
   }

@@ -67,13 +67,14 @@ export async function runExchangeRateCheck(): Promise<{ rateFetched: boolean; al
         });
 
         for (const admin of admins) {
-          await notificationsService.createNotification(
-            admin.id,
-            'PRICING_DRIFT_ALERT',
-            `Pricing tier ${tier.gradeBandTier} is now ${driftPercentage.toFixed(1)}% off the current market exchange rate (${marketRate.toFixed(2)}). Current implied rate: ${impliedRate.toFixed(2)}. Consider reviewing pricing.`,
-            tier.id,
-            true // Send email notification
-          );
+          await notificationsService.notify({
+            recipients: [admin.id],
+            type: 'PRICING_DRIFT_ALERT',
+            title: 'Pricing Drift Alert',
+            message: `Pricing tier ${tier.gradeBandTier} is now ${driftPercentage.toFixed(1)}% off the current market exchange rate (${marketRate.toFixed(2)}). Current implied rate: ${impliedRate.toFixed(2)}. Consider reviewing pricing.`,
+            relatedType: 'PRICING_TIER',
+            relatedId: tier.id,
+          });
         }
 
         alertsCreated++;
@@ -106,13 +107,14 @@ export async function runExchangeRateCheck(): Promise<{ rateFetched: boolean; al
         });
 
         for (const admin of admins) {
-          await notificationsService.createNotification(
-            admin.id,
-            'PRICING_DRIFT_ALERT',
-            `Enrollment override for student ${enrollment.student.fullName} (${enrollment.student.user.studentCode}) is now ${driftPercentage.toFixed(1)}% off the current market exchange rate (${marketRate.toFixed(2)}). Current implied rate: ${impliedRate.toFixed(2)}. Consider reviewing pricing.`,
-            enrollment.id,
-            true
-          );
+          await notificationsService.notify({
+            recipients: [admin.id],
+            type: 'PRICING_DRIFT_ALERT',
+            title: 'Pricing Drift Alert',
+            message: `Enrollment override for student ${enrollment.student.fullName} (${enrollment.student.user.studentCode}) is now ${driftPercentage.toFixed(1)}% off the current market exchange rate (${marketRate.toFixed(2)}). Current implied rate: ${impliedRate.toFixed(2)}. Consider reviewing pricing.`,
+            relatedType: 'ENROLLMENT',
+            relatedId: enrollment.id,
+          });
         }
 
         alertsCreated++;

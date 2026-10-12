@@ -40,6 +40,9 @@ const envSchema = z.object({
   ZOOM_CLIENT_SECRET: z.string().optional(),
   ZOOM_WEBHOOK_SECRET: z.string().optional(),
 
+  // Google Meet
+  GOOGLE_MEET_CREDENTIALS: z.string().optional(),
+
   // Cloudinary
   CLOUDINARY_CLOUD_NAME: z.string().optional(),
   CLOUDINARY_API_KEY: z.string().optional(),

@@ -4,12 +4,15 @@ import { PaystackProvider } from './providers/paystack.provider';
 import { PaymentProvider } from './providers/payment-provider.interface';
 import { InitiatePaymentInput } from './payments.validation';
 import { AppError } from '../../middleware/error-handler.middleware';
+import { SubjectsService } from '../subjects/subjects.service';
 
 export class PaymentsService {
   private paymentProvider: PaymentProvider;
+  private subjectsService: SubjectsService;
 
   constructor() {
     this.paymentProvider = new PaystackProvider();
+    this.subjectsService = new SubjectsService();
   }
 
   async initiatePayment(parentId: string, data: InitiatePaymentInput) {
@@ -50,32 +53,10 @@ export class PaymentsService {
       }> = [];
 
       for (const enrollment of enrollments) {
-        let yearlyPriceNGN: number;
-        let yearlyPriceUSD: number;
-
-        if (enrollment.yearlyPriceNGN !== null && enrollment.yearlyPriceUSD !== null) {
-          yearlyPriceNGN = Number(enrollment.yearlyPriceNGN);
-          yearlyPriceUSD = Number(enrollment.yearlyPriceUSD);
-        } else {
-          const tier = enrollment.student.gradeBandTier
-            ? await prisma.pricingTier.findUnique({
-                where: { gradeBandTier: enrollment.student.gradeBandTier as any },
-              })
-            : null;
-
-          if (tier) {
-            yearlyPriceNGN = Number(tier.yearlyPriceNGN);
-            yearlyPriceUSD = Number(tier.yearlyPriceUSD);
-          } else if (enrollment.yearlyPrice && Number(enrollment.yearlyPrice) > 0) {
-            yearlyPriceUSD = Number(enrollment.yearlyPrice);
-            yearlyPriceNGN = Number(enrollment.yearlyPrice);
-          } else {
-            throw new AppError(
-              400,
-              `No pricing configured for enrollment ${enrollment.id} (${enrollment.subject.name}). Please contact admin.`
-            );
-          }
-        }
+        // Use new SubjectPrice-based resolution
+        const price = await this.subjectsService.resolveEnrollmentPrice(enrollment.id);
+        let yearlyPriceNGN = price.yearlyPriceNGN;
+        let yearlyPriceUSD = price.yearlyPriceUSD;
 
         let subNGN = yearlyPriceNGN;
         let subUSD = yearlyPriceUSD;
@@ -140,6 +121,18 @@ export class PaymentsService {
         },
       });
 
+      // Mark earlier PENDING payments for this enrollment group as EXPIRED
+      await prisma.payment.updateMany({
+        where: {
+          parentId,
+          enrollmentGroupId: data.enrollmentGroupId,
+          status: 'PENDING',
+        },
+        data: {
+          status: 'EXPIRED',
+        },
+      });
+
       const payment = await prisma.payment.create({
         data: {
           parentId,
@@ -188,31 +181,11 @@ export class PaymentsService {
       throw new AppError(403, 'Not authorized to make payment for this enrollment');
     }
 
-    // SECURITY: Compute amount server-side from tiered pricing
-    // Resolution order: override > tier default > legacy yearlyPrice
-    let yearlyPriceNGN: number;
-    let yearlyPriceUSD: number;
-
-    if (enrollment.yearlyPriceNGN !== null && enrollment.yearlyPriceUSD !== null) {
-      yearlyPriceNGN = Number(enrollment.yearlyPriceNGN);
-      yearlyPriceUSD = Number(enrollment.yearlyPriceUSD);
-    } else {
-      const tier = enrollment.student.gradeBandTier
-        ? await prisma.pricingTier.findUnique({
-            where: { gradeBandTier: enrollment.student.gradeBandTier as any },
-          })
-        : null;
-
-      if (tier) {
-        yearlyPriceNGN = Number(tier.yearlyPriceNGN);
-        yearlyPriceUSD = Number(tier.yearlyPriceUSD);
-      } else if (enrollment.yearlyPrice && Number(enrollment.yearlyPrice) > 0) {
-        yearlyPriceUSD = Number(enrollment.yearlyPrice);
-        yearlyPriceNGN = Number(enrollment.yearlyPrice);
-      } else {
-        throw new AppError(400, 'No pricing configured for this enrollment. Please contact admin.');
-      }
-    }
+    // SECURITY: Compute amount server-side from SubjectPrice-based resolution
+    // Resolution order: override > subject price > fail
+    const price = await this.subjectsService.resolveEnrollmentPrice(enrollment.id);
+    let yearlyPriceNGN = price.yearlyPriceNGN;
+    let yearlyPriceUSD = price.yearlyPriceUSD;
 
     // Calculate amount based on billing frequency
     let computedAmountNGN = yearlyPriceNGN;
@@ -261,6 +234,18 @@ export class PaymentsService {
         billingFrequency: enrollment.billingFrequency,
         computedFromYearlyPriceNGN: yearlyPriceNGN,
         computedFromYearlyPriceUSD: yearlyPriceUSD,
+      },
+    });
+
+    // Mark earlier PENDING payments for this enrollment as EXPIRED
+    await prisma.payment.updateMany({
+      where: {
+        parentId,
+        enrollmentId: data.enrollmentId,
+        status: 'PENDING',
+      },
+      data: {
+        status: 'EXPIRED',
       },
     });
 
@@ -319,11 +304,17 @@ export class PaymentsService {
       });
 
       if (isSuccess) {
+        // If payment was EXPIRED but webhook confirms success, still activate enrollment
+        // and log for admin review
+        if (payment.status === 'EXPIRED') {
+          logger.warn({ paymentId: payment.id, reference: payment.providerReference }, 'Payment confirmed success after being marked EXPIRED - activating enrollment for admin review');
+        }
+
         if (payment.enrollmentGroupId) {
           // Atomically update ALL enrollments in the group to ACTIVE — no partial activation
           // Only activate enrollments that are currently PENDING_PAYMENT
           await tx.enrollment.updateMany({
-            where: { 
+            where: {
               enrollmentGroupId: payment.enrollmentGroupId,
               status: 'PENDING_PAYMENT',
             },
@@ -334,7 +325,7 @@ export class PaymentsService {
           const enrollment = await tx.enrollment.findUnique({
             where: { id: payment.enrollmentId },
           });
-          
+
           if (enrollment && enrollment.status === 'PENDING_PAYMENT') {
             await tx.enrollment.update({
               where: { id: payment.enrollmentId },
