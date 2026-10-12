@@ -579,3 +579,32 @@ The RBAC matrix entry for "Message their assigned tutor / assigned student" has 
 
 5. **Security.md Updates**: This section documents all security measures implemented. Keep it updated with any future changes.
 
+6. **Dependency Vulnerabilities**: Run `npm audit` regularly to check for security vulnerabilities in dependencies. Address critical and high-severity issues promptly.
+
+---
+
+## 21. Build Error Fixes (2026-10-12)
+
+**Audit Notice**: TypeScript build error fixed during Render deployment attempt.
+
+### Fixed Issue:
+
+**Problem**: Render build failed with TypeScript error in `src/modules/subjects/subjects.service.ts(199,7)`:
+```
+Type '{ subjectId: string; gradeBandTier: ...; updater: { connect: { id: string; }; } }' is not assignable to type ...
+Types of property 'updater' are incompatible.
+Type '{ connect: { id: string; }; }' is not assignable to type 'undefined'.
+```
+
+**Root Cause**: Incorrect Prisma relation syntax. The `SubjectPrice` model has `updatedBy` as a direct String field with a relation to User. The `updater` relation is read-only (defined by the relation), so it cannot be set directly in a create operation.
+
+**Fix Applied**:
+- Removed `updater: { connect: { id: adminId } }` from the `create` block in `subjects.service.ts` line 206-208
+- Kept only `updatedBy: adminId` (line 205), which is the correct field to set
+- Prisma automatically handles the `updater` relation based on the `updatedBy` foreign key
+
+**Evidence**:
+- Build now passes: `npm run build` completes successfully with exit code 0
+- No TypeScript compilation errors
+- Render deployment should succeed with this fix
+

@@ -399,10 +399,11 @@ Before deploying to production:
    - Configure proper CORS origins
    - Review rate limiting thresholds
    - Test webhook signature verification
+   - Run `npm audit` to check for security vulnerabilities
 
 4. **Services**
    - Configure Paystack webhook URL
-   - Set up Zoom webhook for recording sync
+   - Set up Zoom webhook for recording sync (to be replaced with Google Meet)
    - Verify email delivery via Brevo
    - Test Cloudinary file uploads
 
@@ -411,6 +412,12 @@ Before deploying to production:
    - Configure error tracking
    - Monitor exchange rate drift alerts
    - Review failed payment webhooks
+
+## Build Status
+
+The project builds successfully with TypeScript compilation. Run `npm run build` to verify before deployment.
+
+**Note:** npm audit may report vulnerabilities. Review and address as needed based on your security requirements.
 
 ## License
 

@@ -203,9 +203,6 @@ export class SubjectsService {
         yearlyPriceUSD: data.yearlyPriceUSD,
         isActive: data.isActive ?? true,
         updatedBy: adminId,
-        updater: {
-          connect: { id: adminId },
-        },
       },
       update: {
         yearlyPriceNGN: data.yearlyPriceNGN,
