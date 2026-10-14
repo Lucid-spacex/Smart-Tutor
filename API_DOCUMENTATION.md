@@ -433,16 +433,16 @@ Authorization: Bearer <access_token>
 
 ---
 
-#### 5. Regenerate Student Password
-**POST** `/api/students/:id/regenerate-password`
+#### 5. Regenerate Student PIN
+**POST** `/api/students/:id/regenerate-pin`
 **Authentication Required**: Yes (PARENT only)
 
-**Description**: Regenerate a student's password. New password is sent to parent's email.
+**Description**: Regenerate a student's PIN. New PIN is sent to parent's email.
 
 **Response** (200):
 ```json
 {
-  "message": "Password regenerated successfully. New credentials sent to parent email."
+  "message": "PIN regenerated successfully. New credentials sent to parent email."
 }
 ```
 
@@ -2402,16 +2402,16 @@ Authorization: Bearer <access_token>
 
 ---
 
-#### 14. Regenerate Student Password (Admin)
-**PATCH** `/api/admin/students/:id/regenerate-password`
+#### 14. Regenerate Student PIN (Admin)
+**PATCH** `/api/admin/students/:id/regenerate-pin`
 **Authentication Required**: Yes (ADMIN only)
 
-**Description**: Admin can regenerate any student's password.
+**Description**: Admin can regenerate any student's PIN.
 
 **Response** (200):
 ```json
 {
-  "message": "Password regenerated successfully. New credentials sent to parent email."
+  "message": "PIN regenerated successfully. New credentials sent to parent email."
 }
 ```
 

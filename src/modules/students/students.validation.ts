@@ -47,7 +47,7 @@ export const createStudentSchema = z.object({
   gender: z.enum(genderValues).optional(),
 
   // Contact/notification email \u2014 NOT a login credential.
-  // The three-factor student login (parent email + student code + student password)
+  // The three-factor student login (parent email + student code + student PIN)
   // is the only auth path regardless of whether this field is populated.
   email: z.string().email('Invalid student contact email').optional(),
 

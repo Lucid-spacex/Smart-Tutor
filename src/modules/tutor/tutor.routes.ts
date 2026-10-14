@@ -18,6 +18,7 @@ router.get('/tutor-profile', authenticate, requireRole('TUTOR'), tutorController
 // /tutor/students & /tutor/sessions
 router.get('/students', authenticate, requireRole('TUTOR'), tutorController.getAssignedStudents);
 router.get('/students/:studentId', authenticate, requireRole('TUTOR'), validateUUID('studentId'), tutorController.getStudentDetail);
+router.get('/students/:studentId/performance', authenticate, requireRole('TUTOR'), validateUUID('studentId'), tutorController.getStudentPerformance);
 router.get('/sessions', authenticate, requireRole('TUTOR'), tutorController.getTutorSessions);
 
 // /tutor/sessions (tutor-only session management)

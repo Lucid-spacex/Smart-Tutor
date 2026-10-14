@@ -1,12 +1,16 @@
 import { Response, NextFunction } from 'express';
 import { StudentService } from './student.service';
+import { PerformanceService } from '../performance/performance.service';
 import { AuthRequest } from '../../types/express';
+import prisma from '../../config/database';
 
 export class StudentController {
   private studentService: StudentService;
+  private performanceService: PerformanceService;
 
   constructor() {
     this.studentService = new StudentService();
+    this.performanceService = new PerformanceService();
   }
 
   getStudentProfile = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
@@ -143,6 +147,45 @@ export class StudentController {
 
       const sessions = await this.studentService.getEnrollmentSessions(userId, enrollmentId);
       res.status(200).json(sessions);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getStudentPerformance = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const userId = req.user?.userId;
+      if (!userId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      // Get student ID from user
+      const student = await prisma.student.findUnique({
+        where: { userId },
+      });
+
+      if (!student) {
+        res.status(404).json({ error: 'Student profile not found' });
+        return;
+      }
+
+      const options = {
+        period: req.query.period as 'week' | 'month' | 'quarter' | 'year' | 'all',
+        from: req.query.from as string,
+        to: req.query.to as string,
+        subjectId: req.query.subjectId as string,
+        includePending: req.query.includePending === 'true',
+      };
+
+      const performance = await this.performanceService.getStudentPerformance(
+        student.id,
+        userId,
+        'STUDENT',
+        options
+      );
+
+      res.status(200).json(performance);
     } catch (error) {
       next(error);
     }

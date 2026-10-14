@@ -16,6 +16,7 @@ router.get('/me/schedule', authenticate, requireRole('STUDENT'), studentControll
 router.get('/me/assignments', authenticate, requireRole('STUDENT'), studentController.getStudentAssignments);
 router.get('/me/grades', authenticate, requireRole('STUDENT'), studentController.getStudentGrades);
 router.get('/me/progress-reports', authenticate, requireRole('STUDENT'), studentController.getStudentProgressReports);
+router.get('/me/performance', authenticate, requireRole('STUDENT'), studentController.getStudentPerformance);
 // Alias to unified notifications endpoint
 router.get('/me/notifications', authenticate, requireRole('STUDENT'), notificationsController.getNotifications);
 router.get('/me/next-class', authenticate, requireRole('STUDENT'), studentController.getNextClass);

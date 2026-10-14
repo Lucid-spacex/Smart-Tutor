@@ -267,9 +267,18 @@ export class QuizService {
       throw new Error('Quiz is already completed');
     }
 
-    // Calculate total score
+    // Calculate total score and maxScore
     const totalScore = attempt.responses.reduce(
       (sum, response) => sum + Number(response.pointsAwarded),
+      0
+    );
+
+    // Calculate maxScore as sum of all question base points
+    const questions = await prisma.quizQuestion.findMany({
+      where: { assignmentId: attempt.assignmentId },
+    });
+    const maxScore = questions.reduce(
+      (sum, q) => sum + Number(q.points),
       0
     );
 
@@ -290,6 +299,7 @@ export class QuizService {
         assignmentId: attempt.assignmentId,
         gradedBy: studentId, // Self-graded, but needs admin approval
         score: totalScore,
+        maxScore: maxScore || 100, // Default to 100 if no questions
         comments: 'Auto-graded quiz. Pending admin approval.',
         status: 'PENDING_APPROVAL',
         visibleToStudent: false, // Hidden until approved

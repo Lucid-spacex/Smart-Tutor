@@ -5,7 +5,7 @@ import { ComplaintsController } from '../complaints/complaints.controller';
 import { validate, validateQuery } from '../../middleware/validation.middleware';
 import { authenticate, requireRole } from '../../middleware/auth.middleware';
 import { validateUUID } from '../../middleware/uuid-validation.middleware';
-import { updateTutorVettingSchema, assignTutorSchema, getTutorsQuerySchema, getStudentsQuerySchema, updateEnrollmentPricingSchema, updateEnrollmentPricingOverrideSchema, createSessionSchema, rescheduleSessionSchema, getUnmatchedEnrollmentsQuerySchema, createSubjectSchema, updateSubjectSchema, upsertSubjectPriceSchema } from './admin.validation';
+import { updateTutorVettingSchema, assignTutorSchema, getTutorsQuerySchema, getStudentsQuerySchema, updateEnrollmentPricingSchema, updateEnrollmentPricingOverrideSchema, createSessionSchema, rescheduleSessionSchema, getUnmatchedEnrollmentsQuerySchema, createSubjectSchema, updateSubjectSchema, upsertSubjectPriceSchema, suspendUserSchema, addPaymentNoteSchema } from './admin.validation';
 import { resolveComplaintSchema } from '../complaints/complaints.validation';
 
 const router = Router();
@@ -16,6 +16,11 @@ const complaintsController = new ComplaintsController();
 // Tutors management
 router.get('/tutors/pending', authenticate, requireRole('ADMIN'), adminController.getPendingTutors);
 router.get('/tutors', authenticate, requireRole('ADMIN'), validateQuery(getTutorsQuerySchema), adminController.getTutors);
+router.get('/tutors/:id', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.getTutorById);
+router.get('/tutors/:id/students', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.getTutorStudents);
+router.get('/tutors/:id/sessions', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.getTutorSessions);
+router.get('/tutors/:id/grades', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.getTutorGrades);
+router.get('/tutors/:id/progress-reports', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.getTutorProgressReports);
 router.patch('/tutors/:id/vetting', authenticate, requireRole('ADMIN'), validateUUID('id'), validate(updateTutorVettingSchema), adminController.updateTutorVetting);
 
 // Enrollments & Pricing
@@ -40,10 +45,18 @@ router.get('/payments', authenticate, requireRole('ADMIN'), adminController.getP
 router.get('/payments/:id', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.getPaymentById);
 router.get('/payments/summary', authenticate, requireRole('ADMIN'), adminController.getPaymentsSummary);
 router.get('/payments/failed', authenticate, requireRole('ADMIN'), adminController.getFailedPayments);
+router.patch('/payments/:id/note', authenticate, requireRole('ADMIN'), validateUUID('id'), validate(addPaymentNoteSchema), adminController.addPaymentNote);
+router.post('/payments/:id/reverify', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.reverifyPayment);
 router.get('/reports/overview', authenticate, requireRole('ADMIN'), adminController.getOverviewReport);
 
 // Students
 router.get('/students', authenticate, requireRole('ADMIN'), validateQuery(getStudentsQuerySchema), adminController.getStudents);
+router.get('/students/:id', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.getStudentById);
+router.get('/students/:id/enrollments', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.getStudentEnrollments);
+router.get('/students/:id/grades', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.getStudentGrades);
+router.get('/students/:id/attendance', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.getStudentAttendance);
+router.get('/students/:id/sessions', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.getStudentSessions);
+router.get('/students/:id/performance', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.getStudentPerformance);
 router.patch('/students/:id/regenerate-pin', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.regenerateStudentPin);
 
 // Parent Directory
@@ -52,7 +65,11 @@ router.get('/parents/:id', authenticate, requireRole('ADMIN'), validateUUID('id'
 
 // Suspended Users Management
 router.get('/users/suspended', authenticate, requireRole('ADMIN'), adminController.getSuspendedUsers);
+router.patch('/users/:id/suspend', authenticate, requireRole('ADMIN'), validateUUID('id'), validate(suspendUserSchema), adminController.suspendUser);
 router.patch('/users/:id/reactivate', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.reactivateUser);
+
+// Email Diagnostics
+router.get('/diagnostics/email', authenticate, requireRole('ADMIN'), adminController.getEmailDiagnostics);
 
 // Sessions
 router.post('/sessions', authenticate, requireRole('ADMIN'), validate(createSessionSchema), adminController.createSession);
@@ -60,6 +77,9 @@ router.patch('/sessions/:id/reschedule', authenticate, requireRole('ADMIN'), val
 
 // Grades Approval Workflow
 router.get('/grades/pending', authenticate, requireRole('ADMIN'), adminController.getPendingGrades);
+
+// Email diagnostics
+router.get('/diagnostics/email', authenticate, requireRole('ADMIN'), adminController.getEmailDiagnostics);
 router.patch('/grades/:id/approve', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.approveGrade);
 router.patch('/grades/:id/reject', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.rejectGrade);
 

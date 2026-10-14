@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthService } from './auth.service';
-import { RegisterData, VerifyData, LoginData, StudentLoginData, RefreshData, ChangePasswordData } from './types';
+import { RegisterData, VerifyData, LoginData, StudentLoginData, RefreshData, ChangePasswordData, ChangePinData } from './types';
 import { AuthRequest } from '../../types/express';
 
 export class AuthController {
@@ -97,6 +97,21 @@ export class AuthController {
       }
       const data: ChangePasswordData = req.body;
       const result = await this.authService.changePassword(userId, data);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  changePin = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const userId = req.user?.userId;
+      if (!userId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+      const data: ChangePinData = req.body;
+      const result = await this.authService.changePin(userId, data);
       res.status(200).json(result);
     } catch (error) {
       next(error);

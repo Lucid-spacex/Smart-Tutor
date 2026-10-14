@@ -111,7 +111,6 @@ enum RecordingStatus {
 
 enum PaymentProvider {
   PAYSTACK
-  STRIPE
 }
 
 enum PaymentStatus {
@@ -225,7 +224,7 @@ model Student {
   gender             Gender?
   // Contact/notification email for the student (e.g. CC on notifications).
   // IMPORTANT: This is metadata ONLY. It is NOT a login credential.
-  // Login remains strictly: parent email + student code + student password.
+  // Login remains strictly: parent email + student code + student PIN (6 digits).
   email              String?
   // Parent's intended start date, captured at profile creation before
   // a specific enrollment/subject/tutor is finalised.
@@ -400,6 +399,7 @@ model Payment {
   status            PaymentStatus   @default(PENDING)
   paidAt            DateTime?
   deletedAt         DateTime?
+  adminNote          String?
   createdAt         DateTime        @default(now())
 
   @@index([parentId])
@@ -517,6 +517,7 @@ model Grade {
   gradedBy         String
   grader           User        @relation("GradeGrader", fields: [gradedBy], references: [id], onDelete: Cascade)
   score            Decimal     @db.Decimal(10, 2)
+  maxScore         Decimal     @db.Decimal(10, 2) @default(100)
   comments         String
   attachmentUrl    String?
   attachmentName   String?
@@ -726,4 +727,19 @@ model QuizResponse {
 enum QuizAttemptStatus {
   IN_PROGRESS
   COMPLETED
+}
+
+model AdminActionLog {
+  id         String   @id @default(uuid())
+  adminId    String
+  action     String
+  targetType String
+  targetId   String
+  details    Json
+  createdAt  DateTime @default(now())
+
+  @@index([adminId])
+  @@index([action])
+  @@index([targetType, targetId])
+  @@index([createdAt])
 }

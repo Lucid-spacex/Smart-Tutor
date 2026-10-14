@@ -1,13 +1,17 @@
 import { Request, Response, NextFunction } from 'express';
 import { AdminService } from './admin.service';
-import { UpdateTutorVettingInput, AssignTutorInput, GetTutorsQuery, GetStudentsQuery, UpdateEnrollmentPricingInput, UpdateEnrollmentPricingOverrideInput, GetUnmatchedEnrollmentsQuery } from './admin.validation';
+import { UpdateTutorVettingInput, AssignTutorInput, GetTutorsQuery, GetStudentsQuery, UpdateEnrollmentPricingInput, UpdateEnrollmentPricingOverrideInput, GetUnmatchedEnrollmentsQuery, SuspendUserInput, AddPaymentNoteInput } from './admin.validation';
 import { AuthRequest } from '../../types/express';
+import { PerformanceService } from '../performance/performance.service';
+import { config } from '../../config/env.config';
 
 export class AdminController {
   private adminService: AdminService;
+  private performanceService: PerformanceService;
 
   constructor() {
     this.adminService = new AdminService();
+    this.performanceService = new PerformanceService();
   }
 
   getPendingTutors = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -101,11 +105,135 @@ export class AdminController {
     }
   };
 
+  getTutorById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const tutor = await this.adminService.getTutorById(id);
+      res.status(200).json(tutor);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getTutorStudents = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const page = req.query.page ? parseInt(req.query.page as string) : 1;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 20;
+      const result = await this.adminService.getTutorStudents(id, page, limit);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getTutorSessions = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const filters = {
+        status: req.query.status as string,
+        from: req.query.from as string,
+        to: req.query.to as string,
+        page: req.query.page ? parseInt(req.query.page as string) : 1,
+        limit: req.query.limit ? parseInt(req.query.limit as string) : 20,
+      };
+      const result = await this.adminService.getTutorSessions(id, filters);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getTutorGrades = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const filters = {
+        status: req.query.status as string,
+        page: req.query.page ? parseInt(req.query.page as string) : 1,
+        limit: req.query.limit ? parseInt(req.query.limit as string) : 20,
+      };
+      const result = await this.adminService.getTutorGrades(id, filters);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getTutorProgressReports = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const page = req.query.page ? parseInt(req.query.page as string) : 1;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 20;
+      const result = await this.adminService.getTutorProgressReports(id, page, limit);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
   getStudents = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const query: GetStudentsQuery = req.query as any;
       const students = await this.adminService.getStudents(query);
       res.status(200).json(students);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getStudentById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const student = await this.adminService.getStudentById(id);
+      res.status(200).json(student);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getStudentEnrollments = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const page = req.query.page ? parseInt(req.query.page as string) : 1;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 20;
+      const result = await this.adminService.getStudentEnrollments(id, page, limit);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getStudentGrades = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const page = req.query.page ? parseInt(req.query.page as string) : 1;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 20;
+      const result = await this.adminService.getStudentGrades(id, page, limit);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getStudentAttendance = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const page = req.query.page ? parseInt(req.query.page as string) : 1;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 20;
+      const result = await this.adminService.getStudentAttendance(id, page, limit);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getStudentSessions = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const page = req.query.page ? parseInt(req.query.page as string) : 1;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 20;
+      const result = await this.adminService.getStudentSessions(id, page, limit);
+      res.status(200).json(result);
     } catch (error) {
       next(error);
     }
@@ -195,9 +323,11 @@ export class AdminController {
     }
   };
 
-  getSuspendedUsers = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+  getSuspendedUsers = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const users = await this.adminService.getSuspendedUsers();
+      const page = req.query.page ? parseInt(req.query.page as string) : 1;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 20;
+      const users = await this.adminService.getSuspendedUsers(page, limit);
       res.status(200).json(users);
     } catch (error) {
       next(error);
@@ -215,6 +345,23 @@ export class AdminController {
       const { id } = req.params;
       const user = await this.adminService.reactivateUser(id, adminId);
       res.status(200).json(user);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  suspendUser = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const adminId = req.user?.userId;
+      if (!adminId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id } = req.params;
+      const data: SuspendUserInput = req.body;
+      const result = await this.adminService.suspendUser(id, data, adminId);
+      res.status(200).json(result);
     } catch (error) {
       next(error);
     }
@@ -331,6 +478,87 @@ export class AdminController {
       };
       const summary = await this.adminService.getPaymentsSummary(filters);
       res.status(200).json(summary);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getStudentPerformance = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const adminId = req.user?.userId;
+      if (!adminId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id: studentId } = req.params;
+
+      const options = {
+        period: req.query.period as 'week' | 'month' | 'quarter' | 'year' | 'all',
+        from: req.query.from as string,
+        to: req.query.to as string,
+        subjectId: req.query.subjectId as string,
+        includePending: req.query.includePending === 'true',
+      };
+
+      const performance = await this.performanceService.getStudentPerformance(
+        studentId,
+        adminId,
+        'ADMIN',
+        options
+      );
+
+      res.status(200).json(performance);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  addPaymentNote = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const adminId = req.user?.userId;
+      if (!adminId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id: paymentId } = req.params;
+      const data: AddPaymentNoteInput = req.body;
+
+      const payment = await this.adminService.addPaymentNote(paymentId, data, adminId);
+      res.status(200).json(payment);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  reverifyPayment = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const adminId = req.user?.userId;
+      if (!adminId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id: paymentId } = req.params;
+
+      const payment = await this.adminService.reverifyPayment(paymentId, adminId);
+      res.status(200).json(payment);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getEmailDiagnostics = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const adminId = req.user?.userId;
+      if (!adminId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const result = await this.adminService.getEmailDiagnostics();
+      res.status(200).json(result);
     } catch (error) {
       next(error);
     }

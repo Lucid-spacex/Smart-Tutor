@@ -9,7 +9,7 @@ describe('Auth & Identity Integration Tests', () => {
   let testPassword = 'SecurePassword123!';
   let parentToken = '';
   let studentCode = '';
-  let studentPassword = 'StudentPass123!';
+  let studentPin = '123456';
   let studentId = '';
   let studentUserId = '';
 
@@ -30,7 +30,7 @@ describe('Auth & Identity Integration Tests', () => {
 
     // Create test student
     studentCode = `TEST${Math.floor(1000 + Math.random() * 9000)}`;
-    const studentPassHash = await hashPassword(studentPassword);
+    const studentPassHash = await hashPassword(studentPin);
     const studentUser = await prisma.user.create({
       data: {
         fullName: 'Integration Test Student',
@@ -56,19 +56,19 @@ describe('Auth & Identity Integration Tests', () => {
 
     // Login parent to get token
     const res = await request(app)
-      .post('/auth/login')
+      .post('/api/auth/login')
       .send({ email: parentEmail, password: testPassword });
     parentToken = res.body.accessToken;
   });
 
   describe('Three-Factor Student Login', () => {
-    it('should succeed with valid parentEmail + studentCode + studentPassword', async () => {
+    it('should succeed with valid parentEmail + studentCode + studentPin', async () => {
       const response = await request(app)
-        .post('/auth/student-login')
+        .post('/api/auth/student-login')
         .send({
           parentEmail,
           studentCode,
-          studentPassword,
+          studentPin,
         });
 
       expect(response.status).toBe(200);
@@ -81,11 +81,11 @@ describe('Auth & Identity Integration Tests', () => {
 
     it('should fail with generic 401 when parentEmail is wrong', async () => {
       const response = await request(app)
-        .post('/auth/student-login')
+        .post('/api/auth/student-login')
         .send({
           parentEmail: 'wrongparent@example.com',
           studentCode,
-          studentPassword,
+          studentPin,
         });
 
       expect(response.status).toBe(401);
@@ -94,24 +94,24 @@ describe('Auth & Identity Integration Tests', () => {
 
     it('should fail with generic 401 when studentCode is wrong', async () => {
       const response = await request(app)
-        .post('/auth/student-login')
+        .post('/api/auth/student-login')
         .send({
           parentEmail,
           studentCode: 'NONEXISTENTCODE',
-          studentPassword,
+          studentPin,
         });
 
       expect(response.status).toBe(401);
       expect(response.body.error).toBe('Invalid credentials');
     });
 
-    it('should fail with generic 401 when studentPassword is wrong', async () => {
+    it('should fail with generic 401 when studentPin is wrong', async () => {
       const response = await request(app)
-        .post('/auth/student-login')
+        .post('/api/auth/student-login')
         .send({
           parentEmail,
           studentCode,
-          studentPassword: 'WrongPassword999!',
+          studentPin: '654321',
         });
 
       expect(response.status).toBe(401);
@@ -123,7 +123,7 @@ describe('Auth & Identity Integration Tests', () => {
     it('should register a new parent and verify with OTP', async () => {
       const regEmail = `reg_parent_${Date.now()}@test.com`;
       const regRes = await request(app)
-        .post('/auth/register')
+        .post('/api/auth/register')
         .send({
           fullName: 'New Registered Parent',
           email: regEmail,
@@ -136,7 +136,7 @@ describe('Auth & Identity Integration Tests', () => {
 
       // Verify OTP (default test OTP accepted)
       const verifyRes = await request(app)
-        .post('/auth/verify')
+        .post('/api/auth/verify')
         .send({
           email: regEmail,
           otp: '123456',
@@ -149,7 +149,7 @@ describe('Auth & Identity Integration Tests', () => {
     it('should block tutor from login while status is PENDING_VETTING', async () => {
       const pendingTutorEmail = `pending_tutor_${Date.now()}@test.com`;
       await request(app)
-        .post('/auth/register')
+        .post('/api/auth/register')
         .send({
           fullName: 'Pending Tutor',
           email: pendingTutorEmail,
@@ -160,7 +160,7 @@ describe('Auth & Identity Integration Tests', () => {
 
       // Verify email -> status becomes PENDING_VETTING
       await request(app)
-        .post('/auth/verify')
+        .post('/api/auth/verify')
         .send({
           email: pendingTutorEmail,
           otp: '123456',
@@ -168,7 +168,7 @@ describe('Auth & Identity Integration Tests', () => {
 
       // Attempt login -> should be blocked
       const loginRes = await request(app)
-        .post('/auth/login')
+        .post('/api/auth/login')
         .send({
           email: pendingTutorEmail,
           password: 'Password12345!',
@@ -195,14 +195,14 @@ describe('Auth & Identity Integration Tests', () => {
       });
 
       const loginRes = await request(app)
-        .post('/auth/login')
+        .post('/api/auth/login')
         .send({ email: suspendEmail, password: testPassword });
 
       const token = loginRes.body.accessToken;
 
       // Make authenticated call -> should succeed
       const beforeRes = await request(app)
-        .get('/auth/me')
+        .get('/api/auth/me')
         .set('Authorization', `Bearer ${token}`);
       expect(beforeRes.status).toBe(200);
 
@@ -214,7 +214,7 @@ describe('Auth & Identity Integration Tests', () => {
 
       // Make authenticated call with same unexpired token -> must be blocked
       const afterRes = await request(app)
-        .get('/auth/me')
+        .get('/api/auth/me')
         .set('Authorization', `Bearer ${token}`);
       expect(afterRes.status).toBe(403);
     });
@@ -223,14 +223,14 @@ describe('Auth & Identity Integration Tests', () => {
   describe('Timezone Handling', () => {
     it('should update timezone with valid IANA timezone', async () => {
       const res = await request(app)
-        .patch('/auth/me/timezone')
+        .patch('/api/auth/me/timezone')
         .set('Authorization', `Bearer ${parentToken}`)
         .send({ timezone: 'Africa/Lagos' });
 
       expect(res.status).toBe(200);
 
       const meRes = await request(app)
-        .get('/auth/me')
+        .get('/api/auth/me')
         .set('Authorization', `Bearer ${parentToken}`);
 
       expect(meRes.body.timezone).toBe('Africa/Lagos');
@@ -238,11 +238,101 @@ describe('Auth & Identity Integration Tests', () => {
 
     it('should reject invalid timezone format', async () => {
       const res = await request(app)
-        .patch('/auth/me/timezone')
+        .patch('/api/auth/me/timezone')
         .set('Authorization', `Bearer ${parentToken}`)
         .send({ timezone: 'Invalid/NonExistent_Zone' });
 
       expect(res.status).toBe(400);
+    });
+  });
+
+  describe('Student PIN Change', () => {
+    it('should allow student to change their PIN', async () => {
+      const res = await request(app)
+        .patch('/api/auth/change-pin')
+        .set('Authorization', `Bearer ${studentToken}`)
+        .send({
+          currentPin: studentPin,
+          newPin: '654321',
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.message).toBe('PIN changed successfully. Please login again.');
+    });
+
+    it('should allow student to login with new PIN after change', async () => {
+      // First change the PIN
+      await request(app)
+        .patch('/api/auth/change-pin')
+        .set('Authorization', `Bearer ${studentToken}`)
+        .send({
+          currentPin: studentPin,
+          newPin: '654321',
+        });
+
+      // Login with new PIN
+      const loginRes = await request(app)
+        .post('/api/auth/student-login')
+        .send({
+          parentEmail,
+          studentCode,
+          studentPin: '654321',
+        });
+
+      expect(loginRes.status).toBe(200);
+      expect(loginRes.body).toHaveProperty('accessToken');
+      expect(loginRes.body.user.role).toBe('STUDENT');
+    });
+
+    it('should reject non-student from changing PIN', async () => {
+      const res = await request(app)
+        .patch('/api/auth/change-pin')
+        .set('Authorization', `Bearer ${parentToken}`)
+        .send({
+          currentPin: '123456',
+          newPin: '654321',
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('Only students can change their PIN');
+    });
+
+    it('should reject PIN change with wrong current PIN', async () => {
+      const res = await request(app)
+        .patch('/api/auth/change-pin')
+        .set('Authorization', `Bearer ${studentToken}`)
+        .send({
+          currentPin: '000000',
+          newPin: '654321',
+        });
+
+      expect(res.status).toBe(401);
+      expect(res.body.error).toBe('Current PIN is incorrect');
+    });
+
+    it('should reject PIN change with invalid new PIN format', async () => {
+      const res = await request(app)
+        .patch('/api/auth/change-pin')
+        .set('Authorization', `Bearer ${studentToken}`)
+        .send({
+          currentPin: studentPin,
+          newPin: '12345', // Only 5 digits
+        });
+
+      expect(res.status).toBe(400);
+    });
+
+    it('should reject student from using change-password endpoint', async () => {
+      const res = await request(app)
+        .patch('/api/auth/change-password')
+        .set('Authorization', `Bearer ${studentToken}`)
+        .send({
+          currentPassword: studentPin,
+          newPassword: 'NewPassword123!',
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('Students must use the PIN change endpoint to update their PIN');
     });
   });
 });

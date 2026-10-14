@@ -1,5 +1,5 @@
 import prisma from '../../config/database';
-import { UpdateTutorVettingInput, AssignTutorInput, UpdateEnrollmentPricingInput, UpdatePricingTierInput, UpdateEnrollmentPricingOverrideInput } from './admin.validation';
+import { UpdateTutorVettingInput, AssignTutorInput, UpdateEnrollmentPricingInput, UpdatePricingTierInput, UpdateEnrollmentPricingOverrideInput, SuspendUserInput, AddPaymentNoteInput } from './admin.validation';
 import { hashPassword } from '../../utils/password.util';
 import { sendPasswordResetEmail } from '../../utils/email.util';
 import { logger } from '../../config/logger';
@@ -10,6 +10,7 @@ import { GradesService } from '../grades/grades.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { GradeBandTier } from '@prisma/client';
 import { CreateSessionInput, RescheduleSessionInput } from '../sessions/sessions.validation';
+import { config } from '../../config/env.config';
 
 export class AdminService {
   private enrollmentsService: EnrollmentsService;
@@ -46,52 +47,141 @@ export class AdminService {
     });
   }
 
-  async getTutors(filters?: { status?: string; availabilityStatus?: string; subjectId?: string; hasCapacity?: boolean }) {
+  async getTutors(filters?: {
+    status?: string;
+    vettingStatus?: string;
+    availabilityStatus?: string;
+    subjectId?: string;
+    hasCapacity?: boolean;
+    search?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const { status, vettingStatus, availabilityStatus, subjectId, hasCapacity, search, page = 1, limit = 20 } = filters || {};
+    const skip = (page - 1) * limit;
+
     const where: any = {
       role: 'TUTOR',
     };
 
     // Default to APPROVED if no status filter provided (useful for assign-tutor use case)
-    if (filters?.status) {
-      where.status = filters.status;
+    if (status) {
+      where.status = status;
     } else {
       where.status = 'APPROVED';
     }
 
-    if (filters?.availabilityStatus) {
+    if (vettingStatus) {
       where.tutorProfile = {
-        availabilityStatus: filters.availabilityStatus,
+        ...where.tutorProfile,
+        vettingStatus,
       };
     }
 
-    if (filters?.subjectId) {
+    if (availabilityStatus) {
+      where.tutorProfile = {
+        ...where.tutorProfile,
+        availabilityStatus,
+      };
+    }
+
+    if (subjectId) {
       where.tutorProfile = {
         ...where.tutorProfile,
         tutorSubjects: {
           some: {
-            subjectId: filters.subjectId,
+            subjectId,
           },
         },
       };
     }
 
-    const tutors = await prisma.user.findMany({
-      where,
-      include: {
-        tutorProfile: {
-          include: {
-            tutorSubjects: {
-              include: {
-                subject: true,
+    if (search) {
+      where.OR = [
+        { fullName: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    // When hasCapacity is true, we need to fetch all matching tutors first to filter by capacity
+    // Then apply pagination to the filtered results
+    if (hasCapacity) {
+      const allTutors = await prisma.user.findMany({
+        where,
+        include: {
+          tutorProfile: {
+            include: {
+              tutorSubjects: {
+                include: {
+                  subject: true,
+                },
               },
             },
           },
         },
-      },
-      orderBy: {
-        fullName: 'asc',
-      },
-    });
+        orderBy: {
+          fullName: 'asc',
+        },
+      });
+
+      // Add current student count for each tutor
+      const enrichedTutors = await Promise.all(
+        allTutors.map(async (tutor) => {
+          const currentStudentCount = await prisma.enrollment.count({
+            where: {
+              tutorId: tutor.id,
+              status: 'ACTIVE',
+            },
+          });
+
+          return {
+            ...tutor,
+            currentStudentCount,
+          };
+        })
+      );
+
+      // Filter by capacity
+      const filteredTutors = enrichedTutors.filter(tutor => {
+        const maxStudents = tutor.tutorProfile?.maxStudents;
+        if (!maxStudents) return true; // No limit set
+        return tutor.currentStudentCount < maxStudents;
+      });
+
+      // Apply pagination to filtered results
+      const paginatedTutors = filteredTutors.slice(skip, skip + limit);
+
+      return {
+        data: paginatedTutors,
+        page,
+        limit,
+        total: filteredTutors.length,
+      };
+    }
+
+    // Normal pagination without capacity filter
+    const [tutors, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        include: {
+          tutorProfile: {
+            include: {
+              tutorSubjects: {
+                include: {
+                  subject: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: {
+          fullName: 'asc',
+        },
+        skip,
+        take: Math.min(limit, 100),
+      }),
+      prisma.user.count({ where }),
+    ]);
 
     // Add current student count for each tutor
     const enrichedTutors = await Promise.all(
@@ -110,16 +200,282 @@ export class AdminService {
       })
     );
 
-    // Filter by capacity if requested
-    if (filters?.hasCapacity) {
-      return enrichedTutors.filter(tutor => {
-        const maxStudents = tutor.tutorProfile?.maxStudents;
-        if (!maxStudents) return true; // No limit set
-        return tutor.currentStudentCount < maxStudents;
-      });
+    return {
+      data: enrichedTutors,
+      page,
+      limit,
+      total,
+    };
+  }
+
+  async getTutorById(tutorId: string) {
+    const tutor = await prisma.user.findUnique({
+      where: { id: tutorId, role: 'TUTOR' },
+      include: {
+        tutorProfile: {
+          include: {
+            tutorSubjects: {
+              include: {
+                subject: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!tutor) {
+      throw new Error('Tutor not found');
     }
 
-    return enrichedTutors;
+    // Calculate metrics
+    const [
+      studentsCount,
+      sessionsCompleted,
+      sessionsMissed,
+      sessionsCancelled,
+      avgStudentGradePercentage,
+      avgStudentAttendanceRate,
+      reportsSubmitted,
+      assignmentsCreated,
+    ] = await Promise.all([
+      prisma.enrollment.count({
+        where: { tutorId, status: 'ACTIVE' },
+      }),
+      prisma.session.count({
+        where: { tutorId, status: 'COMPLETED' },
+      }),
+      prisma.session.count({
+        where: { tutorId, status: 'MISSED' },
+      }),
+      prisma.session.count({
+        where: { tutorId, status: 'CANCELLED' },
+      }),
+      // Average student grade percentage (approved grades only, using maxScore)
+      prisma.$queryRaw<Array<{ avg: number }>>`
+        SELECT COALESCE(AVG((g.score::float / NULLIF(g."maxScore", 100)) * 100), 0) as avg
+        FROM "Grade" g
+        INNER JOIN "Enrollment" e ON g."enrollmentId" = e.id
+        WHERE e."tutorId" = ${tutorId}
+        AND g.status = 'APPROVED'
+      `,
+      // Average student attendance rate
+      prisma.$queryRaw<Array<{ rate: number }>>`
+        SELECT COALESCE(
+          (COUNT(CASE WHEN sp.attended = true THEN 1 END)::float / NULLIF(COUNT(*), 0)) * 100,
+          0
+        ) as rate
+        FROM "SessionParticipant" sp
+        INNER JOIN "Session" s ON sp."sessionId" = s.id
+        WHERE s."tutorId" = ${tutorId}
+        AND s.status IN ('COMPLETED', 'MISSED')
+      `,
+      prisma.progressReport.count({
+        where: { createdBy: tutorId },
+      }),
+      prisma.assignment.count({
+        where: { createdBy: tutorId },
+      }),
+    ]);
+
+    return {
+      ...tutor,
+      metrics: {
+        studentsCount,
+        sessionsCompleted,
+        sessionsMissed,
+        sessionsCancelled,
+        avgStudentGradePercentage: Number(avgStudentGradePercentage[0]?.avg || 0),
+        avgStudentAttendanceRate: Number(avgStudentAttendanceRate[0]?.rate || 0),
+        reportsSubmitted,
+        assignmentsCreated,
+      },
+    };
+  }
+
+  async getTutorStudents(tutorId: string, page = 1, limit = 20) {
+    const skip = (page - 1) * limit;
+
+    const [enrollments, total] = await Promise.all([
+      prisma.enrollment.findMany({
+        where: { tutorId, status: 'ACTIVE', deletedAt: null },
+        include: {
+          student: {
+            include: {
+              user: {
+                select: {
+                  studentCode: true,
+                  status: true,
+                },
+              },
+            },
+          },
+          subject: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: Math.min(limit, 100),
+      }),
+      prisma.enrollment.count({
+        where: { tutorId, status: 'ACTIVE', deletedAt: null },
+      }),
+    ]);
+
+    return {
+      data: enrollments.map(e => ({
+        enrollmentId: e.id,
+        student: {
+          id: e.student.id,
+          fullName: e.student.fullName,
+          studentCode: e.student.user.studentCode,
+          gradeLevel: e.student.gradeLevel,
+          gradeBandTier: e.student.gradeBandTier,
+        },
+        subject: {
+          id: e.subject.id,
+          name: e.subject.name,
+        },
+        sessionFrequency: e.sessionFrequency,
+        startDate: e.startDate,
+      })),
+      page,
+      limit,
+      total,
+    };
+  }
+
+  async getTutorSessions(tutorId: string, filters?: { status?: string; from?: string; to?: string; page?: number; limit?: number }) {
+    const { status, from, to, page = 1, limit = 20 } = filters || {};
+    const skip = (page - 1) * limit;
+
+    const where: any = { tutorId };
+
+    if (status) {
+      where.status = status;
+    }
+
+    if (from || to) {
+      where.scheduledAt = {};
+      if (from) {
+        where.scheduledAt.gte = new Date(from);
+      }
+      if (to) {
+        where.scheduledAt.lte = new Date(to);
+      }
+    }
+
+    const [sessions, total] = await Promise.all([
+      prisma.session.findMany({
+        where,
+        include: {
+          participants: {
+            include: {
+              enrollment: {
+                include: {
+                  student: true,
+                  subject: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: { scheduledAt: 'desc' },
+        skip,
+        take: Math.min(limit, 100),
+      }),
+      prisma.session.count({ where }),
+    ]);
+
+    return {
+      data: sessions,
+      page,
+      limit,
+      total,
+    };
+  }
+
+  async getTutorGrades(tutorId: string, filters?: { status?: string; page?: number; limit?: number }) {
+    const { status, page = 1, limit = 20 } = filters || {};
+    const skip = (page - 1) * limit;
+
+    const where: any = {
+      enrollment: {
+        tutorId,
+      },
+    };
+
+    if (status) {
+      where.status = status;
+    }
+
+    const [grades, total] = await Promise.all([
+      prisma.grade.findMany({
+        where,
+        include: {
+          enrollment: {
+            include: {
+              student: true,
+              subject: true,
+            },
+          },
+          assignment: true,
+          grader: {
+            select: {
+              id: true,
+              fullName: true,
+            },
+          },
+          approver: {
+            select: {
+              id: true,
+              fullName: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: Math.min(limit, 100),
+      }),
+      prisma.grade.count({ where }),
+    ]);
+
+    return {
+      data: grades,
+      page,
+      limit,
+      total,
+    };
+  }
+
+  async getTutorProgressReports(tutorId: string, page = 1, limit = 20) {
+    const skip = (page - 1) * limit;
+
+    const [reports, total] = await Promise.all([
+      prisma.progressReport.findMany({
+        where: { createdBy: tutorId },
+        include: {
+          enrollment: {
+            include: {
+              student: true,
+              subject: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: Math.min(limit, 100),
+      }),
+      prisma.progressReport.count({
+        where: { createdBy: tutorId },
+      }),
+    ]);
+
+    return {
+      data: reports,
+      page,
+      limit,
+      total,
+    };
   }
 
   async updateTutorVetting(tutorId: string, data: UpdateTutorVettingInput) {
@@ -278,71 +634,201 @@ export class AdminService {
   }
 
   async getOverviewReport() {
-    // Use raw SQL for complex aggregate queries as specified
-    const activeStudents = await prisma.$queryRaw<Array<{ count: bigint }>>`
-      SELECT COUNT(DISTINCT s.id) as count
-      FROM "Student" s
-      INNER JOIN "Enrollment" e ON s.id = e."studentId"
-      WHERE e.status = 'ACTIVE'
-    `;
+    // Total users (User model does not have deletedAt)
+    const totalUsers = await prisma.user.count();
 
-    const activeTutors = await prisma.$queryRaw<Array<{ count: bigint }>>`
-      SELECT COUNT(*) as count
-      FROM "User" u
-      INNER JOIN "TutorProfile" tp ON u.id = tp."userId"
-      WHERE u.role = 'TUTOR' AND u.status = 'APPROVED' AND tp."vettingStatus" = 'APPROVED'
-    `;
-
-    const revenueThisMonth = await prisma.$queryRaw<Array<{ total: bigint }>>`
-      SELECT COALESCE(SUM(p.amount), 0) as total
-      FROM "Payment" p
-      WHERE p.status = 'SUCCESS'
-      AND p."paidAt" >= DATE_TRUNC('month', CURRENT_DATE)
-      AND p."paidAt" < DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month'
-    `;
-
-    const totalEnrollments = await prisma.enrollment.count({
-      where: { status: 'ACTIVE' },
+    // Total parents
+    const totalParents = await prisma.user.count({
+      where: { role: 'PARENT' },
     });
 
-    const pendingVetting = await prisma.user.count({
+    // Total students (exclude soft-deleted)
+    const totalStudents = await prisma.student.count({
+      where: { deletedAt: null },
+    });
+
+    // Total tutors
+    const totalTutors = await prisma.user.count({
+      where: { role: 'TUTOR' },
+    });
+
+    // Pending tutors (PENDING_VETTING status)
+    const pendingTutors = await prisma.user.count({
       where: {
         role: 'TUTOR',
         status: 'PENDING_VETTING',
       },
     });
 
+    // Active enrollments (exclude soft-deleted)
+    const activeEnrollments = await prisma.enrollment.count({
+      where: { status: 'ACTIVE', deletedAt: null },
+    });
+
+    // Pending payment enrollments (exclude soft-deleted)
+    const pendingPaymentEnrollments = await prisma.enrollment.count({
+      where: { status: 'PENDING_PAYMENT', deletedAt: null },
+    });
+
+    // Unmatched enrollments (PAID/ACTIVE with no tutor, exclude soft-deleted)
+    const unmatchedEnrollments = await prisma.enrollment.count({
+      where: {
+        status: 'ACTIVE',
+        tutorId: null,
+        deletedAt: null,
+      },
+    });
+
+    // Total revenue NGN (sum of successfully charged NGN amounts, exclude soft-deleted)
+    const totalRevenueNGN = await prisma.payment.aggregate({
+      where: {
+        status: 'SUCCESS',
+        currency: 'NGN',
+        deletedAt: null,
+      },
+      _sum: { amount: true },
+    });
+
+    // Revenue this month NGN (exclude soft-deleted)
+    const revenueThisMonthNGN = await prisma.$queryRaw<Array<{ total: bigint }>>`
+      SELECT COALESCE(SUM(p.amount), 0) as total
+      FROM "Payment" p
+      WHERE p.status = 'SUCCESS'
+      AND p.currency = 'NGN'
+      AND p."deletedAt" IS NULL
+      AND p."paidAt" >= DATE_TRUNC('month', CURRENT_DATE)
+      AND p."paidAt" < DATE_TRUNC('month', CURRENT_DATE) + INTERVAL '1 month'
+    `;
+
+    // Failed payments (exclude soft-deleted)
+    const failedPayments = await prisma.payment.count({
+      where: { status: 'FAILED', deletedAt: null },
+    });
+
+    // Pending grades (Grade model does not have deletedAt)
+    const pendingGrades = await prisma.grade.count({
+      where: { status: 'PENDING_APPROVAL' },
+    });
+
+    // Open complaints (Complaint model does not have deletedAt, only OPEN and RESOLVED statuses)
+    const openComplaints = await prisma.complaint.count({
+      where: { status: 'OPEN' },
+    });
+
+    // Suspended users (User model does not have deletedAt)
+    const suspendedUsers = await prisma.user.count({
+      where: { status: 'SUSPENDED' },
+    });
+
     return {
-      activeStudents: Number(activeStudents[0]?.count || 0),
-      activeTutors: Number(activeTutors[0]?.count || 0),
-      revenueThisMonth: Number(revenueThisMonth[0]?.total || 0),
-      totalEnrollments,
-      pendingVetting,
+      totalUsers: totalUsers || 0,
+      totalParents: totalParents || 0,
+      totalStudents: totalStudents || 0,
+      totalTutors: totalTutors || 0,
+      pendingTutors: pendingTutors || 0,
+      activeEnrollments: activeEnrollments || 0,
+      pendingPaymentEnrollments: pendingPaymentEnrollments || 0,
+      unmatchedEnrollments: unmatchedEnrollments || 0,
+      totalRevenueNGN: Number(totalRevenueNGN._sum.amount || 0),
+      revenueThisMonthNGN: Number(revenueThisMonthNGN[0]?.total || 0),
+      totalRevenue: Number(totalRevenueNGN._sum.amount || 0), // Deprecated alias
+      failedPayments: failedPayments || 0,
+      pendingGrades: pendingGrades || 0,
+      openComplaints: openComplaints || 0,
+      suspendedUsers: suspendedUsers || 0,
     };
   }
 
-  async getStudents(filters?: { parentId?: string }) {
-    const where: any = {};
+  async getStudents(filters?: {
+    parentId?: string;
+    search?: string;
+    status?: string;
+    gradeBandTier?: string;
+    enrolled?: boolean;
+    assigned?: boolean;
+    page?: number;
+    limit?: number;
+  }) {
+    const { parentId, search, status, gradeBandTier, enrolled, assigned, page = 1, limit = 20 } = filters || {};
+    const skip = (page - 1) * limit;
 
-    if (filters?.parentId) {
-      where.parentId = filters.parentId;
+    const where: any = {
+      deletedAt: null,
+    };
+
+    if (parentId) {
+      where.parentId = parentId;
     }
 
-    const students = await prisma.student.findMany({
-      where,
-      include: {
-        user: {
-          select: {
-            id: true,
-            studentCode: true,
-            status: true,
+    if (gradeBandTier) {
+      where.gradeBandTier = gradeBandTier;
+    }
+
+    if (search) {
+      where.OR = [
+        { fullName: { contains: search, mode: 'insensitive' } },
+        { user: { studentCode: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
+
+    if (status) {
+      where.user = {
+        ...where.user,
+        status,
+      };
+    }
+
+    if (enrolled !== undefined) {
+      if (enrolled) {
+        where.enrollments = {
+          some: { deletedAt: null },
+        };
+      } else {
+        where.enrollments = {
+          none: { deletedAt: null },
+        };
+      }
+    }
+
+    if (assigned !== undefined) {
+      if (assigned) {
+        where.enrollments = {
+          ...where.enrollments,
+          some: {
+            tutorId: { not: null },
+            deletedAt: null,
+          },
+        };
+      } else {
+        where.enrollments = {
+          ...where.enrollments,
+          every: {
+            tutorId: null,
+          },
+        };
+      }
+    }
+
+    const [students, total] = await Promise.all([
+      prisma.student.findMany({
+        where,
+        include: {
+          user: {
+            select: {
+              id: true,
+              studentCode: true,
+              status: true,
+            },
           },
         },
-      },
-      orderBy: {
-        fullName: 'asc',
-      },
-    });
+        orderBy: {
+          fullName: 'asc',
+        },
+        skip,
+        take: Math.min(limit, 100),
+      }),
+      prisma.student.count({ where }),
+    ]);
 
     // Fetch parent User records for all students in one query
     const parentIds = [...new Set(students.map(s => s.parentId).filter(Boolean))];
@@ -353,7 +839,7 @@ export class AdminService {
     const parentMap = new Map(parents.map(p => [p.id, p]));
 
     // Transform to match expected response format with parentName and studentCode
-    return students.map(student => ({
+    const data = students.map(student => ({
       id: student.id,
       parentId: student.parentId,
       parentName: parentMap.get(student.parentId)?.fullName ?? null,
@@ -361,12 +847,389 @@ export class AdminService {
       studentCode: student.user.studentCode,
       dateOfBirth: student.dateOfBirth,
       gradeLevel: student.gradeLevel,
+      gradeBandTier: student.gradeBandTier,
       school: student.school,
       notes: student.notes,
       status: student.user.status,
       createdAt: student.createdAt,
       parent: parentMap.get(student.parentId) ?? null,
     }));
+
+    return {
+      data,
+      page,
+      limit,
+      total,
+    };
+  }
+
+  async getStudentById(studentId: string) {
+    const student = await prisma.student.findUnique({
+      where: { id: studentId, deletedAt: null },
+      include: {
+        user: {
+          select: {
+            studentCode: true,
+            status: true,
+          },
+        },
+      },
+    });
+
+    if (!student) {
+      throw new Error('Student not found');
+    }
+
+    // Get parent summary
+    const parent = await prisma.user.findUnique({
+      where: { id: student.parentId },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        phone: true,
+      },
+    });
+
+    // Get enrollments with tutor and effective pricing
+    const enrollments = await prisma.enrollment.findMany({
+      where: { studentId, deletedAt: null },
+      include: {
+        subject: true,
+        tutor: {
+          select: {
+            id: true,
+            fullName: true,
+            profilePicture: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Enrich enrollments with effective pricing
+    const enrichedEnrollments = await Promise.all(
+      enrollments.map(async (enrollment) => {
+        let effectivePriceNGN: number | null = null;
+        let effectivePriceUSD: number | null = null;
+        let priceSource: string = 'error';
+
+        if (enrollment.yearlyPriceNGN && enrollment.yearlyPriceUSD) {
+          effectivePriceNGN = Number(enrollment.yearlyPriceNGN);
+          effectivePriceUSD = Number(enrollment.yearlyPriceUSD);
+          priceSource = 'override';
+        } else {
+          const subjectPrice = await prisma.subjectPrice.findUnique({
+            where: {
+              subjectId_gradeBandTier: {
+                subjectId: enrollment.subjectId,
+                gradeBandTier: student.gradeBandTier,
+              },
+            },
+          });
+
+          if (subjectPrice && subjectPrice.isActive) {
+            effectivePriceNGN = Number(subjectPrice.yearlyPriceNGN);
+            effectivePriceUSD = Number(subjectPrice.yearlyPriceUSD);
+            priceSource = 'subject_price';
+          }
+        }
+
+        return {
+          ...enrollment,
+          effectivePriceNGN,
+          effectivePriceUSD,
+          priceSource,
+        };
+      })
+    );
+
+    // Get attendance summary
+    const [attendedCount, missedCount] = await Promise.all([
+      prisma.sessionParticipant.count({
+        where: {
+          enrollment: { studentId },
+          attended: true,
+          session: { status: { in: ['COMPLETED', 'MISSED'] } },
+        },
+      }),
+      prisma.sessionParticipant.count({
+        where: {
+          enrollment: { studentId },
+          attended: false,
+          session: { status: 'MISSED' },
+        },
+      }),
+    ]);
+
+    // Get grade summary (approved average + pending count, using maxScore)
+    const approvedGrades = await prisma.grade.findMany({
+      where: {
+        enrollment: { studentId },
+        status: 'APPROVED',
+      },
+      select: { score: true, maxScore: true },
+    });
+
+    const avgGradePercentage = approvedGrades.length > 0
+      ? approvedGrades.reduce((sum, g) => {
+          const maxScore = Number(g.maxScore || 100);
+          return sum + (Number(g.score) / maxScore) * 100;
+        }, 0) / approvedGrades.length
+      : null;
+
+    const pendingGradesCount = await prisma.grade.count({
+      where: {
+        enrollment: { studentId },
+        status: 'PENDING_APPROVAL',
+      },
+    });
+
+    // Get assignment summary
+    const [assignmentsTotal, assignmentsCompleted, assignmentsPending] = await Promise.all([
+      prisma.assignment.count({
+        where: {
+          enrollment: { studentId },
+        },
+      }),
+      prisma.assignment.count({
+        where: {
+          enrollment: { studentId },
+          status: { in: ['COMPLETED', 'GRADED'] },
+        },
+      }),
+      prisma.assignment.count({
+        where: {
+          enrollment: { studentId },
+          status: 'PENDING',
+        },
+      }),
+    ]);
+
+    // Get recent sessions
+    const recentSessions = await prisma.session.findMany({
+      where: {
+        participants: {
+          some: {
+            enrollment: { studentId },
+          },
+        },
+      },
+      include: {
+        tutor: {
+          select: {
+            id: true,
+            fullName: true,
+          },
+        },
+      },
+      orderBy: { scheduledAt: 'desc' },
+      take: 5,
+    });
+
+    return {
+      ...student,
+      parent,
+      studentCode: student.user.studentCode,
+      status: student.user.status,
+      enrollments: enrichedEnrollments,
+      attendance: {
+        attended: attendedCount,
+        missed: missedCount,
+        total: attendedCount + missedCount,
+      },
+      grades: {
+        averagePercentage: avgGradePercentage,
+        approvedCount: approvedGrades.length,
+        pendingCount: pendingGradesCount,
+      },
+      assignments: {
+        total: assignmentsTotal,
+        completed: assignmentsCompleted,
+        pending: assignmentsPending,
+      },
+      recentSessions,
+    };
+  }
+
+  async getStudentEnrollments(studentId: string, page = 1, limit = 20) {
+    const skip = (page - 1) * limit;
+
+    const [enrollments, total] = await Promise.all([
+      prisma.enrollment.findMany({
+        where: { studentId, deletedAt: null },
+        include: {
+          subject: true,
+          tutor: {
+            select: {
+              id: true,
+              fullName: true,
+              profilePicture: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: Math.min(limit, 100),
+      }),
+      prisma.enrollment.count({
+        where: { studentId, deletedAt: null },
+      }),
+    ]);
+
+    return {
+      data: enrollments,
+      page,
+      limit,
+      total,
+    };
+  }
+
+  async getStudentGrades(studentId: string, page = 1, limit = 20) {
+    const skip = (page - 1) * limit;
+
+    const [grades, total] = await Promise.all([
+      prisma.grade.findMany({
+        where: {
+          enrollment: { studentId },
+        },
+        include: {
+          enrollment: {
+            include: {
+              subject: true,
+            },
+          },
+          assignment: true,
+          grader: {
+            select: {
+              id: true,
+              fullName: true,
+            },
+          },
+          approver: {
+            select: {
+              id: true,
+              fullName: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: Math.min(limit, 100),
+      }),
+      prisma.grade.count({
+        where: {
+          enrollment: { studentId },
+        },
+      }),
+    ]);
+
+    return {
+      data: grades,
+      page,
+      limit,
+      total,
+    };
+  }
+
+  async getStudentAttendance(studentId: string, page = 1, limit = 20) {
+    const skip = (page - 1) * limit;
+
+    const [sessions, total] = await Promise.all([
+      prisma.session.findMany({
+        where: {
+          participants: {
+            some: {
+              enrollment: { studentId },
+            },
+          },
+        },
+        include: {
+          participants: {
+            where: {
+              enrollment: { studentId },
+            },
+          },
+          tutor: {
+            select: {
+              id: true,
+              fullName: true,
+            },
+          },
+        },
+        orderBy: { scheduledAt: 'desc' },
+        skip,
+        take: Math.min(limit, 100),
+      }),
+      prisma.session.count({
+        where: {
+          participants: {
+            some: {
+              enrollment: { studentId },
+            },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      data: sessions,
+      page,
+      limit,
+      total,
+    };
+  }
+
+  async getStudentSessions(studentId: string, page = 1, limit = 20) {
+    const skip = (page - 1) * limit;
+
+    const [sessions, total] = await Promise.all([
+      prisma.session.findMany({
+        where: {
+          participants: {
+            some: {
+              enrollment: { studentId },
+            },
+          },
+        },
+        include: {
+          participants: {
+            include: {
+              enrollment: {
+                include: {
+                  subject: true,
+                },
+              },
+            },
+          },
+          tutor: {
+            select: {
+              id: true,
+              fullName: true,
+            },
+          },
+        },
+        orderBy: { scheduledAt: 'desc' },
+        skip,
+        take: Math.min(limit, 100),
+      }),
+      prisma.session.count({
+        where: {
+          participants: {
+            some: {
+              enrollment: { studentId },
+            },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      data: sessions,
+      page,
+      limit,
+      total,
+    };
   }
 
   async regenerateStudentPin(studentId: string, adminId: string) {
@@ -408,8 +1271,8 @@ export class AdminService {
     if (parent?.email && parent.fullName) {
       await sendPasswordResetEmail(
         parent.email,
-        parent.fullName,
-        plainPin
+        'password_reset',
+        { name: parent.fullName, newPin: plainPin }
       );
     }
 
@@ -436,24 +1299,40 @@ export class AdminService {
     return this.sessionsService.rescheduleSession(sessionId, data);
   }
 
-  async getSuspendedUsers() {
-    return prisma.user.findMany({
-      where: {
-        status: 'SUSPENDED',
-      },
-      select: {
-        id: true,
-        fullName: true,
-        email: true,
-        phone: true,
-        role: true,
-        status: true,
-        studentCode: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-      orderBy: { updatedAt: 'desc' },
-    });
+  async getSuspendedUsers(page = 1, limit = 20) {
+    const skip = (page - 1) * limit;
+
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where: {
+          status: 'SUSPENDED',
+        },
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+          phone: true,
+          role: true,
+          status: true,
+          studentCode: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+        orderBy: { updatedAt: 'desc' },
+        skip,
+        take: Math.min(limit, 100),
+      }),
+      prisma.user.count({
+        where: { status: 'SUSPENDED' },
+      }),
+    ]);
+
+    return {
+      data: users,
+      page,
+      limit,
+      total,
+    };
   }
 
   async reactivateUser(userId: string, adminId: string) {
@@ -485,6 +1364,193 @@ export class AdminService {
     });
 
     logger.info({ userId, adminId, newStatus }, 'User reactivated by admin');
+    return updated;
+  }
+
+  async suspendUser(userId: string, data: SuspendUserInput, adminId: string) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    if (user.status === 'SUSPENDED') {
+      throw new Error('User is already suspended');
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: { status: 'SUSPENDED' },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        role: true,
+        status: true,
+      },
+    });
+
+    // If suspending a tutor, find affected active enrollments
+    let affectedEnrollments: any[] = [];
+    if (user.role === 'TUTOR') {
+      affectedEnrollments = await prisma.enrollment.findMany({
+        where: {
+          tutorId: userId,
+          status: 'ACTIVE',
+          deletedAt: null,
+        },
+        include: {
+          student: true,
+          subject: true,
+        },
+      });
+
+      // Notify admin about affected enrollments for reassignment
+      if (affectedEnrollments.length > 0) {
+        logger.info(
+          { userId, adminId, affectedCount: affectedEnrollments.length },
+          'Tutor suspended with active enrollments - admin notified for reassignment'
+        );
+      }
+    }
+
+    // Revoke all refresh tokens for security
+    await prisma.refreshToken.deleteMany({
+      where: { userId },
+    });
+
+    // Send suspension notification email
+    if (user.email) {
+      await this.notificationsService.createNotification({
+        userId,
+        type: 'ACCOUNT_SUSPENDED',
+        title: 'Account Suspended',
+        message: `Your account has been suspended for the following reason: ${data.reason}`,
+        data: { reason: data.reason },
+      });
+
+      // Send email notification
+      await sendPasswordResetEmail(user.email, 'account_suspended', {
+        fullName: user.fullName,
+        reason: data.reason,
+      });
+    }
+
+    logger.info({ userId, adminId, reason: data.reason }, 'User suspended by admin');
+
+    return {
+      user: updated,
+      affectedEnrollments,
+    };
+  }
+
+  async addPaymentNote(paymentId: string, data: AddPaymentNoteInput, adminId: string) {
+    const payment = await prisma.payment.findUnique({
+      where: { id: paymentId },
+    });
+
+    if (!payment) {
+      throw new Error('Payment not found');
+    }
+
+    const updated = await prisma.payment.update({
+      where: { id: paymentId },
+      data: { adminNote: data.note },
+    });
+
+    // Log to admin action log
+    await prisma.adminActionLog.create({
+      data: {
+        adminId,
+        action: 'ADD_PAYMENT_NOTE',
+        targetType: 'PAYMENT',
+        targetId: paymentId,
+        details: { note: data.note },
+      },
+    });
+
+    logger.info({ paymentId, adminId }, 'Admin added note to payment');
+
+    return updated;
+  }
+
+  async reverifyPayment(paymentId: string, adminId: string) {
+    const payment = await prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: {
+        enrollment: true,
+      },
+    });
+
+    if (!payment) {
+      throw new Error('Payment not found');
+    }
+
+    if (payment.status !== 'PENDING') {
+      throw new Error('Payment is not in PENDING status');
+    }
+
+    if (!payment.providerReference) {
+      throw new Error('Payment has no provider reference to verify');
+    }
+
+    // Call Paystack verify API server-side
+    const paystackUrl = `https://api.paystack.co/transaction/verify/${payment.providerReference}`;
+    const paystackKey = process.env.PAYSTACK_SECRET_KEY;
+
+    if (!paystackKey) {
+      throw new Error('Paystack secret key not configured');
+    }
+
+    const response = await fetch(paystackUrl, {
+      headers: {
+        Authorization: `Bearer ${paystackKey}`,
+      },
+    });
+
+    const result: any = await response.json();
+
+    if (!result.status || result.data.status !== 'success') {
+      throw new Error('Payment verification failed: ' + (result.message || 'Unknown error'));
+    }
+
+    // Update payment status if successful
+    const updated = await prisma.payment.update({
+      where: { id: paymentId },
+      data: {
+        status: 'SUCCESS',
+        paidAt: new Date(result.data.paid_at),
+      },
+    });
+
+    // Activate enrollment(s) idempotently
+    if (payment.enrollmentId) {
+      await prisma.enrollment.update({
+        where: { id: payment.enrollmentId },
+        data: { status: 'ACTIVE' },
+      });
+    } else if (payment.enrollmentGroupId) {
+      await prisma.enrollment.updateMany({
+        where: { enrollmentGroupId: payment.enrollmentGroupId },
+        data: { status: 'ACTIVE' },
+      });
+    }
+
+    // Log to admin action log
+    await prisma.adminActionLog.create({
+      data: {
+        adminId,
+        action: 'REVERIFY_PAYMENT',
+        targetType: 'PAYMENT',
+        targetId: paymentId,
+        details: { providerReference: payment.providerReference },
+      },
+    });
+
+    logger.info({ paymentId, adminId }, 'Admin reverified payment and activated enrollment');
+
     return updated;
   }
 
@@ -1061,6 +2127,11 @@ export class AdminService {
     const { status, currency, provider, parentId, from, to, search, page = 1, limit = 20 } = filters || {};
     const skip = (page - 1) * limit;
 
+    // Validate provider filter - only PAYSTACK is supported
+    if (provider && provider !== 'PAYSTACK') {
+      throw new Error('Invalid payment provider. Only PAYSTACK is supported.');
+    }
+
     const where: any = {};
 
     if (status) {
@@ -1291,5 +2362,71 @@ export class AdminService {
         amount: Number(item.amount),
       })),
     };
+  }
+
+  async getEmailDiagnostics() {
+    const diagnostics = {
+      configured: !!config.RESEND_API_KEY,
+      emailFrom: config.EMAIL_FROM,
+      emailReplyTo: config.EMAIL_REPLY_TO || 'Not configured',
+      domainStatus: 'unknown',
+      domain: 'teachmenest.com',
+    };
+
+    if (!config.RESEND_API_KEY) {
+      return {
+        ...diagnostics,
+        domainStatus: 'error',
+        message: 'Resend API key not configured',
+      };
+    }
+
+    try {
+      // Extract domain from EMAIL_FROM
+      const emailMatch = config.EMAIL_FROM.match(/<([^>]+)>/);
+      const senderEmail = emailMatch ? emailMatch[1] : config.EMAIL_FROM;
+      const domain = senderEmail.split('@')[1];
+
+      // Call Resend API to check domain verification status
+      const response = await fetch(`https://api.resend.com/v1/domains/${domain}`, {
+        headers: {
+          'Authorization': `Bearer ${config.RESEND_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const domainData = await response.json();
+        return {
+          ...diagnostics,
+          domain,
+          domainStatus: domainData.status || 'verified',
+          dnsRecords: domainData.dnsRecords || [],
+          message: 'Domain verification status retrieved successfully',
+        };
+      } else if (response.status === 404) {
+        return {
+          ...diagnostics,
+          domain,
+          domainStatus: 'not_found',
+          message: 'Domain not found in Resend. Please add it in the Resend dashboard.',
+        };
+      } else {
+        const error = await response.text();
+        return {
+          ...diagnostics,
+          domain,
+          domainStatus: 'error',
+          message: `Resend API error: ${response.status} - ${error}`,
+        };
+      }
+    } catch (error) {
+      logger.error({ error: error instanceof Error ? error.message : String(error) }, 'Failed to check Resend domain status');
+      return {
+        ...diagnostics,
+        domainStatus: 'error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
   }
 }

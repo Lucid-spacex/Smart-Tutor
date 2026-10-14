@@ -32,6 +32,11 @@
  *                 format: uuid
  *               score:
  *                 type: number
+ *                 description: 'Score achieved (must be <= maxScore)'
+ *               maxScore:
+ *                 type: number
+ *                 default: 100
+ *                 description: 'Maximum possible score (default 100)'
  *               comments:
  *                 type: string
  *     responses:
@@ -151,6 +156,10 @@
  *             properties:
  *               score:
  *                 type: number
+ *                 description: 'Score achieved (must be <= maxScore)'
+ *               maxScore:
+ *                 type: number
+ *                 description: 'Maximum possible score'
  *               comments:
  *                 type: string
  *               removeAttachment:

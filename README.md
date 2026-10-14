@@ -164,11 +164,12 @@ Smart-Tutor/
    PORT=3000
    NODE_ENV="development"
    ALLOWED_ORIGINS="http://localhost:3000,http://localhost:3001"
-   # For production: ALLOWED_ORIGINS="https://teach-me-hub.vercel.app"
+   # For production: ALLOWED_ORIGINS="https://teachmenest.com"
 
-   # Email (Brevo API)
-   BREVO_API_KEY="your-brevo-api-key"
-   EMAIL_FROM="TeachMeHub <noreply@teachmehub.com>"
+   # Email (Resend API)
+   RESEND_API_KEY="your-resend-api-key"
+   EMAIL_FROM="Teachmenest <no-reply@teachmenest.com>"
+   EMAIL_REPLY_TO="support@teachmenest.com"
 
    # Exchange Rate API (for pricing drift monitoring)
    EXCHANGERATE_API_KEY="your-exchangerate-api-key"
@@ -321,13 +322,13 @@ npm run test:coverage
 ## Development Notes
 
 ### OTP Verification
-OTP verification is fully implemented with SHA-256 hashing, 15-minute expiry, one-time use, and rate limiting. OTPs are sent via email using the Brevo API.
+OTP verification is fully implemented with SHA-256 hashing, 15-minute expiry, one-time use, and rate limiting. OTPs are sent via email using the Resend API.
 
 ### Payment Integration
-Payment processing uses the real Paystack API with webhook signature verification. The callback URL is set to the production frontend (`https://teach-me-hub.vercel.app/payment/callback`).
+Payment processing uses the real Paystack API with webhook signature verification. The callback URL is set to the production frontend (`https://teachmenest.com/payment/callback`).
 
 ### Email Service
-Email functionality is fully implemented using the Brevo API. Emails are sent for OTP verification, student credentials, notifications, and account suspension.
+Email functionality is fully implemented using the Resend API. Emails are sent for OTP verification, student credentials, notifications, and account suspension.
 
 ### New Features (2026-10-12)
 
@@ -381,7 +382,8 @@ Before deploying to production:
 1. **Environment Variables**
    - Set strong, unique JWT secrets (ACCESS_SECRET, REFRESH_SECRET)
    - Configure PAYSTACK_SECRET_KEY and PAYSTACK_PUBLIC_KEY
-   - Set BREVO_API_KEY for email delivery
+   - Set RESEND_API_KEY for email delivery
+   - Configure EMAIL_FROM="Teachmenest <no-reply@teachmenest.com>"
    - Configure ALLOWED_ORIGINS to production frontend URL
    - Set CLOUDINARY credentials for file storage
    - Configure EXCHANGERATE_API_KEY for pricing drift monitoring
@@ -404,7 +406,7 @@ Before deploying to production:
 4. **Services**
    - Configure Paystack webhook URL
    - Set up Zoom webhook for recording sync (to be replaced with Google Meet)
-   - Verify email delivery via Brevo
+   - Verify email delivery via Resend
    - Test Cloudinary file uploads
 
 5. **Monitoring**

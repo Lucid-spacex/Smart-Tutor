@@ -22,7 +22,7 @@
  *
  * /admin/tutors:
  *   get:
- *     summary: Get all tutors with optional filters
+ *     summary: Get all tutors with optional filters and pagination
  *     tags: [Admin - Pricing]
  *     security:
  *       - bearerAuth: []
@@ -31,22 +31,392 @@
  *         name: status
  *         schema:
  *           type: string
+ *           enum: [APPROVED, PENDING_VETTING, REJECTED, SUSPENDED]
+ *         description: Filter by user status
+ *       - in: query
+ *         name: vettingStatus
+ *         schema:
+ *           type: string
  *           enum: [PENDING, APPROVED, REJECTED]
  *         description: Filter by vetting status
  *       - in: query
- *         name: subject
+ *         name: availabilityStatus
  *         schema:
  *           type: string
+ *           enum: [AVAILABLE, LIMITED, UNAVAILABLE]
+ *         description: Filter by availability status
+ *       - in: query
+ *         name: subjectId
+ *         schema:
+ *           type: string
+ *           format: uuid
  *         description: Filter by subject
+ *       - in: query
+ *         name: hasCapacity
+ *         schema:
+ *           type: boolean
+ *         description: Only return tutors with capacity
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Search by name or email
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *           maximum: 100
+ *         description: Items per page
  *     responses:
  *       200:
- *         description: List of tutors
+ *         description: Paginated list of tutors
  *         content:
  *           application/json:
  *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/TutorProfile'
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/TutorProfile'
+ *                 page:
+ *                   type: integer
+ *                 limit:
+ *                   type: integer
+ *                 total:
+ *                   type: integer
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized - user is not an admin
+ *
+ * /admin/tutors/{id}:
+ *   get:
+ *     summary: Get detailed tutor profile with metrics
+ *     tags: [Admin - Pricing]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Detailed tutor profile with metrics
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                   format: uuid
+ *                 fullName:
+ *                   type: string
+ *                 email:
+ *                   type: string
+ *                 phone:
+ *                   type: string
+ *                 status:
+ *                   type: string
+ *                 tutorProfile:
+ *                   type: object
+ *                   properties:
+ *                     bio:
+ *                       type: string
+ *                     hourlyRate:
+ *                       type: number
+ *                     credentialsUrl:
+ *                       type: string
+ *                     availability:
+ *                       type: object
+ *                     availabilityStatus:
+ *                       type: string
+ *                       enum: [AVAILABLE, LIMITED, UNAVAILABLE]
+ *                     maxStudents:
+ *                       type: integer
+ *                     tutorSubjects:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           subject:
+ *                             type: object
+ *                             properties:
+ *                               id:
+ *                                 type: string
+ *                               name:
+ *                                 type: string
+ *                 metrics:
+ *                   type: object
+ *                   properties:
+ *                     studentsCount:
+ *                       type: integer
+ *                     sessionsCompleted:
+ *                       type: integer
+ *                     sessionsMissed:
+ *                       type: integer
+ *                     sessionsCancelled:
+ *                       type: integer
+ *                     avgStudentGradePercentage:
+ *                       type: number
+ *                     avgStudentAttendanceRate:
+ *                       type: number
+ *                     reportsSubmitted:
+ *                       type: integer
+ *                     assignmentsCreated:
+ *                       type: integer
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized - user is not an admin
+ *       404:
+ *         description: Tutor not found
+ *
+ * /admin/tutors/{id}/students:
+ *   get:
+ *     summary: Get paginated list of tutor's students
+ *     tags: [Admin - Pricing]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *           maximum: 100
+ *     responses:
+ *       200:
+ *         description: Paginated list of students
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       enrollmentId:
+ *                         type: string
+ *                         format: uuid
+ *                       student:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: string
+ *                             format: uuid
+ *                           fullName:
+ *                             type: string
+ *                           studentCode:
+ *                             type: string
+ *                           gradeLevel:
+ *                             type: string
+ *                           gradeBandTier:
+ *                             type: string
+ *                       subject:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: string
+ *                             format: uuid
+ *                           name:
+ *                             type: string
+ *                       sessionFrequency:
+ *                         type: string
+ *                       startDate:
+ *                         type: string
+ *                         format: date
+ *                 page:
+ *                   type: integer
+ *                 limit:
+ *                   type: integer
+ *                 total:
+ *                   type: integer
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized - user is not an admin
+ *
+ * /admin/tutors/{id}/sessions:
+ *   get:
+ *     summary: Get paginated list of tutor's sessions with filters
+ *     tags: [Admin - Pricing]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [SCHEDULED, COMPLETED, MISSED, CANCELLED]
+ *       - in: query
+ *         name: from
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *       - in: query
+ *         name: to
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *           maximum: 100
+ *     responses:
+ *       200:
+ *         description: Paginated list of sessions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Session'
+ *                 page:
+ *                   type: integer
+ *                 limit:
+ *                   type: integer
+ *                 total:
+ *                   type: integer
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized - user is not an admin
+ *
+ * /admin/tutors/{id}/grades:
+ *   get:
+ *     summary: Get paginated list of tutor's grades
+ *     tags: [Admin - Pricing]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [PENDING_APPROVAL, APPROVED, REJECTED]
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *           maximum: 100
+ *     responses:
+ *       200:
+ *         description: Paginated list of grades
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Grade'
+ *                 page:
+ *                   type: integer
+ *                 limit:
+ *                   type: integer
+ *                 total:
+ *                   type: integer
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized - user is not an admin
+ *
+ * /admin/tutors/{id}/progress-reports:
+ *   get:
+ *     summary: Get paginated list of tutor's progress reports
+ *     tags: [Admin - Pricing]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *           maximum: 100
+ *     responses:
+ *       200:
+ *         description: Paginated list of progress reports
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/ProgressReport'
+ *                 page:
+ *                   type: integer
+ *                 limit:
+ *                   type: integer
+ *                 total:
+ *                   type: integer
  *       401:
  *         description: Not authenticated
  *       403:
@@ -217,13 +587,34 @@
  *               properties:
  *                 totalUsers:
  *                   type: integer
- *                 totalEnrollments:
+ *                 totalParents:
  *                   type: integer
+ *                 totalStudents:
+ *                   type: integer
+ *                 totalTutors:
+ *                   type: integer
+ *                 pendingTutors:
+ *                   type: integer
+ *                 activeEnrollments:
+ *                   type: integer
+ *                 pendingPaymentEnrollments:
+ *                   type: integer
+ *                 unmatchedEnrollments:
+ *                   type: integer
+ *                 totalRevenueNGN:
+ *                   type: number
+ *                 revenueThisMonthNGN:
+ *                   type: number
  *                 totalRevenue:
  *                   type: number
- *                 activeTutors:
+ *                   description: Deprecated alias of totalRevenueNGN
+ *                 failedPayments:
  *                   type: integer
- *                 pendingVetting:
+ *                 pendingGrades:
+ *                   type: integer
+ *                 openComplaints:
+ *                   type: integer
+ *                 suspendedUsers:
  *                   type: integer
  *       401:
  *         description: Not authenticated
@@ -232,30 +623,403 @@
  *
  * /admin/students:
  *   get:
- *     summary: Get all students with optional filters
+ *     summary: Get paginated list of students with optional filters
  *     tags: [Admin - Pricing]
  *     security:
  *       - bearerAuth: []
  *     parameters:
  *       - in: query
- *         name: gradeBand
+ *         name: search
  *         schema:
  *           type: string
- *         description: Filter by grade band
+ *         description: Search by name or student code
  *       - in: query
  *         name: status
  *         schema:
  *           type: string
- *         description: Filter by status
+ *           enum: [UNVERIFIED, ACTIVE, PENDING_VETTING, APPROVED, REJECTED, SUSPENDED]
+ *         description: Filter by user status
+ *       - in: query
+ *         name: gradeBandTier
+ *         schema:
+ *           type: string
+ *           enum: [PRESCHOOL_TO_G1, G2_TO_G4, G5_TO_G8, G9_TO_G12]
+ *         description: Filter by grade band tier
+ *       - in: query
+ *         name: enrolled
+ *         schema:
+ *           type: boolean
+ *         description: Filter by enrollment status
+ *       - in: query
+ *         name: assigned
+ *         schema:
+ *           type: boolean
+ *         description: Filter by tutor assignment status
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *           maximum: 100
  *     responses:
  *       200:
- *         description: List of students
+ *         description: Paginated list of students
  *         content:
  *           application/json:
  *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/Student'
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         format: uuid
+ *                       parentId:
+ *                         type: string
+ *                         format: uuid
+ *                       parentName:
+ *                         type: string
+ *                       fullName:
+ *                         type: string
+ *                       studentCode:
+ *                         type: string
+ *                       dateOfBirth:
+ *                         type: string
+ *                         format: date
+ *                       gradeLevel:
+ *                         type: string
+ *                       gradeBandTier:
+ *                         type: string
+ *                       school:
+ *                         type: string
+ *                       notes:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *                       createdAt:
+ *                         type: string
+ *                         format: date-time
+ *                 page:
+ *                   type: integer
+ *                 limit:
+ *                   type: integer
+ *                 total:
+ *                   type: integer
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized - user is not an admin
+ *
+ * /admin/students/{id}:
+ *   get:
+ *     summary: Get detailed student profile
+ *     tags: [Admin - Pricing]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Detailed student profile
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                   format: uuid
+ *                 fullName:
+ *                   type: string
+ *                 studentCode:
+ *                   type: string
+ *                 dateOfBirth:
+ *                   type: string
+ *                   format: date
+ *                 gradeLevel:
+ *                   type: string
+ *                 gradeBandTier:
+ *                   type: string
+ *                 school:
+ *                   type: string
+ *                 notes:
+ *                   type: string
+ *                 parent:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                     fullName:
+ *                       type: string
+ *                     email:
+ *                       type: string
+ *                     phone:
+ *                       type: string
+ *                 enrollments:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         format: uuid
+ *                       subject:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: string
+ *                           name:
+ *                             type: string
+ *                       tutor:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: string
+ *                           fullName:
+ *                             type: string
+ *                           profilePicture:
+ *                             type: string
+ *                       effectivePriceNGN:
+ *                         type: number
+ *                       effectivePriceUSD:
+ *                         type: number
+ *                       priceSource:
+ *                         type: string
+ *                 attendance:
+ *                   type: object
+ *                   properties:
+ *                     attended:
+ *                       type: integer
+ *                     missed:
+ *                       type: integer
+ *                     total:
+ *                       type: integer
+ *                 grades:
+ *                   type: object
+ *                   properties:
+ *                     averagePercentage:
+ *                       type: number
+ *                       nullable: true
+ *                     approvedCount:
+ *                       type: integer
+ *                     pendingCount:
+ *                       type: integer
+ *                 assignments:
+ *                   type: object
+ *                   properties:
+ *                     total:
+ *                       type: integer
+ *                     completed:
+ *                       type: integer
+ *                     pending:
+ *                       type: integer
+ *                 recentSessions:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Session'
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized - user is not an admin
+ *       404:
+ *         description: Student not found
+ *
+ * /admin/students/{id}/enrollments:
+ *   get:
+ *     summary: Get paginated list of student's enrollments
+ *     tags: [Admin - Pricing]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *           maximum: 100
+ *     responses:
+ *       200:
+ *         description: Paginated list of enrollments
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Enrollment'
+ *                 page:
+ *                   type: integer
+ *                 limit:
+ *                   type: integer
+ *                 total:
+ *                   type: integer
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized - user is not an admin
+ *
+ * /admin/students/{id}/grades:
+ *   get:
+ *     summary: Get paginated list of student's grades (includes pending)
+ *     tags: [Admin - Pricing]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *           maximum: 100
+ *     responses:
+ *       200:
+ *         description: Paginated list of grades
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Grade'
+ *                 page:
+ *                   type: integer
+ *                 limit:
+ *                   type: integer
+ *                 total:
+ *                   type: integer
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized - user is not an admin
+ *
+ * /admin/students/{id}/attendance:
+ *   get:
+ *     summary: Get paginated list of student's attendance records
+ *     tags: [Admin - Pricing]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *           maximum: 100
+ *     responses:
+ *       200:
+ *         description: Paginated list of sessions with attendance
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Session'
+ *                 page:
+ *                   type: integer
+ *                 limit:
+ *                   type: integer
+ *                 total:
+ *                   type: integer
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized - user is not an admin
+ *
+ * /admin/students/{id}/sessions:
+ *   get:
+ *     summary: Get paginated list of student's sessions
+ *     tags: [Admin - Pricing]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *           maximum: 100
+ *     responses:
+ *       200:
+ *         description: Paginated list of sessions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Session'
+ *                 page:
+ *                   type: integer
+ *                 limit:
+ *                   type: integer
+ *                 total:
+ *                   type: integer
  *       401:
  *         description: Not authenticated
  *       403:
@@ -295,23 +1059,111 @@
  *
  * /admin/users/suspended:
  *   get:
- *     summary: Get all suspended users
+ *     summary: Get paginated list of suspended users
  *     tags: [Admin - Pricing]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *           maximum: 100
  *     responses:
  *       200:
- *         description: List of suspended users
+ *         description: Paginated list of suspended users
  *         content:
  *           application/json:
  *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/User'
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/User'
+ *                 page:
+ *                   type: integer
+ *                 limit:
+ *                   type: integer
+ *                 total:
+ *                   type: integer
  *       401:
  *         description: Not authenticated
  *       403:
  *         description: Not authorized - user is not an admin
+ *
+ * /admin/users/{id}/suspend:
+ *   patch:
+ *     summary: Suspend user account
+ *     tags: [Admin - Pricing]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - reason
+ *             properties:
+ *               reason:
+ *                 type: string
+ *                 description: Reason for suspension
+ *     responses:
+ *       200:
+ *         description: User suspended successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 user:
+ *                   $ref: '#/components/schemas/User'
+ *                 affectedEnrollments:
+ *                   type: array
+ *                   description: For tutors only - active enrollments that need reassignment
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         format: uuid
+ *                       student:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: string
+ *                           fullName:
+ *                             type: string
+ *                       subject:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: string
+ *                           name:
+ *                             type: string
+ *       400:
+ *         description: Validation error
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized - user is not an admin
+ *       404:
+ *         description: User not found
  *
  * /admin/users/{id}/reactivate:
  *   patch:
@@ -555,7 +1407,7 @@
  *             schema:
  *               type: object
  *               properties:
- *                 parents:
+ *                 data:
  *                   type: array
  *                   items:
  *                     type: object
@@ -575,17 +1427,21 @@
  *                         type: integer
  *                       activeEnrollments:
  *                         type: integer
- *                 pagination:
- *                   type: object
- *                   properties:
- *                     page:
- *                       type: integer
- *                     limit:
- *                       type: integer
- *                     total:
- *                       type: integer
- *                     totalPages:
- *                       type: integer
+ *                       pendingPaymentCount:
+ *                         type: integer
+ *                       totalPaidNGN:
+ *                         type: number
+ *                       totalPaidUSD:
+ *                         type: number
+ *                       createdAt:
+ *                         type: string
+ *                         format: date-time
+ *                 page:
+ *                   type: integer
+ *                 limit:
+ *                   type: integer
+ *                 total:
+ *                   type: integer
  *       401:
  *         description: Not authenticated
  *       403:
@@ -724,7 +1580,7 @@
  *         name: provider
  *         schema:
  *           type: string
- *           enum: [PAYSTACK, STRIPE]
+ *           enum: [PAYSTACK]
  *         description: Filter by provider
  *       - in: query
  *         name: parentId
@@ -769,21 +1625,16 @@
  *             schema:
  *               type: object
  *               properties:
- *                 payments:
+ *                 data:
  *                   type: array
  *                   items:
  *                     $ref: '#/components/schemas/Payment'
- *                 pagination:
- *                   type: object
- *                   properties:
- *                     page:
- *                       type: integer
- *                     limit:
- *                       type: integer
- *                     total:
- *                       type: integer
- *                     totalPages:
- *                       type: integer
+ *                 page:
+ *                   type: integer
+ *                 limit:
+ *                   type: integer
+ *                 total:
+ *                   type: integer
  *       401:
  *         description: Not authenticated
  *       403:
@@ -898,6 +1749,78 @@
  *         description: Not authenticated
  *       403:
  *         description: Not authorized - user is not an admin
+ *
+ * /admin/payments/{id}/note:
+ *   patch:
+ *     summary: Add admin note to payment
+ *     tags: [Admin - Pricing]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - note
+ *             properties:
+ *               note:
+ *                 type: string
+ *                 description: Admin-only note for internal tracking
+ *     responses:
+ *       200:
+ *         description: Payment note added successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Payment'
+ *       400:
+ *         description: Validation error
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized - user is not an admin
+ *       404:
+ *         description: Payment not found
+ *
+ * /admin/payments/{id}/reverify:
+ *   post:
+ *     summary: Reverify payment with Paystack API
+ *     tags: [Admin - Pricing]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Payment verified and enrollment activated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Payment'
+ *       400:
+ *         description: Payment is not in PENDING status or has no provider reference
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized - user is not an admin
+ *       404:
+ *         description: Payment not found
+ *       500:
+ *         description: Paystack API error or verification failed
  *
  * /admin/subjects:
  *   get:

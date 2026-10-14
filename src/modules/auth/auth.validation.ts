@@ -47,6 +47,11 @@ export const changePasswordSchema = z.object({
     .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character'),
 });
 
+export const changePinSchema = z.object({
+  currentPin: z.string().length(6, 'Current PIN must be exactly 6 digits'),
+  newPin: z.string().length(6, 'New PIN must be exactly 6 digits'),
+});
+
 export const timezoneSchema = z.object({
   timezone: z.string().regex(/^[A-Za-z]+\/[A-Za-z_]+$/, 'Invalid timezone format. Expected IANA format (e.g., "Africa/Lagos")'),
 });

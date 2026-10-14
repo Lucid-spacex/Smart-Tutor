@@ -31,13 +31,13 @@ This platform processes minors' personal data and payment transactions. Security
 Students do not authenticate with standard email/password. Instead, students authenticate with **three-factor authentication**:
 1. **Parent Email** (verified against the student's linked parent in `User.parentId`)
 2. **Student Code** (system-generated 8+ character unique alphanumeric code, case-insensitive comparison)
-3. **Student Password** (system-generated strong random password, 12+ chars, stored bcrypt-hashed)
+3. **Student PIN** (system-generated 6-digit numeric PIN, stored bcrypt-hashed)
 
 ### Security Rules:
-- **Credential Generation**: On `POST /students`, credentials are generated and emailed to the parent. The API returns `studentCode` but **never** the plaintext password.
-- **Uniform 401 Responses**: On failed `POST /auth/student-login`, generic `401 "Invalid credentials"` is returned for any mismatch (wrong code, mismatched parent email, or invalid password) to prevent user enumeration.
-- **Rate Limiting**: Rate limited both per IP and per `studentCode` to block targeted brute-forcing.
-- **No Plaintext Password Retrieval**: Passwords can only be regenerated via `POST /students/:id/regenerate-password` (parent-only) or `PATCH /admin/students/:id/regenerate-password` (admin-only).
+- **Credential Generation**: On `POST /students`, credentials are generated and emailed to the parent. The API returns `studentCode` but **never** the plaintext PIN.
+- **Uniform 401 Responses**: On failed `POST /auth/student-login`, generic `401 "Invalid credentials"` is returned for any mismatch (wrong code, mismatched parent email, or invalid PIN) to prevent user enumeration.
+- **Rate Limiting**: Rate limited both per IP and per `studentCode` (5 requests per 15 minutes) to block targeted brute-forcing.
+- **No Plaintext PIN Retrieval**: PINs can only be regenerated via `POST /students/:id/regenerate-pin` (parent-only) or `PATCH /admin/students/:id/regenerate-pin` (admin-only).
 
 ---
 
@@ -61,7 +61,7 @@ Students do not authenticate with standard email/password. Instead, students aut
 | Approve/reject tutors | ❌ | ❌ | ✅ | ❌ |
 | File a complaint | ✅ | ❌ | — | ❌ |
 | Resolve a complaint | ❌ | ❌ | ✅ | ❌ |
-| Regenerate a student's password | ✅ (own child) | ❌ | ✅ (support) | ❌ |
+| Regenerate a student's PIN | ✅ (own child) | ❌ | ✅ (support) | ❌ |
 | Reactivate a suspended parent | ❌ | ❌ | ✅ | — |
 | Message their assigned tutor / assigned student (student↔tutor) | ❌ | ❌ (removed 2026-10-12) | — | ❌ (removed 2026-10-12) |
 | Message Admin | ✅ | ✅ | — | ❌ |
@@ -113,13 +113,15 @@ The platform enforces communication isolation via the single `canMessage(senderI
 - **Allowed**:
   - `Tutor <-> Admin` (shared inbox - any admin can reply)
   - `Parent <-> Admin` (shared inbox - any admin can reply)
-  - `Parent <-> Child` (parent-child relationship verification)
+  - `Admin <-> Admin` (admin-to-admin messaging)
 - **Strictly Blocked**:
   - `Student <-> Tutor` (403 Forbidden - removed 2026-10-12)
   - `Student <-> Admin` (403 Forbidden)
   - `Student <-> Parent` (403 Forbidden - handled outside platform)
   - `Parent <-> Tutor` (403 Forbidden in both directions - must route through Admin)
   - `Student <-> Unassigned Tutor` (403 Forbidden)
+  - `Parent <-> Parent` (403 Forbidden)
+  - `Tutor <-> Tutor` (403 Forbidden)
 
 **Shared Admin Inbox (2026-09-30)**:
 - Parents and tutors message "Admin" as a shared team inbox, not individual admins
@@ -129,6 +131,14 @@ The platform enforces communication isolation via the single `canMessage(senderI
 - This provides a unified "Admin" conversation experience for parents and tutors
 
 **Note (2026-10-12)**: Students no longer have any messaging capability in the platform. Their sole prior messaging contact (their assigned tutor) has been removed.
+
+**Message Permission Matrix (4×4)**:
+| Sender \ Recipient | PARENT | TUTOR | ADMIN | STUDENT |
+|-------------------|--------|-------|-------|---------|
+| PARENT | ❌ | ❌ | ✅ | ❌ |
+| TUTOR | ❌ | ❌ | ✅ | ❌ |
+| ADMIN | ✅ | ✅ | ✅ | ❌ |
+| STUDENT | ❌ | ❌ | ❌ | ❌ |
 
 ---
 
@@ -296,7 +306,7 @@ Students are otherwise fully read-only, but quiz mode provides a **deliberate, n
 
 ---
 
-## 13. Rate Limiting Tiers
+## 15. Rate Limiting Tiers
 
 Rate limiting is applied in **three separately-instanced tiers** based on risk level. A single blanket limit is intentionally avoided — it would throttle normal usage (dashboard loads, notification polling) while under-protecting the endpoints that actually need aggressive limits.
 
@@ -365,7 +375,7 @@ All three limiters currently use `express-rate-limit`'s default `MemoryStore`. T
 
 ---
 
-## 15. Messaging Graph Update (2026-10-12)
+## 16. Messaging Graph Update (2026-10-12)
 
 **Policy Change Notice**: As of 2026-10-12, Student ↔ Tutor messaging has been removed from the platform.
 
@@ -374,17 +384,17 @@ All three limiters currently use `express-rate-limit`'s default `MemoryStore`. T
 - **Removed**: Tutors can no longer message their assigned students
 - **Still Allowed**: Parent ↔ Admin (shared inbox)
 - **Still Allowed**: Tutor ↔ Admin (shared inbox)
-- **Still Allowed**: Parent ↔ Child (parent-child relationship)
+- **Allowed**: Admin ↔ Admin (admin-to-admin messaging)
 
 ### Rationale:
 This change simplifies the communication model and ensures all student-tutor communication flows through parents for oversight and safety. Students and tutors should now communicate session details, assignments, and feedback through the parent or admin channels.
 
 ### RBAC Matrix Update:
-The RBAC matrix entry for "Message their assigned tutor / assigned student" has been updated to ❌ for both Tutor and Student roles.
+The RBAC matrix entry for "Message their assigned tutor / assigned student" has been updated to ❌ for both Tutor and Student roles. The "Parent ↔ Child" messaging was never implemented and has been removed from documentation.
 
 ---
 
-## 16. Per-Grade Subject Pricing (2026-10-12)
+## 17. Per-Grade Subject Pricing (2026-10-12)
 
 **Implementation Notice**: As of 2026-10-12, subjects support per-grade-band pricing instead of a single gradeBand field. The pricing model is now more granular and flexible.
 
@@ -418,7 +428,7 @@ The RBAC matrix entry for "Message their assigned tutor / assigned student" has 
 
 ---
 
-## 17. Tutor Availability & Subject Linking (2026-10-12)
+## 18. Tutor Availability & Subject Linking (2026-10-12)
 
 **Implementation Notice**: As of 2026-10-12, tutors can set availability status and are linked to subjects via structured relations instead of free text.
 
@@ -454,7 +464,7 @@ The RBAC matrix entry for "Message their assigned tutor / assigned student" has 
 
 ---
 
-## 18. Admin Parent Directory (2026-10-12)
+## 19. Admin Parent Directory (2026-10-12)
 
 **Implementation Notice**: As of 2026-10-12, admins have a comprehensive parent directory view with pricing and enrollment details.
 
@@ -481,7 +491,7 @@ The RBAC matrix entry for "Message their assigned tutor / assigned student" has 
 
 ---
 
-## 19. Admin Transactions (2026-10-12)
+## 20. Admin Transactions (2026-10-12)
 
 **Implementation Notice**: As of 2026-10-12, admins have comprehensive transaction management and reporting.
 
@@ -493,7 +503,7 @@ The RBAC matrix entry for "Message their assigned tutor / assigned student" has 
 ### Payment List Filters:
 - **Status**: PENDING, SUCCESS, FAILED, REFUNDED, EXPIRED
 - **Currency**: NGN, USD
-- **Provider**: PAYSTACK, STRIPE
+- **Provider**: PAYSTACK
 - **Parent**: Filter by specific parent
 - **Date range**: from/to timestamps
 - **Search**: Reference, parent name, or email
@@ -511,7 +521,7 @@ The RBAC matrix entry for "Message their assigned tutor / assigned student" has 
 
 ---
 
-## 20. Security Audit Fixes (2026-10-12)
+## 21. Security Audit Fixes (2026-10-12)
 
 **Audit Notice**: Comprehensive security audit performed on 2026-10-12. The following critical issues were identified and fixed:
 
@@ -583,7 +593,7 @@ The RBAC matrix entry for "Message their assigned tutor / assigned student" has 
 
 ---
 
-## 21. Build Error Fixes (2026-10-12)
+## 22. Build Error Fixes (2026-10-12)
 
 **Audit Notice**: TypeScript build error fixed during Render deployment attempt.
 
@@ -607,4 +617,88 @@ Type '{ connect: { id: string; }; }' is not assignable to type 'undefined'.
 - Build now passes: `npm run build` completes successfully with exit code 0
 - No TypeScript compilation errors
 - Render deployment should succeed with this fix
+
+---
+
+## 23. Grade Normalization & Performance Overview (2026-10-14)
+
+**Implementation Notice**: As of 2026-10-14, grades now support variable max scores for proper percentage calculation, and comprehensive performance overview endpoints have been added for all roles.
+
+### Grade.maxScore Field:
+- **New field**: `Grade.maxScore` (decimal, default 100) added to Grade model
+- **Purpose**: Allows quiz grades and tutor-entered grades to have different point scales while still producing comparable percentages
+- **Percentage calculation**: `percentage = (score / maxScore) * 100` computed on read, not stored
+- **Quiz grades**: `maxScore` set to sum of quiz question base points
+- **Migration**: Existing grades set to `maxScore = 100`
+
+### Grade Visibility Rules:
+- **APPROVED grades only**: Only grades with `status: APPROVED` count in any student- or parent-facing metric
+- **Pending/Rejected grades**: Never appear in averages, summaries, or performance dashboards for students/parents
+- **Admin visibility**: Admins can see all grades regardless of status via admin-only endpoints
+- **No ranking/percentile**: No student comparison, ranking, or percentile features allowed anywhere in the platform
+
+### Performance Overview Endpoints:
+- **Student**: `GET /student/me/performance` - own performance only
+- **Parent**: `GET /students/:id/performance` - must own the student
+- **Tutor**: `GET /tutor/students/:studentId/performance` - assigned enrollments only, includes `pendingGradesCount`
+- **Admin**: `GET /admin/students/:id/performance` - all enrollments, optional `includePending=true`
+
+### Performance Data Includes:
+- **Period filtering**: week, month, quarter, year, all (default month)
+- **Average grade**: percentage, gradedCount, trend vs previous period
+- **Grades by subject**: breakdown per subject with averages
+- **Grade timeline**: time-bucketed averages (weekly for periods ≤ month, monthly for longer)
+- **Attendance**: rate, attended/missed counts, trend, timeline
+- **Assignments**: total, completed, pending, overdue, submittedLate, completionRate
+- **Quizzes**: attempts, averagePercentage
+- **Recent grades**: last 5 approved grades with subject and assignment title
+
+### Timezone Handling:
+- **Viewer timezone**: Uses `User.timezone` with fallback to `Africa/Lagos`
+- **Bucket boundaries**: Computed in viewer's timezone for accurate reporting
+- **Time-bucketing**: Uses parameterized SQL via `$queryRaw` for safe aggregation
+
+### Security Rules:
+- **Ownership enforcement**: Students can only see own performance, parents only own children, tutors only assigned students
+- **Approved-only for students/parents**: Pending/rejected grades never affect student/parent metrics
+- **Null vs zero**: Returns `null` (not `0`) when no approved grades exist, with `gradedCount: 0`
+- **Trend calculation**: `null` if no previous period data exists
+- **Admin override**: Admins can include pending grades via `includePending=true` query param
+
+---
+
+## 24. Admin Payment Actions & Audit Logging (2026-10-14)
+
+**Implementation Notice**: As of 2026-10-14, admins have safe, auditable payment management actions while maintaining payment immutability.
+
+### Immutable Payment Records:
+- **No generic PATCH**: `PATCH /admin/payments/:id` intentionally NOT implemented
+- **Financial history**: Payment records (amount, status, reference) are immutable financial history
+- **No client trust**: Never trust client-supplied payment status; always verify via provider API
+
+### Safe Admin Actions:
+- **Add note**: `PATCH /admin/payments/:id/note` with `{note}` - admin-only notes for internal tracking
+- **Reverify**: `POST /admin/payments/:id/reverify` - calls Paystack verify API server-side for stuck PENDING payments
+  - Only for payments stuck in PENDING where webhook never arrived
+  - On confirmed success, activates enrollment(s) idempotently
+  - Never trusts client-supplied status
+
+### Audit Logging:
+- **AdminActionLog model**: New table for tracking all admin actions
+  - `id`, `adminId`, `action`, `targetType`, `targetId`, `details` (JSON), `createdAt`
+  - Indexes on adminId, action, targetType+targetId, createdAt
+- **Logged actions**: Payment note and reverify actions are logged
+- **Purpose**: Audit trail for all admin actions on sensitive data
+
+### Payment Schema Changes:
+- **Payment.adminNote**: New field for admin-only notes
+- **Payment immutability**: Core fields (amount, status, providerReference) remain immutable
+
+### Security Rules:
+- **Admin-only**: Both payment actions require ADMIN role
+- **Provider verification**: Reverify always calls Paystack API server-side
+- **Idempotency**: Reverify and webhook processing are idempotent
+- **Audit trail**: All payment admin actions logged to AdminActionLog
+- **No refunds**: Refund handling is separate work (not implemented here)
+
 

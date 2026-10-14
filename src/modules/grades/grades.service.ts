@@ -12,6 +12,25 @@ export class GradesService {
     this.cloudinaryService = new CloudinaryService();
   }
 
+  /**
+   * Calculate percentage from score and maxScore
+   * Computed on read, not stored
+   */
+  private calculatePercentage(score: number, maxScore: number): number {
+    if (maxScore === 0) return 0;
+    return (score / maxScore) * 100;
+  }
+
+  /**
+   * Enrich grade with computed percentage
+   */
+  private enrichWithPercentage(grade: any) {
+    return {
+      ...grade,
+      percentage: this.calculatePercentage(Number(grade.score), Number(grade.maxScore || 100)),
+    };
+  }
+
   async createGrade(tutorId: string, data: any) {
     // Verify enrollment exists and tutor is assigned
     const enrollment = await prisma.enrollment.findUnique({
@@ -55,12 +74,13 @@ export class GradesService {
     }
 
     // Grade always starts as PENDING_APPROVAL
-    return prisma.grade.create({
+    const grade = await prisma.grade.create({
       data: {
         enrollmentId: data.enrollmentId,
         assignmentId: data.assignmentId || null,
         gradedBy: tutorId,
         score: data.score,
+        maxScore: data.maxScore || 100,
         comments: data.comments,
         attachmentUrl,
         attachmentName,
@@ -83,36 +103,39 @@ export class GradesService {
         },
       },
     });
+
+    return this.enrichWithPercentage(grade);
   }
 
   async updateGrade(gradeId: string, tutorId: string, data: any) {
-    const grade = await prisma.grade.findUnique({
+    const existingGrade = await prisma.grade.findUnique({
       where: { id: gradeId },
     });
 
-    if (!grade) {
+    if (!existingGrade) {
       throw new AppError(404, 'Grade not found');
     }
 
     // Only the grader (tutor) can update the grade
-    if (grade.gradedBy !== tutorId) {
+    if (existingGrade.gradedBy !== tutorId) {
       throw new AppError(403, 'Not authorized to update this grade');
     }
 
     // Only allow updates when grade is PENDING_APPROVAL or REJECTED
-    if (grade.status === 'APPROVED') {
+    if (existingGrade.status === 'APPROVED') {
       throw new AppError(403, 'Cannot update approved grades');
     }
 
     const updateData: any = {};
     if (data.score !== undefined) updateData.score = data.score;
+    if (data.maxScore !== undefined) updateData.maxScore = data.maxScore;
     if (data.comments !== undefined) updateData.comments = data.comments;
 
     // Handle attachment update
     if (data.attachmentBase64) {
       // Delete old attachment from Cloudinary if it exists
-      if (grade.attachmentUrl) {
-        const publicId = this.extractPublicIdFromUrl(grade.attachmentUrl);
+      if (existingGrade.attachmentUrl) {
+        const publicId = this.extractPublicIdFromUrl(existingGrade.attachmentUrl);
         if (publicId) {
           await this.cloudinaryService.deleteFile(publicId);
         }
@@ -128,8 +151,8 @@ export class GradesService {
       updateData.attachmentName = uploadResult.filename;
     } else if (data.removeAttachment === true) {
       // Remove attachment
-      if (grade.attachmentUrl) {
-        const publicId = this.extractPublicIdFromUrl(grade.attachmentUrl);
+      if (existingGrade.attachmentUrl) {
+        const publicId = this.extractPublicIdFromUrl(existingGrade.attachmentUrl);
         if (publicId) {
           await this.cloudinaryService.deleteFile(publicId);
         }
@@ -138,7 +161,7 @@ export class GradesService {
       updateData.attachmentName = null;
     }
 
-    return prisma.grade.update({
+    const grade = await prisma.grade.update({
       where: { id: gradeId },
       data: updateData,
       include: {
@@ -157,6 +180,8 @@ export class GradesService {
         },
       },
     });
+
+    return this.enrichWithPercentage(grade);
   }
 
   /**
@@ -215,7 +240,7 @@ export class GradesService {
   }
 
   async getPendingGrades() {
-    return prisma.grade.findMany({
+    const grades = await prisma.grade.findMany({
       where: {
         status: 'PENDING_APPROVAL',
       },
@@ -238,6 +263,8 @@ export class GradesService {
         createdAt: 'asc',
       },
     });
+
+    return grades.map(g => this.enrichWithPercentage(g));
   }
 
   async approveGrade(gradeId: string, adminId: string) {
@@ -287,7 +314,7 @@ export class GradesService {
     // Create notification for student and parent
     await this.notificationsService.createGradeApprovedNotification(gradeId);
 
-    return updatedGrade;
+    return this.enrichWithPercentage(updatedGrade);
   }
 
   async rejectGrade(gradeId: string, adminId: string, reason?: string) {
@@ -303,7 +330,7 @@ export class GradesService {
       throw new AppError(400, 'Grade is not in pending approval status');
     }
 
-    return prisma.grade.update({
+    const updatedGrade = await prisma.grade.update({
       where: { id: gradeId },
       data: {
         status: 'REJECTED',
@@ -333,6 +360,8 @@ export class GradesService {
         },
       },
     });
+
+    return this.enrichWithPercentage(updatedGrade);
   }
 
   async getGrades(userId: string, userRole: string, filters?: { studentId?: string; enrollmentId?: string }) {
@@ -376,7 +405,7 @@ export class GradesService {
       delete where.visibleToStudent;
     }
 
-    return prisma.grade.findMany({
+    const grades = await prisma.grade.findMany({
       where,
       include: {
         enrollment: {
@@ -403,5 +432,57 @@ export class GradesService {
         createdAt: 'desc',
       },
     });
+
+    return grades.map(g => this.enrichWithPercentage(g));
+  }
+
+  /**
+   * Calculate average grade percentage for a student or enrollment
+   * Only APPROVED grades count
+   * Returns null if no approved grades exist
+   */
+  async calculateAverageGrade(filters: { studentId?: string; enrollmentId?: string; tutorId?: string }) {
+    const where: any = {
+      status: 'APPROVED',
+    };
+
+    if (filters.studentId) {
+      where.enrollment = {
+        studentId: filters.studentId,
+      };
+    }
+
+    if (filters.enrollmentId) {
+      where.enrollmentId = filters.enrollmentId;
+    }
+
+    if (filters.tutorId) {
+      where.enrollment = {
+        tutorId: filters.tutorId,
+      };
+    }
+
+    const grades = await prisma.grade.findMany({
+      where,
+      select: {
+        score: true,
+        maxScore: true,
+      },
+    });
+
+    if (grades.length === 0) {
+      return {
+        averagePercentage: null,
+        gradedCount: 0,
+      };
+    }
+
+    const percentages = grades.map(g => this.calculatePercentage(Number(g.score), Number(g.maxScore || 100)));
+    const averagePercentage = percentages.reduce((sum, p) => sum + p, 0) / percentages.length;
+
+    return {
+      averagePercentage: Math.round(averagePercentage * 10) / 10, // Round to 1 decimal
+      gradedCount: grades.length,
+    };
   }
 }

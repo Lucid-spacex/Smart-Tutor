@@ -3,7 +3,7 @@ import { hashPassword, comparePassword } from '../../utils/password.util';
 import { generateAccessToken, generateRefreshToken, hashToken, verifyRefreshToken } from '../../utils/token.util';
 import { sendVerificationEmail } from '../../utils/email.util';
 import { generateOTP, storeOTP, verifyOTP } from '../../utils/otp.util';
-import { RegisterData, VerifyData, LoginData, StudentLoginData, RefreshData, ChangePasswordData, AuthResponse } from './types';
+import { RegisterData, VerifyData, LoginData, StudentLoginData, RefreshData, ChangePasswordData, ChangePinData, AuthResponse } from './types';
 import crypto from 'crypto';
 import { logger } from '../../config/logger';
 import { AppError } from '../../middleware/error-handler.middleware';
@@ -355,6 +355,11 @@ export class AuthService {
       throw new AppError(404, 'User not found');
     }
 
+    // Students should use changePin, not changePassword
+    if (user.role === 'STUDENT') {
+      throw new AppError(400, 'Students must use the PIN change endpoint to update their PIN');
+    }
+
     const isValidPassword = await comparePassword(data.currentPassword, user.passwordHash);
     if (!isValidPassword) {
       throw new AppError(401, 'Current password is incorrect');
@@ -375,6 +380,42 @@ export class AuthService {
     logger.info({ userId }, 'Password changed successfully');
 
     return { message: 'Password changed successfully. Please login again.' };
+  }
+
+  async changePin(userId: string, data: ChangePinData): Promise<{ message: string }> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new AppError(404, 'User not found');
+    }
+
+    // Only students can change PIN
+    if (user.role !== 'STUDENT') {
+      throw new AppError(400, 'Only students can change their PIN');
+    }
+
+    const isValidPin = await comparePassword(data.currentPin, user.passwordHash);
+    if (!isValidPin) {
+      throw new AppError(401, 'Current PIN is incorrect');
+    }
+
+    const newPinHash = await hashPassword(data.newPin);
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: newPinHash },
+    });
+
+    // Revoke all refresh tokens for security
+    await prisma.refreshToken.deleteMany({
+      where: { userId },
+    });
+
+    logger.info({ userId }, 'Student PIN changed successfully');
+
+    return { message: 'PIN changed successfully. Please login again.' };
   }
 
   async updateTimezone(userId: string, timezone: string): Promise<{ message: string }> {

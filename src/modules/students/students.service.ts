@@ -283,8 +283,8 @@ export class StudentsService {
     if (parent?.email && parent.fullName) {
       await sendPasswordResetEmail(
         parent.email,
-        parent.fullName,
-        plainPin
+        'password_reset',
+        { name: parent.fullName, newPin: plainPin }
       );
     }
 

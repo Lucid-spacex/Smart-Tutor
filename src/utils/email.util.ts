@@ -1,20 +1,16 @@
 import { logger } from '../config/logger';
 import { config } from '../config/env.config';
 
-// Brevo API client
-const BREVO_API_URL = 'https://api.brevo.com/v3/smtp/email';
+// Resend API client
+const RESEND_API_URL = 'https://api.resend.com/v3/smtp/email';
 
-let brevoApiKey: string | null = null;
+let resendApiKey: string | null = null;
 
-// Check for both BREVO_API_KEY and legacy API_KEY
-if (config.BREVO_API_KEY) {
-  brevoApiKey = config.BREVO_API_KEY;
-  logger.info('Brevo API client initialized successfully');
-} else if (config.API_KEY) {
-  brevoApiKey = config.API_KEY;
-  logger.info('Brevo API client initialized successfully (using API_KEY)');
+if (config.RESEND_API_KEY) {
+  resendApiKey = config.RESEND_API_KEY;
+  logger.info('Resend API client initialized successfully');
 } else {
-  logger.warn('Brevo API key not configured - email sending is disabled');
+  logger.warn('Resend API key not configured - email sending is disabled');
 }
 
 // Email templates
@@ -46,49 +42,47 @@ const parseEmailFrom = (emailFrom: string): { email: string; name: string } => {
     };
   }
   return {
-    name: 'TeachMeHub',
+    name: 'Teachmenest',
     email: emailFrom.trim(),
   };
 };
 
 /**
  * Centralized email sending function
- * Handles all email delivery through Brevo API
+ * Handles all email delivery through Resend API
  */
 export const sendEmail = async (data: EmailData): Promise<void> => {
-  if (!brevoApiKey) {
-    logger.warn({ to: data.to }, 'Email not sent - Brevo API not configured');
+  if (!resendApiKey) {
+    logger.warn({ to: data.to }, 'Email not sent - Resend API not configured');
     return;
   }
 
   try {
-    const sender = parseEmailFrom(config.EMAIL_FROM || 'noreply@teachmehub.com');
+    const sender = parseEmailFrom(config.EMAIL_FROM || 'Teachmenest <no-reply@teachmenest.com>');
 
-    const response = await fetch(BREVO_API_URL, {
+    const response = await fetch(RESEND_API_URL, {
       method: 'POST',
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
-        'api-key': brevoApiKey,
+        'Authorization': `Bearer ${resendApiKey}`,
       },
       body: JSON.stringify({
-        sender: {
-          email: sender.email,
-          name: sender.name,
-        },
-        to: [{ email: data.to }],
+        from: sender.email,
+        to: data.to,
         subject: data.subject,
-        htmlContent: data.html,
-        textContent: data.text,
+        html: data.html,
+        text: data.text,
       }),
     });
 
     if (!response.ok) {
       const error = await response.text();
-      throw new Error(`Brevo API error: ${response.status} - ${error}`);
+      throw new Error(`Resend API error: ${response.status} - ${error}`);
     }
 
-    logger.info({ to: data.to, subject: data.subject }, 'Email sent successfully');
+    const messageId = response.headers.get('X-Message-Id');
+    logger.info({ to: data.to, subject: data.subject, messageId }, 'Email sent successfully');
   } catch (error) {
     logger.error({ to: data.to, subject: data.subject, error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined }, 'Email sending failed');
     // Don't throw - email failures shouldn't block the main flow
@@ -102,19 +96,19 @@ export const sendVerificationEmail = async (email: string, otp: string): Promise
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
       <h2 style="color: #333;">Verify Your Email Address</h2>
-      <p>Thank you for registering with Smart-Tutor. Please use the following verification code to complete your registration:</p>
+      <p>Thank you for registering with Teachmenest. Please use the following verification code to complete your registration:</p>
       <div style="background: #f4f4f4; padding: 20px; text-align: center; margin: 20px 0;">
         <span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #333;">${otp}</span>
       </div>
       <p><strong>This code will expire in 15 minutes.</strong></p>
       <p>If you didn't request this verification, please ignore this email.</p>
-      <p style="color: #666; font-size: 12px;">Smart-Tutor Platform</p>
+      <p style="color: #666; font-size: 12px;">Teachmenest Platform</p>
     </div>
   `;
 
   await sendEmail({
     to: email,
-    subject: 'Verify Your Smart-Tutor Account',
+    subject: 'Verify Your Teachmenest Account',
     html,
     text: `Your verification code is: ${otp}. This code will expire in 15 minutes.`,
   });
@@ -134,7 +128,7 @@ export const sendStudentCredentialsEmail = async (
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
       <h2 style="color: #333;">Student Account Created</h2>
       <p>Dear ${parentName},</p>
-      <p>A student account has been created for <strong>${studentName}</strong> on Smart-Tutor. Below are the login credentials:</p>
+      <p>A student account has been created for <strong>${studentName}</strong> on Teachmenest. Below are the login credentials:</p>
       
       <div style="background: #f4f4f4; padding: 20px; margin: 20px 0;">
         <p><strong>Student Code:</strong> <span style="font-size: 18px; font-weight: bold; color: #333;">${studentCode}</span></p>
@@ -151,8 +145,8 @@ export const sendStudentCredentialsEmail = async (
         </ul>
       </div>
       
-      <p>Your child can log in using the Smart-Tutor student portal with these credentials.</p>
-      <p style="color: #666; font-size: 12px;">Smart-Tutor Platform</p>
+      <p>Your child can log in using the Teachmenest student portal with these credentials.</p>
+      <p style="color: #666; font-size: 12px;">Teachmenest Platform</p>
     </div>
   `;
 
@@ -188,7 +182,7 @@ export const sendPinResetEmail = async (
       </div>
       
       <p>If you didn't request this PIN change, please contact support immediately.</p>
-      <p style="color: #666; font-size: 12px;">Smart-Tutor Platform</p>
+      <p style="color: #666; font-size: 12px;">Teachmenest Platform</p>
     </div>
   `;
 
@@ -201,7 +195,16 @@ export const sendPinResetEmail = async (
 };
 
 // Legacy function name for backward compatibility
-export const sendPasswordResetEmail = sendPinResetEmail;
+export const sendPasswordResetEmail = async (
+  email: string,
+  template: 'password_reset' | 'account_suspended' = 'password_reset',
+  data?: any
+): Promise<void> => {
+  if (template === 'account_suspended') {
+    return sendSuspensionEmail(email, data?.fullName || 'User', data?.reason || 'Policy violation');
+  }
+  return sendPinResetEmail(email, data?.name || 'User', data?.newPin || 'N/A');
+};
 
 /**
  * Send notification email
@@ -214,17 +217,17 @@ export const sendNotificationEmail = async (
 ): Promise<void> => {
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <h2 style="color: #333;">Smart-Tutor Notification</h2>
+      <h2 style="color: #333;">Teachmenest Notification</h2>
       <p>Dear ${name},</p>
       <p>${message}</p>
-      <p>Please log in to your Smart-Tutor dashboard for more details.</p>
-      <p style="color: #666; font-size: 12px;">Smart-Tutor Platform</p>
+      <p>Please log in to your Teachmenest dashboard for more details.</p>
+      <p style="color: #666; font-size: 12px;">Teachmenest Platform</p>
     </div>
   `;
 
   await sendEmail({
     to: email,
-    subject: `Smart-Tutor: ${notificationType}`,
+    subject: `Teachmenest: ${notificationType}`,
     html,
     text: message,
   });
@@ -242,20 +245,20 @@ export const sendSuspensionEmail = async (
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
       <h2 style="color: #dc3545;">Account Suspended</h2>
       <p>Dear ${name},</p>
-      <p>Your Smart-Tutor account has been suspended due to the following reason:</p>
+      <p>Your Teachmenest account has been suspended due to the following reason:</p>
       
       <div style="background: #f8d7da; border-left: 4px solid #dc3545; padding: 15px; margin: 20px 0;">
         <p style="margin: 0;">${reason}</p>
       </div>
       
       <p>If you believe this is an error, or to reactivate your account, please contact our support team.</p>
-      <p style="color: #666; font-size: 12px;">Smart-Tutor Platform</p>
+      <p style="color: #666; font-size: 12px;">Teachmenest Platform</p>
     </div>
   `;
 
   await sendEmail({
     to: email,
-    subject: 'Your Smart-Tutor Account Has Been Suspended',
+    subject: 'Your Teachmenest Account Has Been Suspended',
     html,
     text: `Your account has been suspended. Reason: ${reason}. Please contact support for assistance.`,
   });

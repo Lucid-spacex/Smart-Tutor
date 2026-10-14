@@ -3,14 +3,18 @@ import { TutorService } from './tutor.service';
 import { CreateTutorProfileInput, UpdateAvailabilityInput } from './tutor.validation';
 import { SessionsService } from '../sessions/sessions.service';
 import { CreateTutorSessionInput, RescheduleTutorSessionInput } from '../sessions/sessions.validation';
+import { PerformanceService } from '../performance/performance.service';
+import { AuthRequest } from '../../types/express';
 
 export class TutorController {
   private tutorService: TutorService;
   private sessionsService: SessionsService;
+  private performanceService: PerformanceService;
 
   constructor() {
     this.tutorService = new TutorService();
     this.sessionsService = new SessionsService();
+    this.performanceService = new PerformanceService();
   }
 
   createTutorProfile = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -166,6 +170,37 @@ export class TutorController {
       const { id } = req.params;
       await this.sessionsService.deleteSession(id, tutorId);
       res.status(200).json({ message: 'Session deleted successfully' });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getStudentPerformance = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const tutorId = req.user?.userId;
+      if (!tutorId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { studentId } = req.params;
+
+      const options = {
+        period: req.query.period as 'week' | 'month' | 'quarter' | 'year' | 'all',
+        from: req.query.from as string,
+        to: req.query.to as string,
+        subjectId: req.query.subjectId as string,
+        includePending: req.query.includePending === 'true',
+      };
+
+      const performance = await this.performanceService.getStudentPerformance(
+        studentId,
+        tutorId,
+        'TUTOR',
+        options
+      );
+
+      res.status(200).json(performance);
     } catch (error) {
       next(error);
     }

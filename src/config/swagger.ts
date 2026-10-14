@@ -96,6 +96,10 @@ const options = {
         description: 'Timed quiz mode for assignments',
       },
       {
+        name: 'Performance',
+        description: 'Student performance overview and analytics',
+      },
+      {
         name: 'Webhooks',
         description: 'External webhook integrations (Zoom - to be replaced with Google Meet)',
       },
@@ -445,19 +449,24 @@ const options = {
             },
             provider: {
               type: 'string',
-              enum: ['PAYSTACK', 'STRIPE'],
+              enum: ['PAYSTACK'],
             },
             providerReference: {
               type: 'string',
             },
             status: {
               type: 'string',
-              enum: ['PENDING', 'SUCCESS', 'FAILED', 'REFUNDED'],
+              enum: ['PENDING', 'SUCCESS', 'FAILED', 'REFUNDED', 'EXPIRED'],
             },
             paidAt: {
               type: 'string',
               format: 'date-time',
               nullable: true,
+            },
+            adminNote: {
+              type: 'string',
+              nullable: true,
+              description: 'Admin-only note for internal tracking',
             },
             createdAt: {
               type: 'string',
@@ -567,6 +576,15 @@ const options = {
             score: {
               type: 'number',
             },
+            maxScore: {
+              type: 'number',
+              default: 100,
+              description: 'Maximum possible score for this grade',
+            },
+            percentage: {
+              type: 'number',
+              description: 'Computed percentage (score / maxScore * 100)',
+            },
             comments: {
               type: 'string',
             },
@@ -660,6 +678,184 @@ const options = {
             createdAt: {
               type: 'string',
               format: 'date-time',
+            },
+          },
+        },
+        PerformanceOverview: {
+          type: 'object',
+          properties: {
+            period: {
+              type: 'object',
+              properties: {
+                from: {
+                  type: 'string',
+                  format: 'date-time',
+                },
+                to: {
+                  type: 'string',
+                  format: 'date-time',
+                },
+                label: {
+                  type: 'string',
+                },
+              },
+            },
+            averageGrade: {
+              type: 'object',
+              properties: {
+                percentage: {
+                  type: 'number',
+                  nullable: true,
+                },
+                gradedCount: {
+                  type: 'integer',
+                },
+                trend: {
+                  type: 'number',
+                  nullable: true,
+                },
+              },
+            },
+            gradesBySubject: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  subjectId: {
+                    type: 'string',
+                    format: 'uuid',
+                  },
+                  subjectName: {
+                    type: 'string',
+                  },
+                  averagePercentage: {
+                    type: 'number',
+                  },
+                  gradedCount: {
+                    type: 'integer',
+                  },
+                },
+              },
+            },
+            gradeTimeline: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  bucketStart: {
+                    type: 'string',
+                    format: 'date',
+                  },
+                  averagePercentage: {
+                    type: 'number',
+                  },
+                  gradedCount: {
+                    type: 'integer',
+                  },
+                },
+              },
+            },
+            attendance: {
+              type: 'object',
+              properties: {
+                rate: {
+                  type: 'number',
+                  nullable: true,
+                },
+                attended: {
+                  type: 'integer',
+                },
+                missed: {
+                  type: 'integer',
+                },
+                trend: {
+                  type: 'number',
+                  nullable: true,
+                },
+                timeline: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      bucketStart: {
+                        type: 'string',
+                        format: 'date',
+                      },
+                      rate: {
+                        type: 'number',
+                      },
+                      sessionCount: {
+                        type: 'integer',
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            assignments: {
+              type: 'object',
+              properties: {
+                total: {
+                  type: 'integer',
+                },
+                completed: {
+                  type: 'integer',
+                },
+                pending: {
+                  type: 'integer',
+                },
+                overdue: {
+                  type: 'integer',
+                },
+                submittedLate: {
+                  type: 'integer',
+                },
+                completionRate: {
+                  type: 'number',
+                },
+              },
+            },
+            quizzes: {
+              type: 'object',
+              properties: {
+                attempts: {
+                  type: 'integer',
+                },
+                averagePercentage: {
+                  type: 'number',
+                },
+              },
+            },
+            recentGrades: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: {
+                    type: 'string',
+                    format: 'uuid',
+                  },
+                  score: {
+                    type: 'number',
+                  },
+                  maxScore: {
+                    type: 'number',
+                  },
+                  percentage: {
+                    type: 'number',
+                  },
+                  subjectName: {
+                    type: 'string',
+                  },
+                  assignmentTitle: {
+                    type: 'string',
+                  },
+                  createdAt: {
+                    type: 'string',
+                    format: 'date-time',
+                  },
+                },
+              },
             },
           },
         },

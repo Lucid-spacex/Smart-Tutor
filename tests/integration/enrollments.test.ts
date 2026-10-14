@@ -69,7 +69,7 @@ describe('Enrollment Flow Integration Tests', () => {
 
     // Login as parent to get access token
     const loginResponse = await request(app)
-      .post('/auth/login')
+      .post('/api/auth/login')
       .send({
         email: parent.email,
         password: testPassword,
@@ -77,7 +77,7 @@ describe('Enrollment Flow Integration Tests', () => {
     parentAccessToken = loginResponse.body.accessToken;
 
     const otherLogin = await request(app)
-      .post('/auth/login')
+      .post('/api/auth/login')
       .send({
         email: otherParent.email,
         password: testPassword,
@@ -88,7 +88,7 @@ describe('Enrollment Flow Integration Tests', () => {
   describe('POST /students (with Part B1 profile fields)', () => {
     it('should create a new student and auto-derive gradeBandTier from actualGrade', async () => {
       const response = await request(app)
-        .post('/students')
+        .post('/api/students')
         .set('Authorization', `Bearer ${parentAccessToken}`)
         .send({
           fullName: 'Test Student Grade 4',
@@ -131,7 +131,7 @@ describe('Enrollment Flow Integration Tests', () => {
 
     it('should fail with invalid data', async () => {
       const response = await request(app)
-        .post('/students')
+        .post('/api/students')
         .set('Authorization', `Bearer ${parentAccessToken}`)
         .send({
           fullName: 'Test Student',
@@ -145,7 +145,7 @@ describe('Enrollment Flow Integration Tests', () => {
   describe('GET /students', () => {
     it('should get all students for parent', async () => {
       const response = await request(app)
-        .get('/students')
+        .get('/api/students')
         .set('Authorization', `Bearer ${parentAccessToken}`);
 
       expect(response.status).toBe(200);
@@ -154,7 +154,7 @@ describe('Enrollment Flow Integration Tests', () => {
     });
 
     it('should fail without authentication', async () => {
-      const response = await request(app).get('/students');
+      const response = await request(app).get('/api/students');
       expect(response.status).toBe(401);
     });
   });
@@ -162,7 +162,7 @@ describe('Enrollment Flow Integration Tests', () => {
   describe('POST /enrollments (Part B2 batch multi-subject)', () => {
     it('should reject enrollment if availableDays count does not match sessionFrequency', async () => {
       const response = await request(app)
-        .post('/enrollments')
+        .post('/api/enrollments')
         .set('Authorization', `Bearer ${parentAccessToken}`)
         .send({
           studentId,
@@ -181,7 +181,7 @@ describe('Enrollment Flow Integration Tests', () => {
 
     it('should reject batch enrollment with duplicate subject IDs', async () => {
       const response = await request(app)
-        .post('/enrollments')
+        .post('/api/enrollments')
         .set('Authorization', `Bearer ${parentAccessToken}`)
         .send({
           studentId,
@@ -200,7 +200,7 @@ describe('Enrollment Flow Integration Tests', () => {
 
     it('should reject batch enrollment if preferredStartHour >= preferredEndHour', async () => {
       const response = await request(app)
-        .post('/enrollments')
+        .post('/api/enrollments')
         .set('Authorization', `Bearer ${parentAccessToken}`)
         .send({
           studentId,
@@ -221,7 +221,7 @@ describe('Enrollment Flow Integration Tests', () => {
 
     it('should create a batch enrollment with 2 subjects sharing one enrollmentGroupId', async () => {
       const response = await request(app)
-        .post('/enrollments')
+        .post('/api/enrollments')
         .set('Authorization', `Bearer ${parentAccessToken}`)
         .send({
           studentId,
@@ -258,7 +258,7 @@ describe('Enrollment Flow Integration Tests', () => {
 
     it('should reject enrollment if student is already actively enrolled in that subject', async () => {
       const response = await request(app)
-        .post('/enrollments')
+        .post('/api/enrollments')
         .set('Authorization', `Bearer ${parentAccessToken}`)
         .send({
           studentId,
