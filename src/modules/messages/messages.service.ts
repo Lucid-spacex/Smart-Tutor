@@ -87,21 +87,25 @@ export class MessagesService {
 
       let errorMessage = 'You are not permitted to message this user';
 
-      if (sender?.role === 'STUDENT') {
+      // Type cast to allow comparison with all possible roles including STUDENT
+      const senderRole = sender?.role as any;
+      const recipientRole = recipient?.role as any;
+
+      if (senderRole === 'STUDENT') {
         errorMessage = 'Students are not permitted to send messages';
-      } else if (recipient?.role === 'STUDENT') {
+      } else if (recipientRole === 'STUDENT') {
         errorMessage = 'Messaging students is not permitted';
-      } else if (sender?.role === 'PARENT' && recipient?.role === 'PARENT') {
+      } else if (senderRole === 'PARENT' && recipientRole === 'PARENT') {
         errorMessage = 'You cannot message other parents';
-      } else if (sender?.role === 'TUTOR' && recipient?.role === 'TUTOR') {
+      } else if (senderRole === 'TUTOR' && recipientRole === 'TUTOR') {
         errorMessage = 'You cannot message other tutors';
-      } else if (sender?.role === 'PARENT' && recipient?.role === 'TUTOR') {
+      } else if (senderRole === 'PARENT' && recipientRole === 'TUTOR') {
         errorMessage = 'Parents cannot message tutors directly. Please contact admin for assistance.';
-      } else if (sender?.role === 'TUTOR' && recipient?.role === 'PARENT') {
+      } else if (senderRole === 'TUTOR' && recipientRole === 'PARENT') {
         errorMessage = 'Tutors cannot message parents directly. Please contact admin for assistance.';
-      } else if (sender?.role === 'PARENT' && recipient?.role === 'STUDENT') {
+      } else if (senderRole === 'PARENT' && recipientRole === 'STUDENT') {
         errorMessage = 'Parents cannot message students directly. Please contact admin for assistance.';
-      } else if (sender?.role === 'STUDENT' && recipient?.role === 'PARENT') {
+      } else if (senderRole === 'STUDENT' && recipientRole === 'PARENT') {
         errorMessage = 'Students cannot message anyone. Please contact admin for assistance.';
       }
 

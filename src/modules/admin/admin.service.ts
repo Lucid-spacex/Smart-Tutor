@@ -2396,7 +2396,7 @@ export class AdminService {
       });
 
       if (response.ok) {
-        const domainData = await response.json();
+        const domainData: any = await response.json();
         return {
           ...diagnostics,
           domain,
