@@ -18,6 +18,7 @@ import sessionRoutes from './modules/sessions/sessions.routes';
 import paymentRoutes from './modules/payments/payments.routes';
 import progressReportRoutes from './modules/progress-reports/progress-reports.routes';
 import tutorRoutes from './modules/tutor/tutor.routes';
+import tutorApplicationRoutes from './modules/tutor-application/tutor-application.routes';
 import adminRoutes from './modules/admin/admin.routes';
 import subjectsRoutes from './modules/subjects/subjects.routes';
 import pricingRoutes from './modules/pricing/pricing.routes';
@@ -133,6 +134,7 @@ const mountRoutes = (prefix: string = '') => {
   app.use(`${prefix}/progress-reports`, progressReportRoutes);
   app.use(`${prefix}/tutor`, tutorRoutes);
   app.use(`${prefix}/tutor-profile`, tutorRoutes);
+  app.use(`${prefix}/tutor-application`, tutorApplicationRoutes);
   app.use(`${prefix}/admin`, adminRoutes);
   app.use(`${prefix}/subjects`, subjectsRoutes);
   app.use(`${prefix}/pricing`, pricingRoutes);

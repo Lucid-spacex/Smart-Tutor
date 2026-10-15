@@ -12,9 +12,13 @@ export interface AuthResponse {
 }
 
 export interface RegisterData {
-  fullName: string;
+  firstName?: string;
+  lastName?: string;
+  middleName?: string;
+  fullName?: string; // For backward compatibility
   email: string;
   phone: string;
+  address?: string; // Required for TUTOR, optional for PARENT
   password: string;
   role: 'PARENT' | 'TUTOR';
 }

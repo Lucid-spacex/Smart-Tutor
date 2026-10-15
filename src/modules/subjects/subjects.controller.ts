@@ -25,6 +25,22 @@ export class SubjectsController {
     }
   };
 
+  getPublicSubjects = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const gradeBandTier = req.query.gradeBandTier as string;
+      const category = req.query.category as string;
+
+      // Public endpoint returns active subjects without prices
+      const subjects = await this.subjectsService.getPublicSubjects(
+        { gradeBandTier, category },
+        undefined // No user role = no prices
+      );
+      res.status(200).json(subjects);
+    } catch (error) {
+      next(error);
+    }
+  };
+
   getPricingQuote = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const parentId = req.user?.userId;

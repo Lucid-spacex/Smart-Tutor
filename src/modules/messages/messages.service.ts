@@ -112,18 +112,60 @@ export class MessagesService {
       throw new AppError(403, errorMessage);
     }
 
-    // Look for existing thread between these two users
-    const existingMessage = await prisma.message.findFirst({
-      where: {
-        OR: [
-          { senderId, recipientId: data.recipientId },
-          { senderId: data.recipientId, recipientId: senderId },
-        ],
-      },
-      select: { threadId: true },
-    });
+    // For admin support threads, use the Thread model to ensure one thread per parent/tutor
+    const [sender, recipient] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id: senderId },
+        select: { role: true },
+      }),
+      prisma.user.findUnique({
+        where: { id: data.recipientId },
+        select: { role: true },
+      }),
+    ]);
 
-    const threadId = existingMessage?.threadId || crypto.randomUUID();
+    let threadId: string;
+
+    // If this is an admin-support conversation (parent/tutor ↔ admin)
+    if ((sender?.role === 'ADMIN' && ['PARENT', 'TUTOR'].includes(recipient?.role as string)) ||
+        (recipient?.role === 'ADMIN' && ['PARENT', 'TUTOR'].includes(sender?.role as string))) {
+      // Use the non-admin user's ID as the thread identifier
+      const nonAdminId = sender?.role === 'ADMIN' ? data.recipientId : senderId;
+
+      // Find or create the Thread for this admin-support conversation
+      let thread = await prisma.thread.findUnique({
+        where: {
+          kind_participantId: {
+            kind: 'ADMIN_SUPPORT',
+            participantId: nonAdminId,
+          },
+        },
+      });
+
+      if (!thread) {
+        thread = await prisma.thread.create({
+          data: {
+            kind: 'ADMIN_SUPPORT',
+            participantId: nonAdminId,
+          },
+        });
+      }
+
+      threadId = thread.id;
+    } else {
+      // For other conversations (e.g., admin-to-admin), use the old logic
+      const existingMessage = await prisma.message.findFirst({
+        where: {
+          OR: [
+            { senderId, recipientId: data.recipientId },
+            { senderId: data.recipientId, recipientId: senderId },
+          ],
+        },
+        select: { threadId: true },
+      });
+
+      threadId = existingMessage?.threadId || crypto.randomUUID();
+    }
 
     const message = await prisma.message.create({
       data: {
@@ -165,102 +207,105 @@ export class MessagesService {
       throw new AppError(404, 'User not found');
     }
 
-    let whereClause: any;
-
-    // Shared admin inbox: admins see all threads with parents and tutors
+    // Shared admin inbox: admins see all ADMIN_SUPPORT threads
     if (user.role === 'ADMIN') {
-      // Get all thread IDs where the other participant is a parent or tutor
-      const adminThreadIds = await prisma.message.findMany({
+      const threads = await prisma.thread.findMany({
         where: {
-          OR: [
-            { senderId: userId, recipient: { role: { in: ['PARENT', 'TUTOR'] } } },
-            { recipientId: userId, sender: { role: { in: ['PARENT', 'TUTOR'] } } },
-          ],
+          kind: 'ADMIN_SUPPORT',
         },
-        select: { threadId: true },
-        distinct: ['threadId'],
+        include: {
+          participant: {
+            select: {
+              id: true,
+              fullName: true,
+              role: true,
+              profilePicture: true,
+            },
+          },
+          messages: {
+            include: {
+              sender: {
+                select: {
+                  id: true,
+                  fullName: true,
+                  role: true,
+                },
+              },
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+          },
+        },
+        orderBy: { updatedAt: 'desc' },
       });
 
-      const threadIds = adminThreadIds.map(m => m.threadId);
+      return threads.map(thread => {
+        const lastMessage = thread.messages[0];
+        const unreadCount = lastMessage?.sender.role !== 'ADMIN' && lastMessage?.readAt === null ? 1 : 0;
 
-      whereClause = {
-        threadId: { in: threadIds },
-      };
+        return {
+          threadId: thread.id,
+          otherParticipant: thread.participant,
+          lastMessage: lastMessage ? {
+            id: lastMessage.id,
+            body: lastMessage.body,
+            createdAt: lastMessage.createdAt,
+            senderId: lastMessage.senderId,
+            readAt: lastMessage.readAt,
+          } : null,
+          unreadCount,
+        };
+      });
     } else {
-      // Non-admin users: only see their own threads
-      whereClause = {
-        OR: [{ senderId: userId }, { recipientId: userId }],
-      };
-    }
-
-    // Find all messages based on the where clause
-    const messages = await prisma.message.findMany({
-      where: whereClause,
-      include: {
-        sender: {
-          select: {
-            id: true,
-            fullName: true,
-            role: true,
+      // Non-admin users: find their admin-support thread
+      const thread = await prisma.thread.findUnique({
+        where: {
+          kind_participantId: {
+            kind: 'ADMIN_SUPPORT',
+            participantId: userId,
           },
         },
-        recipient: {
-          select: {
-            id: true,
-            fullName: true,
-            role: true,
+        include: {
+          messages: {
+            include: {
+              sender: {
+                select: {
+                  id: true,
+                  fullName: true,
+                  role: true,
+                },
+              },
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
           },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+      });
 
-    // Group messages by threadId
-    const threadsMap = new Map<string, {
-      threadId: string;
-      otherParticipant: { id: string; fullName: string; role: string };
-      lastMessage: {
-        id: string;
-        body: string;
-        createdAt: Date;
-        senderId: string;
-        readAt: Date | null;
-      };
-      unreadCount: number;
-    }>();
-
-    for (const msg of messages) {
-      const otherUser = msg.senderId === userId ? msg.recipient : msg.sender;
-      
-      // For admins, normalize the other participant display to "Admin" if it's another admin
-      let displayParticipant = otherUser;
-      if (user.role === 'ADMIN' && otherUser.role === 'ADMIN') {
-        // Admin-to-admin threads show as "Admin" consistently
-        displayParticipant = { ...otherUser, fullName: 'Admin' };
-      }
-      
-      if (!threadsMap.has(msg.threadId)) {
-        threadsMap.set(msg.threadId, {
-          threadId: msg.threadId,
-          otherParticipant: displayParticipant,
-          lastMessage: {
-            id: msg.id,
-            body: msg.body,
-            createdAt: msg.createdAt,
-            senderId: msg.senderId,
-            readAt: msg.readAt,
-          },
-          unreadCount: 0,
-        });
+      if (!thread) {
+        return [];
       }
 
-      if (msg.recipientId === userId && !msg.readAt) {
-        const thread = threadsMap.get(msg.threadId)!;
-        thread.unreadCount += 1;
-      }
+      const lastMessage = thread.messages[0];
+      const unreadCount = lastMessage?.readAt === null ? 1 : 0;
+
+      return [{
+        threadId: thread.id,
+        otherParticipant: {
+          id: 'admin',
+          fullName: 'Admin',
+          role: 'ADMIN',
+        },
+        lastMessage: lastMessage ? {
+          id: lastMessage.id,
+          body: lastMessage.body,
+          createdAt: lastMessage.createdAt,
+          senderId: lastMessage.senderId,
+          readAt: lastMessage.readAt,
+        } : null,
+        unreadCount,
+      }];
     }
-
-    return Array.from(threadsMap.values());
   }
 
   async getThreadMessages(threadId: string, userId: string) {
@@ -311,16 +356,38 @@ export class MessagesService {
       throw new Error('Access denied to this message thread');
     }
 
-    await prisma.message.updateMany({
-      where: {
-        threadId,
-        recipientId: userId,
-        readAt: null,
-      },
-      data: {
-        readAt: new Date(),
-      },
+    // Check if this is an admin marking a support thread as read
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
     });
+
+    if (user?.role === 'ADMIN') {
+      // For admin support threads, mark all messages from non-admin participants as read for all admins
+      await prisma.message.updateMany({
+        where: {
+          threadId,
+          sender: { role: { in: ['PARENT', 'TUTOR'] } },
+          recipient: { role: 'ADMIN' },
+          readAt: null,
+        },
+        data: {
+          readAt: new Date(),
+        },
+      });
+    } else {
+      // For non-admin users, only mark their own messages as read
+      await prisma.message.updateMany({
+        where: {
+          threadId,
+          recipientId: userId,
+          readAt: null,
+        },
+        data: {
+          readAt: new Date(),
+        },
+      });
+    }
 
     return { message: 'Messages marked as read' };
   }

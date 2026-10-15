@@ -8,15 +8,18 @@ import crypto from 'crypto';
 import { logger } from '../../config/logger';
 import { AppError } from '../../middleware/error-handler.middleware';
 import { CloudinaryService } from '../../services/cloudinary.service';
+import { TutorApplicationService } from '../tutor-application/tutor-application.service';
 
 export class AuthService {
   private cloudinaryService: CloudinaryService;
+  private tutorApplicationService: TutorApplicationService;
 
   constructor() {
     this.cloudinaryService = new CloudinaryService();
+    this.tutorApplicationService = new TutorApplicationService();
   }
 
-  async register(data: RegisterData): Promise<{ message: string; userId: string }> {
+  async register(data: RegisterData): Promise<{ message: string; userId: string; emailSent: boolean }> {
     const existingUser = await prisma.user.findUnique({
       where: { email: data.email },
     });
@@ -28,11 +31,20 @@ export class AuthService {
     const passwordHash = await hashPassword(data.password);
     const otp = generateOTP();
 
+    // Derive fullName from name parts if not provided (backward compatibility)
+    const fullName = data.fullName || [data.firstName, data.middleName, data.lastName]
+      .filter(Boolean)
+      .join(' ');
+
     const user = await prisma.user.create({
       data: {
-        fullName: data.fullName,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        middleName: data.middleName,
+        fullName,
         email: data.email,
         phone: data.phone,
+        address: data.address,
         passwordHash,
         role: data.role,
         status: 'UNVERIFIED',
@@ -43,13 +55,14 @@ export class AuthService {
     await storeOTP(data.email, otp);
 
     // Send OTP via email
-    await sendVerificationEmail(data.email, otp);
+    const emailSent = await sendVerificationEmail(data.email, otp);
 
-    logger.info({ email: data.email }, 'User registered successfully');
+    logger.info({ email: data.email, emailSent }, 'User registered successfully');
 
     return {
       message: 'Registration successful. Please verify your email.',
       userId: user.id,
+      emailSent,
     };
   }
 
@@ -78,17 +91,9 @@ export class AuthService {
       data: { status: newStatus },
     });
 
-    // Create tutor profile if tutor
+    // Create tutor application draft if tutor (not tutor profile)
     if (user.role === 'TUTOR') {
-      await prisma.tutorProfile.create({
-        data: {
-          userId: user.id,
-          subjects: [],
-          bio: '',
-          hourlyRate: 0,
-          availability: {},
-        },
-      });
+      await this.tutorApplicationService.createDraftApplication(user.id);
     }
 
     return {
@@ -125,18 +130,21 @@ export class AuthService {
       throw new AppError(403, 'Your account is pending admin approval');
     }
 
+    // Store refresh token with token family for rotation detection
+    const tokenFamily = crypto.randomUUID();
+
     const accessToken = generateAccessToken({
       userId: user.id,
       role: user.role,
+      sid: tokenFamily,
     });
 
     const refreshToken = generateRefreshToken({
       userId: user.id,
       role: user.role,
+      sid: tokenFamily,
     });
 
-    // Store refresh token with token family for rotation detection
-    const tokenFamily = crypto.randomUUID();
     await prisma.refreshToken.create({
       data: {
         userId: user.id,
@@ -195,18 +203,20 @@ export class AuthService {
       throw new AppError(403, 'Account is suspended. Please contact your parent or admin.');
     }
 
+    // Store refresh token with token family for rotation detection
+    const tokenFamily = crypto.randomUUID();
+
     const accessToken = generateAccessToken({
       userId: studentUser.id,
       role: studentUser.role,
+      sid: tokenFamily,
     });
 
     const refreshToken = generateRefreshToken({
       userId: studentUser.id,
       role: studentUser.role,
+      sid: tokenFamily,
     });
-
-    // Store refresh token with token family for rotation detection
-    const tokenFamily = crypto.randomUUID();
     await prisma.refreshToken.create({
       data: {
         userId: studentUser.id,
@@ -262,11 +272,13 @@ export class AuthService {
       const newAccessToken = generateAccessToken({
         userId: user.id,
         role: user.role,
+        sid: storedToken.tokenFamily,
       });
 
       const newRefreshToken = generateRefreshToken({
         userId: user.id,
         role: user.role,
+        sid: storedToken.tokenFamily,
       });
 
       const newTokenHash = hashToken(newRefreshToken);
@@ -313,8 +325,10 @@ export class AuthService {
   }
 
   async logout(userId: string): Promise<{ message: string }> {
-    await prisma.refreshToken.deleteMany({
+    // Revoke the entire token family on logout
+    await prisma.refreshToken.updateMany({
       where: { userId },
+      data: { revokedAt: new Date() },
     });
 
     return { message: 'Logout successful' };
@@ -372,9 +386,10 @@ export class AuthService {
       data: { passwordHash: newPasswordHash },
     });
 
-    // Revoke all refresh tokens for security
-    await prisma.refreshToken.deleteMany({
+    // Revoke the entire token family on password change
+    await prisma.refreshToken.updateMany({
       where: { userId },
+      data: { revokedAt: new Date() },
     });
 
     logger.info({ userId }, 'Password changed successfully');
@@ -408,9 +423,10 @@ export class AuthService {
       data: { passwordHash: newPinHash },
     });
 
-    // Revoke all refresh tokens for security
-    await prisma.refreshToken.deleteMany({
+    // Revoke the entire token family on PIN change
+    await prisma.refreshToken.updateMany({
       where: { userId },
+      data: { revokedAt: new Date() },
     });
 
     logger.info({ userId }, 'Student PIN changed successfully');
@@ -436,7 +452,7 @@ export class AuthService {
     return { message: 'Timezone updated successfully' };
   }
 
-  async resendOtp(email: string): Promise<{ message: string }> {
+  async resendOtp(email: string): Promise<{ message: string; emailSent: boolean }> {
     const user = await prisma.user.findUnique({
       where: { email },
     });
@@ -455,10 +471,11 @@ export class AuthService {
     await storeOTP(email, otp);
 
     // Send OTP via email
-    await sendVerificationEmail(email, otp);
+    const emailSent = await sendVerificationEmail(email, otp);
 
     return {
       message: 'OTP sent successfully',
+      emailSent,
     };
   }
 

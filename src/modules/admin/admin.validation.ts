@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export const updateTutorVettingSchema = z.object({
   vettingStatus: z.enum(['APPROVED', 'REJECTED']),
+  rejectionReason: z.string().optional(),
 });
 
 export const assignTutorSchema = z.object({
@@ -43,6 +44,7 @@ export const rescheduleSessionSchema = z.object({
 
 export const getTutorsQuerySchema = z.object({
   status: z.enum(['APPROVED', 'PENDING_VETTING', 'REJECTED', 'SUSPENDED']).optional(),
+  applicationStatus: z.enum(['DRAFT', 'SUBMITTED', 'APPROVED', 'REJECTED']).optional(),
   vettingStatus: z.enum(['PENDING', 'APPROVED', 'REJECTED']).optional(),
   availabilityStatus: z.enum(['AVAILABLE', 'LIMITED', 'UNAVAILABLE']).optional(),
   subjectId: z.string().uuid().optional(),
@@ -66,7 +68,9 @@ export const getStudentsQuerySchema = z.object({
 export const createSubjectSchema = z.object({
   name: z.string().min(1, 'Subject name is required'),
   description: z.string().optional(),
-  category: z.enum(['CORE', 'ENRICHMENT', 'TEST_PREP']),
+  category: z.string().transform((val) => val.toUpperCase()).refine((val) => ['CORE', 'ENRICHMENT', 'TEST_PREP'].includes(val), {
+    message: 'Category must be one of: CORE, ENRICHMENT, TEST_PREP',
+  }),
   prices: z.array(z.object({
     gradeBandTier: z.enum(['PRESCHOOL_TO_G1', 'G2_TO_G4', 'G5_TO_G8', 'G9_TO_G12']),
     yearlyPriceNGN: z.number().positive('NGN price must be positive'),
@@ -77,7 +81,9 @@ export const createSubjectSchema = z.object({
 export const updateSubjectSchema = z.object({
   name: z.string().min(1, 'Subject name is required').optional(),
   description: z.string().optional(),
-  category: z.enum(['CORE', 'ENRICHMENT', 'TEST_PREP']).optional(),
+  category: z.string().transform((val) => val.toUpperCase()).refine((val) => ['CORE', 'ENRICHMENT', 'TEST_PREP'].includes(val), {
+    message: 'Category must be one of: CORE, ENRICHMENT, TEST_PREP',
+  }).optional(),
   isActive: z.boolean().optional(),
 });
 

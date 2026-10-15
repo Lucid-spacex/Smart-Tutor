@@ -34,6 +34,12 @@
  *           enum: [APPROVED, PENDING_VETTING, REJECTED, SUSPENDED]
  *         description: Filter by user status
  *       - in: query
+ *         name: applicationStatus
+ *         schema:
+ *           type: string
+ *           enum: [DRAFT, SUBMITTED, APPROVED, REJECTED]
+ *         description: Filter by application status
+ *       - in: query
  *         name: vettingStatus
  *         schema:
  *           type: string
@@ -85,7 +91,77 @@
  *                 data:
  *                   type: array
  *                   items:
- *                     $ref: '#/components/schemas/TutorProfile'
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         format: uuid
+ *                       firstName:
+ *                         type: string
+ *                       lastName:
+ *                         type: string
+ *                       middleName:
+ *                         type: string
+ *                       fullName:
+ *                         type: string
+ *                       email:
+ *                         type: string
+ *                       phone:
+ *                         type: string
+ *                       address:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *                       profilePicture:
+ *                         type: string
+ *                       timezone:
+ *                         type: string
+ *                       createdAt:
+ *                         type: string
+ *                         format: date-time
+ *                       updatedAt:
+ *                         type: string
+ *                         format: date-time
+ *                       tutorProfile:
+ *                         type: object
+ *                         properties:
+ *                           bio:
+ *                             type: string
+ *                           hourlyRate:
+ *                             type: number
+ *                           availability:
+ *                             type: object
+ *                           availabilityStatus:
+ *                             type: string
+ *                           maxStudents:
+ *                             type: integer
+ *                           vettingStatus:
+ *                             type: string
+ *                           tutorSubjects:
+ *                             type: array
+ *                             items:
+ *                               type: object
+ *                               properties:
+ *                                 subject:
+ *                                   type: object
+ *                                   properties:
+ *                                     id:
+ *                                       type: string
+ *                                     name:
+ *                                       type: string
+ *                                     category:
+ *                                       type: string
+ *                       tutorApplication:
+ *                         type: object
+ *                         properties:
+ *                           status:
+ *                             type: string
+ *                           submittedAt:
+ *                             type: string
+ *                           reviewedAt:
+ *                             type: string
+ *                       currentStudentCount:
+ *                         type: integer
  *                 page:
  *                   type: integer
  *                 limit:
@@ -99,7 +175,7 @@
  *
  * /admin/tutors/{id}:
  *   get:
- *     summary: Get detailed tutor profile with metrics
+ *     summary: Get detailed tutor profile with full application, profile, and metrics
  *     tags: [Admin - Pricing]
  *     security:
  *       - bearerAuth: []
@@ -112,14 +188,169 @@
  *           format: uuid
  *     responses:
  *       200:
- *         description: Detailed tutor profile with metrics
+ *         description: Detailed tutor profile with full data
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
- *                 id:
- *                   type: string
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                       format: uuid
+ *                     firstName:
+ *                       type: string
+ *                     lastName:
+ *                       type: string
+ *                     middleName:
+ *                       type: string
+ *                     fullName:
+ *                       type: string
+ *                     email:
+ *                       type: string
+ *                     phone:
+ *                       type: string
+ *                     address:
+ *                       type: string
+ *                     status:
+ *                       type: string
+ *                     profilePictureUrl:
+ *                       type: string
+ *                     timezone:
+ *                       type: string
+ *                     createdAt:
+ *                       type: string
+ *                       format: date-time
+ *                     updatedAt:
+ *                       type: string
+ *                       format: date-time
+ *                 application:
+ *                   type: object
+ *                   properties:
+ *                     status:
+ *                       type: string
+ *                     birthDay:
+ *                       type: integer
+ *                     birthMonth:
+ *                       type: integer
+ *                     country:
+ *                       type: string
+ *                     city:
+ *                       type: string
+ *                     highestQualification:
+ *                       type: string
+ *                     subjects:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: string
+ *                           name:
+ *                             type: string
+ *                           category:
+ *                             type: string
+ *                     levels:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                     yearsOfExperience:
+ *                       type: integer
+ *                     whyTeach:
+ *                       type: string
+ *                     howHeard:
+ *                       type: string
+ *                     aboutYou:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                     documents:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: string
+ *                           name:
+ *                             type: string
+ *                           mimeType:
+ *                             type: string
+ *                           sizeBytes:
+ *                             type: integer
+ *                           url:
+ *                             type: string
+ *                           expiresAt:
+ *                             type: string
+ *                     submittedAt:
+ *                       type: string
+ *                       format: date-time
+ *                     reviewedAt:
+ *                       type: string
+ *                       format: date-time
+ *                     reviewedBy:
+ *                       type: string
+ *                     rejectionReason:
+ *                       type: string
+ *                 profile:
+ *                   type: object
+ *                   properties:
+ *                     bio:
+ *                       type: string
+ *                     hourlyRate:
+ *                       type: number
+ *                     availability:
+ *                       type: object
+ *                     availabilityStatus:
+ *                       type: string
+ *                     maxStudents:
+ *                       type: integer
+ *                     statusNote:
+ *                       type: string
+ *                     statusUpdatedAt:
+ *                       type: string
+ *                       format: date-time
+ *                     currentStudentCount:
+ *                       type: integer
+ *                     vettingStatus:
+ *                       type: string
+ *                     subjects:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: string
+ *                           name:
+ *                             type: string
+ *                           category:
+ *                             type: string
+ *                 metrics:
+ *                   type: object
+ *                   properties:
+ *                     studentsCount:
+ *                       type: integer
+ *                     sessionsCompleted:
+ *                       type: integer
+ *                     sessionsMissed:
+ *                       type: integer
+ *                     sessionsCancelled:
+ *                       type: integer
+ *                     avgStudentGradePercentage:
+ *                       type: number
+ *                     avgStudentAttendanceRate:
+ *                       type: number
+ *                     reportsSubmitted:
+ *                       type: integer
+ *                     assignmentsCreated:
+ *                       type: integer
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized - user is not an admin
+ *       404:
+ *         description: Tutor not found
  *                   format: uuid
  *                 fullName:
  *                   type: string
@@ -230,8 +461,6 @@
  *                             type: string
  *                             format: uuid
  *                           fullName:
- *                             type: string
- *                           studentCode:
  *                             type: string
  *                           gradeLevel:
  *                             type: string
@@ -689,8 +918,6 @@
  *                         type: string
  *                       fullName:
  *                         type: string
- *                       studentCode:
- *                         type: string
  *                       dateOfBirth:
  *                         type: string
  *                         format: date
@@ -720,7 +947,7 @@
  *
  * /admin/students/{id}:
  *   get:
- *     summary: Get detailed student profile
+ *     summary: Get detailed student profile with full data
  *     tags: [Admin - Pricing]
  *     security:
  *       - bearerAuth: []
@@ -731,43 +958,96 @@
  *         schema:
  *           type: string
  *           format: uuid
+ *       - in: query
+ *         name: period
+ *         schema:
+ *           type: string
+ *           enum: [week, month, quarter, year, all]
+ *           default: month
+ *         description: Performance data period
  *     responses:
  *       200:
- *         description: Detailed student profile
+ *         description: Detailed student profile with all related data
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
- *                 id:
- *                   type: string
- *                   format: uuid
- *                 fullName:
- *                   type: string
- *                 studentCode:
- *                   type: string
- *                 dateOfBirth:
- *                   type: string
- *                   format: date
- *                 gradeLevel:
- *                   type: string
- *                 gradeBandTier:
- *                   type: string
- *                 school:
- *                   type: string
- *                 notes:
- *                   type: string
+ *                 student:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                       format: uuid
+ *                     fullName:
+ *                       type: string
+ *                     dateOfBirth:
+ *                       type: string
+ *                       format: date
+ *                     gender:
+ *                       type: string
+ *                     actualGrade:
+ *                       type: string
+ *                     gradeLevel:
+ *                       type: string
+ *                     gradeBandTier:
+ *                       type: string
+ *                     school:
+ *                       type: string
+ *                     notes:
+ *                       type: string
+ *                     email:
+ *                       type: string
+ *                     preferredStartDate:
+ *                       type: string
+ *                       format: date
+ *                     timezone:
+ *                       type: string
+ *                     profilePictureUrl:
+ *                       type: string
+ *                     createdAt:
+ *                       type: string
+ *                       format: date-time
+ *                     status:
+ *                       type: string
  *                 parent:
  *                   type: object
  *                   properties:
  *                     id:
  *                       type: string
+ *                       format: uuid
  *                     fullName:
  *                       type: string
  *                     email:
  *                       type: string
  *                     phone:
  *                       type: string
+ *                     profilePictureUrl:
+ *                       type: string
+ *                 tutors:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         format: uuid
+ *                       fullName:
+ *                         type: string
+ *                       profilePicture:
+ *                         type: string
+ *                       subjects:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: string
+ *                               format: uuid
+ *                             name:
+ *                               type: string
+ *                             category:
+ *                               type: string
  *                 enrollments:
  *                   type: array
  *                   items:
@@ -783,6 +1063,8 @@
  *                             type: string
  *                           name:
  *                             type: string
+ *                       status:
+ *                         type: string
  *                       tutor:
  *                         type: object
  *                         properties:
@@ -792,12 +1074,64 @@
  *                             type: string
  *                           profilePicture:
  *                             type: string
+ *                           subjects:
+ *                             type: array
+ *                             items:
+ *                               type: object
+ *                       sessionFrequency:
+ *                         type: string
+ *                       availableDays:
+ *                         type: array
+ *                         items:
+ *                           type: string
+ *                       preferredStartHour:
+ *                         type: integer
+ *                       preferredEndHour:
+ *                         type: integer
+ *                       billingFrequency:
+ *                         type: string
  *                       effectivePriceNGN:
  *                         type: number
  *                       effectivePriceUSD:
  *                         type: number
  *                       priceSource:
  *                         type: string
+ *                       paymentStatus:
+ *                         type: string
+ *                 sessions:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         format: uuid
+ *                       scheduledAt:
+ *                         type: string
+ *                         format: date-time
+ *                       durationMinutes:
+ *                         type: integer
+ *                       status:
+ *                         type: string
+ *                       zoomLink:
+ *                         type: string
+ *                       zoomMeetingId:
+ *                         type: string
+ *                       recordingUrl:
+ *                         type: string
+ *                       recordingStatus:
+ *                         type: string
+ *                       tutorNotes:
+ *                         type: string
+ *                       homeworkAssigned:
+ *                         type: string
+ *                       tutor:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: string
+ *                           fullName:
+ *                             type: string
  *                 attendance:
  *                   type: object
  *                   properties:
@@ -807,6 +1141,18 @@
  *                       type: integer
  *                     total:
  *                       type: integer
+ *                     recent:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           date:
+ *                             type: string
+ *                             format: date-time
+ *                           attended:
+ *                             type: boolean
+ *                           status:
+ *                             type: string
  *                 grades:
  *                   type: object
  *                   properties:
@@ -817,6 +1163,31 @@
  *                       type: integer
  *                     pendingCount:
  *                       type: integer
+ *                     recent:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: string
+ *                           score:
+ *                             type: number
+ *                           maxScore:
+ *                             type: number
+ *                           percentage:
+ *                             type: number
+ *                           status:
+ *                             type: string
+ *                           subject:
+ *                             type: string
+ *                           assignmentTitle:
+ *                             type: string
+ *                           grader:
+ *                             type: string
+ *                           approvedAt:
+ *                             type: string
+ *                           createdAt:
+ *                             type: string
  *                 assignments:
  *                   type: object
  *                   properties:
@@ -826,10 +1197,32 @@
  *                       type: integer
  *                     pending:
  *                       type: integer
- *                 recentSessions:
+ *                     recent:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: string
+ *                           title:
+ *                             type: string
+ *                           type:
+ *                             type: string
+ *                           dueDate:
+ *                             type: string
+ *                           status:
+ *                             type: string
+ *                           hasSubmission:
+ *                             type: boolean
+ *                           lastSubmittedAt:
+ *                             type: string
+ *                 progressReports:
  *                   type: array
  *                   items:
- *                     $ref: '#/components/schemas/Session'
+ *                     $ref: '#/components/schemas/ProgressReport'
+ *                 performance:
+ *                   type: object
+ *                   description: Performance metrics for the specified period
  *       401:
  *         description: Not authenticated
  *       403:
@@ -1014,6 +1407,100 @@
  *                   type: array
  *                   items:
  *                     $ref: '#/components/schemas/Session'
+ *                 page:
+ *                   type: integer
+ *                 limit:
+ *                   type: integer
+ *                 total:
+ *                   type: integer
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized - user is not an admin
+ *
+ * /admin/students/{id}/assignments:
+ *   get:
+ *     summary: Get paginated list of student's assignments with submission status
+ *     tags: [Admin - Pricing]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *           maximum: 100
+ *     responses:
+ *       200:
+ *         description: Paginated list of assignments
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Assignment'
+ *                 page:
+ *                   type: integer
+ *                 limit:
+ *                   type: integer
+ *                 total:
+ *                   type: integer
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Not authorized - user is not an admin
+ *
+ * /admin/students/{id}/progress-reports:
+ *   get:
+ *     summary: Get paginated list of student's progress reports
+ *     tags: [Admin - Pricing]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *           maximum: 100
+ *     responses:
+ *       200:
+ *         description: Paginated list of progress reports
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/ProgressReport'
  *                 page:
  *                   type: integer
  *                 limit:
@@ -1491,8 +1978,6 @@
  *                         type: string
  *                         format: uuid
  *                       fullName:
- *                         type: string
- *                       studentCode:
  *                         type: string
  *                       gradeLevel:
  *                         type: string
@@ -2077,8 +2562,6 @@
  *                 enrollmentId:
  *                   type: string
  *                 studentName:
- *                   type: string
- *                 studentCode:
  *                   type: string
  *                 subject:
  *                   type: string

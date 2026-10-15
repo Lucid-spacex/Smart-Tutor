@@ -111,6 +111,7 @@ enum RecordingStatus {
 
 enum PaymentProvider {
   PAYSTACK
+  STRIPE
 }
 
 enum PaymentStatus {
@@ -123,9 +124,13 @@ enum PaymentStatus {
 
 model User {
   id             String     @id @default(uuid())
+  firstName      String?
+  lastName       String?
+  middleName     String?
   fullName       String
   email          String?    @unique
   phone          String?
+  address        String?
   passwordHash   String
   role           UserRole
   status         UserStatus @default(UNVERIFIED)
@@ -139,6 +144,7 @@ model User {
   updatedAt      DateTime   @updatedAt
 
   tutorProfile        TutorProfile?
+  tutorApplication    TutorApplication?
   studentProfile      Student?
   enrollmentsAsTutor  Enrollment[]     @relation("TutorEnrollments")
   sessions            Session[]        @relation("SessionTutor")
@@ -156,6 +162,7 @@ model User {
   pricingTiersUpdated PricingTier[]
   notifications       Notification[]
   subjectPricesUpdated SubjectPrice[]
+  threads             Thread[]               @relation("ThreadParticipant")
 
   @@index([email])
   @@index([role])
@@ -190,6 +197,100 @@ enum TutorAvailabilityStatus {
   AVAILABLE
   LIMITED
   UNAVAILABLE
+}
+
+enum TutorApplicationStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+}
+
+enum Qualification {
+  SSCE_WAEC
+  OND_NCE
+  HND
+  BACHELORS
+  BED_PGDE
+  MASTERS
+  PHD
+  OTHER
+}
+
+enum QualificationLevel {
+  PRESCHOOL_TO_G1
+  G2_TO_G4
+  G5_TO_G8
+  G9_TO_G12
+  EXAM_LEVELS
+}
+
+enum HowHeardSource {
+  TEACHMENEST_TUTOR_OR_STAFF
+  PARENT_OR_FAMILY
+  FRIEND_OR_FAMILY
+  INSTAGRAM
+  FACEBOOK
+  LINKEDIN
+  WHATSAPP_GROUP
+  GOOGLE_SEARCH
+  JOB_BOARD
+  OTHER
+}
+
+model TutorApplication {
+  id              String                  @id @default(uuid())
+  userId          String                  @unique
+  user            User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  status          TutorApplicationStatus  @default(DRAFT)
+  birthDay        Int                     // 1-31
+  birthMonth      Int                     // 1-12
+  country         String
+  city            String
+  highestQualification Qualification
+
+  subjects        TutorApplicationSubject[]
+  levels          QualificationLevel[]
+
+  yearsOfExperience Int
+  whyTeach        String
+  howHeard        HowHeardSource
+  aboutYou        String[]                // Up to 3 paragraphs
+
+  lastSavedAt     DateTime                @updatedAt
+  submittedAt     DateTime?
+  reviewedAt      DateTime?
+  reviewedBy      String?
+  rejectionReason String?
+
+  documents       TutorDocument[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+model TutorApplicationSubject {
+  id              String             @id @default(uuid())
+  applicationId   String
+  application     TutorApplication  @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  subjectId       String
+  subject         Subject            @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@unique([applicationId, subjectId])
+}
+
+model TutorDocument {
+  id              String             @id @default(uuid())
+  applicationId   String
+  application     TutorApplication  @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  publicId        String             // Cloudinary public ID
+  originalName    String
+  mimeType        String
+  sizeBytes       Int
+  createdAt       DateTime           @default(now())
+
+  @@index([applicationId])
 }
 
 model TutorSubject {
@@ -255,9 +356,10 @@ model Subject {
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @default(now()) @updatedAt
 
-  enrollments   Enrollment[]
-  subjectPrices SubjectPrice[]
-  tutorSubjects TutorSubject[]
+  enrollments               Enrollment[]
+  subjectPrices             SubjectPrice[]
+  tutorSubjects             TutorSubject[]
+  tutorApplicationSubjects  TutorApplicationSubject[]
 
   @@index([category])
   @@index([isActive])
@@ -426,13 +528,32 @@ model ProgressReport {
   @@index([createdBy])
 }
 
+enum ThreadKind {
+  ADMIN_SUPPORT
+}
+
+model Thread {
+  id             String     @id @default(uuid())
+  kind           ThreadKind @default(ADMIN_SUPPORT)
+  participantId  String     // The non-admin user (parent or tutor)
+  participant    User       @relation("ThreadParticipant", fields: [participantId], references: [id], onDelete: Cascade)
+  messages       Message[]
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@unique([kind, participantId])
+  @@index([participantId])
+  @@index([kind])
+}
+
 model Message {
   id          String    @id @default(uuid())
   senderId    String
   sender      User      @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
   recipientId String
   recipient   User      @relation("MessageRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
-  threadId    String
+  threadId    String?
+  thread      Thread?   @relation(fields: [threadId], references: [id], onDelete: Cascade)
   body        String
   readAt      DateTime?
   createdAt   DateTime  @default(now())

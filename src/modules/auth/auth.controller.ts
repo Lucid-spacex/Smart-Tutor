@@ -14,7 +14,11 @@ export class AuthController {
     try {
       const data: RegisterData = req.body;
       const result = await this.authService.register(data);
-      res.status(201).json(result);
+      res.status(201).json({
+        message: result.message,
+        userId: result.userId,
+        emailSent: result.emailSent,
+      });
     } catch (error) {
       next(error);
     }

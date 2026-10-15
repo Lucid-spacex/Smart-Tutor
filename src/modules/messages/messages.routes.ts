@@ -18,6 +18,9 @@ const blockStudents = (req: AuthRequest, res: Response, next: NextFunction): voi
   next();
 };
 
+// Get admin contact for messaging (PARENT and TUTOR only)
+router.get('/admin-contact', authenticate, requireRole('PARENT', 'TUTOR'), messagesController.getAdminContact);
+
 // Send message (allowed roles validated per permission graph in service)
 // STUDENTS blocked entirely from messaging
 router.post('/', authenticate, blockStudents, validate(createMessageSchema), messagesController.sendMessage);
@@ -30,8 +33,5 @@ router.get('/threads/:threadId', authenticate, validateUUID('threadId'), blockSt
 
 // Mark thread messages as read (STUDENTS blocked entirely)
 router.patch('/threads/:threadId/read', authenticate, validateUUID('threadId'), blockStudents, messagesController.markThreadAsRead);
-
-// Get admin contact for messaging (PARENT and TUTOR only)
-router.get('/admin-contact', authenticate, requireRole('PARENT', 'TUTOR'), messagesController.getAdminContact);
 
 export default router;

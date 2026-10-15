@@ -5,6 +5,7 @@ import { jwtConfig } from '../config';
 export interface TokenPayload {
   userId: string;
   role: string;
+  sid?: string; // Session ID (token family) for revocation checking
 }
 
 export const generateAccessToken = (payload: TokenPayload): string => {
@@ -29,4 +30,8 @@ export const verifyRefreshToken = (token: string): TokenPayload => {
 
 export const hashToken = (token: string): string => {
   return crypto.createHash('sha256').update(token).digest('hex');
+};
+
+export const generateSessionId = (): string => {
+  return crypto.randomUUID();
 };

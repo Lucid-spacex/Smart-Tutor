@@ -99,7 +99,7 @@ export class SubjectsService {
   async createSubject(data: {
     name: string;
     description?: string;
-    category: 'CORE' | 'ENRICHMENT' | 'TEST_PREP';
+    category: string;
     prices: Array<{
       gradeBandTier: 'PRESCHOOL_TO_G1' | 'G2_TO_G4' | 'G5_TO_G8' | 'G9_TO_G12';
       yearlyPriceNGN: number;
@@ -114,16 +114,13 @@ export class SubjectsService {
       data: {
         name: data.name,
         description: data.description,
-        category: data.category,
+        category: data.category as 'CORE' | 'ENRICHMENT' | 'TEST_PREP',
         subjectPrices: {
           create: data.prices.map(price => ({
             gradeBandTier: price.gradeBandTier,
             yearlyPriceNGN: price.yearlyPriceNGN,
             yearlyPriceUSD: price.yearlyPriceUSD,
             updatedBy: adminId,
-            updater: {
-              connect: { id: adminId },
-            },
           })),
         },
       },
@@ -139,12 +136,22 @@ export class SubjectsService {
   async updateSubject(subjectId: string, data: {
     name?: string;
     description?: string;
-    category?: 'CORE' | 'ENRICHMENT' | 'TEST_PREP';
+    category?: string;
     isActive?: boolean;
   }) {
+    const updateData: any = {
+      name: data.name,
+      description: data.description,
+      isActive: data.isActive,
+    };
+
+    if (data.category) {
+      updateData.category = data.category as 'CORE' | 'ENRICHMENT' | 'TEST_PREP';
+    }
+
     return prisma.subject.update({
       where: { id: subjectId },
-      data,
+      data: updateData,
     });
   }
 

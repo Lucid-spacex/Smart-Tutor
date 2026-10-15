@@ -1,13 +1,12 @@
 import { logger } from '../config/logger';
 import { config } from '../config/env.config';
+import { Resend } from 'resend';
 
 // Resend API client
-const RESEND_API_URL = 'https://api.resend.com/v3/smtp/email';
-
-let resendApiKey: string | null = null;
+let resendClient: Resend | null = null;
 
 if (config.RESEND_API_KEY) {
-  resendApiKey = config.RESEND_API_KEY;
+  resendClient = new Resend(config.RESEND_API_KEY);
   logger.info('Resend API client initialized successfully');
 } else {
   logger.warn('Resend API key not configured - email sending is disabled');
@@ -50,49 +49,92 @@ const parseEmailFrom = (emailFrom: string): { email: string; name: string } => {
 /**
  * Centralized email sending function
  * Handles all email delivery through Resend API
+ * Returns boolean indicating success for credential/OTP emails
  */
-export const sendEmail = async (data: EmailData): Promise<void> => {
-  if (!resendApiKey) {
+export const sendEmail = async (data: EmailData, retryOnFailure: boolean = false): Promise<boolean> => {
+  if (!resendClient) {
     logger.warn({ to: data.to }, 'Email not sent - Resend API not configured');
-    return;
+    return false;
   }
 
-  try {
-    const sender = parseEmailFrom(config.EMAIL_FROM || 'Teachmenest <no-reply@teachmenest.com>');
+  const sender = parseEmailFrom(config.EMAIL_FROM || 'Teachmenest <no-reply@teachmenest.com>');
 
-    const response = await fetch(RESEND_API_URL, {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${resendApiKey}`,
-      },
-      body: JSON.stringify({
+  const attemptSend = async (): Promise<boolean> => {
+    try {
+      const emailData: any = {
         from: sender.email,
-        to: data.to,
+        to: [data.to],
         subject: data.subject,
         html: data.html,
-        text: data.text,
-      }),
-    });
+      };
 
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Resend API error: ${response.status} - ${error}`);
+      if (data.text) {
+        emailData.text = data.text;
+      }
+
+      // Log the request details for debugging
+      logger.info({
+        to: data.to,
+        subject: data.subject,
+        from: sender.email,
+        method: 'POST',
+        endpoint: 'https://api.resend.com/emails',
+      }, 'Sending email via Resend SDK');
+
+      const result = await resendClient!.emails.send(emailData);
+
+      if (result.error) {
+        const error = `Resend API error: ${result.error.name} - ${result.error.message}`;
+        logger.error({ to: data.to, subject: data.subject, error }, 'Email sending failed');
+        throw new Error(error);
+      }
+
+      const messageId = result.data?.id;
+      logger.info({ to: data.to, subject: data.subject, messageId }, 'Email sent successfully');
+      return true;
+    } catch (error) {
+      const err = error as Error;
+      // Re-throw with provider error code plainly (not swallowed)
+      throw err;
+    }
+  };
+
+  try {
+    if (retryOnFailure) {
+      // Retry with exponential backoff for 429 and 5xx errors
+      const maxRetries = 3;
+      const baseDelay = 1000; // 1 second
+
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+          return await attemptSend();
+        } catch (error) {
+          const err = error as Error;
+          const isRetryable = err.message.includes('429') || err.message.includes('5');
+
+          if (!isRetryable || attempt === maxRetries - 1) {
+            throw error;
+          }
+
+          const delay = baseDelay * Math.pow(2, attempt);
+          logger.info({ to: data.to, attempt: attempt + 1, delay }, 'Retrying email send with backoff');
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
     }
 
-    const messageId = response.headers.get('X-Message-Id');
-    logger.info({ to: data.to, subject: data.subject, messageId }, 'Email sent successfully');
+    return await attemptSend();
   } catch (error) {
-    logger.error({ to: data.to, subject: data.subject, error: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined }, 'Email sending failed');
-    // Don't throw - email failures shouldn't block the main flow
+    const err = error as Error;
+    logger.error({ to: data.to, subject: data.subject, error: err.message, stack: err.stack }, 'Email sending failed after retries');
+    return false;
   }
 };
 
 /**
  * Send OTP verification email
  */
-export const sendVerificationEmail = async (email: string, otp: string): Promise<void> => {
+export const sendVerificationEmail = async (email: string, otp: string): Promise<boolean> => {
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
       <h2 style="color: #333;">Verify Your Email Address</h2>
@@ -106,7 +148,7 @@ export const sendVerificationEmail = async (email: string, otp: string): Promise
     </div>
   `;
 
-  await sendEmail({
+  return sendEmail({
     to: email,
     subject: 'Verify Your Teachmenest Account',
     html,
@@ -123,18 +165,18 @@ export const sendStudentCredentialsEmail = async (
   studentName: string,
   studentCode: string,
   studentPin: string
-): Promise<void> => {
+): Promise<boolean> => {
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
       <h2 style="color: #333;">Student Account Created</h2>
       <p>Dear ${parentName},</p>
       <p>A student account has been created for <strong>${studentName}</strong> on Teachmenest. Below are the login credentials:</p>
-      
+
       <div style="background: #f4f4f4; padding: 20px; margin: 20px 0;">
         <p><strong>Student Code:</strong> <span style="font-size: 18px; font-weight: bold; color: #333;">${studentCode}</span></p>
         <p><strong>Student PIN:</strong> <span style="font-size: 24px; font-weight: bold; color: #333; letter-spacing: 3px;">${studentPin}</span></p>
       </div>
-      
+
       <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0;">
         <p style="margin: 0;"><strong>⚠️ Important Security Notice:</strong></p>
         <ul style="margin: 10px 0;">
@@ -144,13 +186,13 @@ export const sendStudentCredentialsEmail = async (
           <li>Keep this information secure</li>
         </ul>
       </div>
-      
+
       <p>Your child can log in using the Teachmenest student portal with these credentials.</p>
       <p style="color: #666; font-size: 12px;">Teachmenest Platform</p>
     </div>
   `;
 
-  await sendEmail({
+  return sendEmail({
     to: parentEmail,
     subject: `Student Account Created for ${studentName}`,
     html,
@@ -165,28 +207,28 @@ export const sendPinResetEmail = async (
   email: string,
   name: string,
   newPin: string
-): Promise<void> => {
+): Promise<boolean> => {
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
       <h2 style="color: #333;">Student PIN Regenerated</h2>
       <p>Dear ${name},</p>
       <p>The student PIN has been successfully regenerated. Below is the new PIN:</p>
-      
+
       <div style="background: #f4f4f4; padding: 20px; text-align: center; margin: 20px 0;">
         <span style="font-size: 32px; font-weight: bold; color: #333; letter-spacing: 5px;">${newPin}</span>
       </div>
-      
+
       <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0;">
         <p style="margin: 0;"><strong>⚠️ Security Notice:</strong></p>
         <p style="margin: 5px 0;">Please share this new PIN only with your child.</p>
       </div>
-      
+
       <p>If you didn't request this PIN change, please contact support immediately.</p>
       <p style="color: #666; font-size: 12px;">Teachmenest Platform</p>
     </div>
   `;
 
-  await sendEmail({
+  return sendEmail({
     to: email,
     subject: 'Student PIN Has Been Regenerated',
     html,
@@ -199,9 +241,10 @@ export const sendPasswordResetEmail = async (
   email: string,
   template: 'password_reset' | 'account_suspended' = 'password_reset',
   data?: any
-): Promise<void> => {
+): Promise<boolean> => {
   if (template === 'account_suspended') {
-    return sendSuspensionEmail(email, data?.fullName || 'User', data?.reason || 'Policy violation');
+    await sendSuspensionEmail(email, data?.fullName || 'User', data?.reason || 'Policy violation');
+    return true;
   }
   return sendPinResetEmail(email, data?.name || 'User', data?.newPin || 'N/A');
 };
@@ -214,7 +257,7 @@ export const sendNotificationEmail = async (
   name: string,
   notificationType: string,
   message: string
-): Promise<void> => {
+): Promise<boolean> => {
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
       <h2 style="color: #333;">Teachmenest Notification</h2>
@@ -225,12 +268,12 @@ export const sendNotificationEmail = async (
     </div>
   `;
 
-  await sendEmail({
+  return sendEmail({
     to: email,
     subject: `Teachmenest: ${notificationType}`,
     html,
     text: message,
-  });
+  }, true); // Retry on failure for non-secret emails
 };
 
 /**
@@ -240,23 +283,23 @@ export const sendSuspensionEmail = async (
   email: string,
   name: string,
   reason: string
-): Promise<void> => {
+): Promise<boolean> => {
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
       <h2 style="color: #dc3545;">Account Suspended</h2>
       <p>Dear ${name},</p>
       <p>Your Teachmenest account has been suspended due to the following reason:</p>
-      
+
       <div style="background: #f8d7da; border-left: 4px solid #dc3545; padding: 15px; margin: 20px 0;">
         <p style="margin: 0;">${reason}</p>
       </div>
-      
+
       <p>If you believe this is an error, or to reactivate your account, please contact our support team.</p>
       <p style="color: #666; font-size: 12px;">Teachmenest Platform</p>
     </div>
   `;
 
-  await sendEmail({
+  return sendEmail({
     to: email,
     subject: 'Your Teachmenest Account Has Been Suspended',
     html,

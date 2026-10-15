@@ -8,6 +8,8 @@ import { EnrollmentsService } from '../enrollments/enrollments.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { GradesService } from '../grades/grades.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { PerformanceService } from '../performance/performance.service';
+import { TutorApplicationService } from '../tutor-application/tutor-application.service';
 import { GradeBandTier } from '@prisma/client';
 import { CreateSessionInput, RescheduleSessionInput } from '../sessions/sessions.validation';
 import { config } from '../../config/env.config';
@@ -17,12 +19,16 @@ export class AdminService {
   private sessionsService: SessionsService;
   private gradesService: GradesService;
   private notificationsService: NotificationsService;
+  private performanceService: PerformanceService;
+  private tutorApplicationService: TutorApplicationService;
 
   constructor() {
     this.enrollmentsService = new EnrollmentsService();
     this.sessionsService = new SessionsService();
     this.gradesService = new GradesService();
     this.notificationsService = new NotificationsService();
+    this.performanceService = new PerformanceService();
+    this.tutorApplicationService = new TutorApplicationService();
   }
 
   // Generate a 6-digit numeric PIN for student login
@@ -49,6 +55,7 @@ export class AdminService {
 
   async getTutors(filters?: {
     status?: string;
+    applicationStatus?: string;
     vettingStatus?: string;
     availabilityStatus?: string;
     subjectId?: string;
@@ -57,7 +64,7 @@ export class AdminService {
     page?: number;
     limit?: number;
   }) {
-    const { status, vettingStatus, availabilityStatus, subjectId, hasCapacity, search, page = 1, limit = 20 } = filters || {};
+    const { status, applicationStatus, vettingStatus, availabilityStatus, subjectId, hasCapacity, search, page = 1, limit = 20 } = filters || {};
     const skip = (page - 1) * limit;
 
     const where: any = {
@@ -69,6 +76,12 @@ export class AdminService {
       where.status = status;
     } else {
       where.status = 'APPROVED';
+    }
+
+    if (applicationStatus) {
+      where.tutorApplication = {
+        status: applicationStatus,
+      };
     }
 
     if (vettingStatus) {
@@ -118,6 +131,7 @@ export class AdminService {
               },
             },
           },
+          tutorApplication: true,
         },
         orderBy: {
           fullName: 'asc',
@@ -173,6 +187,7 @@ export class AdminService {
               },
             },
           },
+          tutorApplication: true,
         },
         orderBy: {
           fullName: 'asc',
@@ -219,6 +234,16 @@ export class AdminService {
                 subject: true,
               },
             },
+          },
+        },
+        tutorApplication: {
+          include: {
+            subjects: {
+              include: {
+                subject: true,
+              },
+            },
+            documents: true,
           },
         },
       },
@@ -278,8 +303,70 @@ export class AdminService {
       }),
     ]);
 
+    const currentStudentCount = studentsCount;
+
     return {
-      ...tutor,
+      user: {
+        id: tutor.id,
+        firstName: tutor.firstName,
+        lastName: tutor.lastName,
+        middleName: tutor.middleName,
+        fullName: tutor.fullName,
+        email: tutor.email,
+        phone: tutor.phone,
+        address: tutor.address,
+        status: tutor.status,
+        profilePictureUrl: tutor.profilePicture,
+        timezone: tutor.timezone,
+        createdAt: tutor.createdAt,
+        updatedAt: tutor.updatedAt,
+      },
+      application: tutor.tutorApplication ? {
+        status: tutor.tutorApplication.status,
+        birthDay: tutor.tutorApplication.birthDay,
+        birthMonth: tutor.tutorApplication.birthMonth,
+        country: tutor.tutorApplication.country,
+        city: tutor.tutorApplication.city,
+        highestQualification: tutor.tutorApplication.highestQualification,
+        subjects: tutor.tutorApplication.subjects.map(s => ({
+          id: s.subject.id,
+          name: s.subject.name,
+          category: s.subject.category,
+        })),
+        levels: tutor.tutorApplication.levels,
+        yearsOfExperience: tutor.tutorApplication.yearsOfExperience,
+        whyTeach: tutor.tutorApplication.whyTeach,
+        howHeard: tutor.tutorApplication.howHeard,
+        aboutYou: tutor.tutorApplication.aboutYou,
+        documents: tutor.tutorApplication.documents.map(d => ({
+          id: d.id,
+          name: d.originalName,
+          mimeType: d.mimeType,
+          sizeBytes: d.sizeBytes,
+          url: d.publicId, // Cloudinary public ID (for generating signed URLs)
+          expiresAt: null, // Documents don't expire, but signed URLs do
+        })),
+        submittedAt: tutor.tutorApplication.submittedAt,
+        reviewedAt: tutor.tutorApplication.reviewedAt,
+        reviewedBy: tutor.tutorApplication.reviewedBy,
+        rejectionReason: tutor.tutorApplication.rejectionReason,
+      } : null,
+      profile: tutor.tutorProfile ? {
+        bio: tutor.tutorProfile.bio,
+        hourlyRate: Number(tutor.tutorProfile.hourlyRate),
+        availability: tutor.tutorProfile.availability,
+        availabilityStatus: tutor.tutorProfile.availabilityStatus,
+        maxStudents: tutor.tutorProfile.maxStudents,
+        statusNote: tutor.tutorProfile.statusNote,
+        statusUpdatedAt: tutor.tutorProfile.statusUpdatedAt,
+        currentStudentCount,
+        vettingStatus: tutor.tutorProfile.vettingStatus,
+        subjects: tutor.tutorProfile.tutorSubjects.map(ts => ({
+          id: ts.subject.id,
+          name: ts.subject.name,
+          category: ts.subject.category,
+        })),
+      } : null,
       metrics: {
         studentsCount,
         sessionsCompleted,
@@ -304,7 +391,6 @@ export class AdminService {
             include: {
               user: {
                 select: {
-                  studentCode: true,
                   status: true,
                 },
               },
@@ -327,7 +413,6 @@ export class AdminService {
         student: {
           id: e.student.id,
           fullName: e.student.fullName,
-          studentCode: e.student.user.studentCode,
           gradeLevel: e.student.gradeLevel,
           gradeBandTier: e.student.gradeBandTier,
         },
@@ -478,44 +563,29 @@ export class AdminService {
     };
   }
 
-  async updateTutorVetting(tutorId: string, data: UpdateTutorVettingInput) {
+  async updateTutorVetting(tutorId: string, data: UpdateTutorVettingInput, adminId: string) {
+    // Use TutorApplicationService to review the application
+    await this.tutorApplicationService.reviewApplication(
+      tutorId,
+      adminId,
+      data.vettingStatus,
+      data.rejectionReason
+    );
+
+    // Return updated user for response
     const user = await prisma.user.findUnique({
       where: { id: tutorId },
-      include: { tutorProfile: true },
+      include: {
+        tutorProfile: true,
+        tutorApplication: true,
+      },
     });
 
     if (!user) {
       throw new Error('Tutor not found');
     }
 
-    if (user.role !== 'TUTOR') {
-      throw new Error('User is not a tutor');
-    }
-
-    // Update both user status and tutor profile vetting status
-    const userStatus = data.vettingStatus === 'APPROVED' ? 'APPROVED' : 'REJECTED';
-
-    await prisma.user.update({
-      where: { id: tutorId },
-      data: { status: userStatus },
-    });
-
-    const updatedProfile = await prisma.tutorProfile.update({
-      where: { userId: tutorId },
-      data: { vettingStatus: data.vettingStatus },
-      include: {
-        user: {
-          select: {
-            id: true,
-            fullName: true,
-            email: true,
-            status: true,
-          },
-        },
-      },
-    });
-
-    return updatedProfile;
+    return user;
   }
 
   async getUnmatchedEnrollments(includeUnpaid: boolean = false) {
@@ -767,7 +837,6 @@ export class AdminService {
     if (search) {
       where.OR = [
         { fullName: { contains: search, mode: 'insensitive' } },
-        { user: { studentCode: { contains: search, mode: 'insensitive' } } },
       ];
     }
 
@@ -816,8 +885,8 @@ export class AdminService {
           user: {
             select: {
               id: true,
-              studentCode: true,
               status: true,
+              // Explicitly exclude studentCode - admins must never see student codes
             },
           },
         },
@@ -838,13 +907,12 @@ export class AdminService {
     });
     const parentMap = new Map(parents.map(p => [p.id, p]));
 
-    // Transform to match expected response format with parentName and studentCode
+    // Transform to match expected response format with parentName
     const data = students.map(student => ({
       id: student.id,
       parentId: student.parentId,
       parentName: parentMap.get(student.parentId)?.fullName ?? null,
       fullName: student.fullName,
-      studentCode: student.user.studentCode,
       dateOfBirth: student.dateOfBirth,
       gradeLevel: student.gradeLevel,
       gradeBandTier: student.gradeBandTier,
@@ -863,14 +931,17 @@ export class AdminService {
     };
   }
 
-  async getStudentById(studentId: string) {
+  async getStudentById(studentId: string, adminId: string, period: 'week' | 'month' | 'quarter' | 'year' | 'all' = 'month') {
     const student = await prisma.student.findUnique({
       where: { id: studentId, deletedAt: null },
       include: {
         user: {
           select: {
-            studentCode: true,
             status: true,
+            email: true,
+            timezone: true,
+            profilePicture: true,
+            // Explicitly exclude studentCode - admins must never see student codes
           },
         },
       },
@@ -880,7 +951,7 @@ export class AdminService {
       throw new Error('Student not found');
     }
 
-    // Get parent summary
+    // Get parent summary with profile picture
     const parent = await prisma.user.findUnique({
       where: { id: student.parentId },
       select: {
@@ -888,10 +959,11 @@ export class AdminService {
         fullName: true,
         email: true,
         phone: true,
+        profilePicture: true,
       },
     });
 
-    // Get enrollments with tutor and effective pricing
+    // Get enrollments with tutor info and effective pricing
     const enrollments = await prisma.enrollment.findMany({
       where: { studentId, deletedAt: null },
       include: {
@@ -903,11 +975,48 @@ export class AdminService {
             profilePicture: true,
           },
         },
+        payments: {
+          where: { deletedAt: null },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
 
-    // Enrich enrollments with effective pricing
+    // Get unique tutor IDs
+    const tutorIds = Array.from(new Set(enrollments.filter(e => e.tutorId).map(e => e.tutorId!)));
+
+    // Fetch tutors with their subjects from TutorSubject relation
+    const tutorsWithSubjects = await prisma.user.findMany({
+      where: { id: { in: tutorIds } },
+      include: {
+        tutorProfile: {
+          include: {
+            tutorSubjects: {
+              include: {
+                subject: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Create tutors map with subjects
+    const tutorsMap = new Map(
+      tutorsWithSubjects.map(t => [
+        t.id,
+        {
+          id: t.id,
+          fullName: t.fullName,
+          profilePicture: t.profilePicture,
+          subjects: t.tutorProfile?.tutorSubjects.map(ts => ts.subject) || [],
+        },
+      ])
+    );
+
+    // Enrich enrollments with effective pricing and payment status
     const enrichedEnrollments = await Promise.all(
       enrollments.map(async (enrollment) => {
         let effectivePriceNGN: number | null = null;
@@ -935,17 +1044,67 @@ export class AdminService {
           }
         }
 
+        const paymentStatus = enrollment.payments[0]?.status || 'PENDING';
+        const tutorInfo = enrollment.tutorId ? tutorsMap.get(enrollment.tutorId) : null;
+
         return {
-          ...enrollment,
+          id: enrollment.id,
+          subject: enrollment.subject,
+          status: enrollment.status,
+          tutor: tutorInfo,
+          sessionFrequency: enrollment.sessionFrequency,
+          availableDays: enrollment.availableDays,
+          preferredStartHour: enrollment.preferredStartHour,
+          preferredEndHour: enrollment.preferredEndHour,
+          billingFrequency: enrollment.billingFrequency,
           effectivePriceNGN,
           effectivePriceUSD,
           priceSource,
+          paymentStatus,
         };
       })
     );
 
-    // Get attendance summary
-    const [attendedCount, missedCount] = await Promise.all([
+    // Unique tutors list
+    const uniqueTutors = Array.from(tutorsMap.values());
+
+    // Get recent sessions (latest 20, upcoming first) with full details
+    const sessions = await prisma.session.findMany({
+      where: {
+        participants: {
+          some: {
+            enrollment: { studentId },
+          },
+        },
+      },
+      include: {
+        tutor: {
+          select: {
+            id: true,
+            fullName: true,
+          },
+        },
+      },
+      orderBy: [{ scheduledAt: 'asc' }, { createdAt: 'desc' }],
+      take: 20,
+    });
+
+    const enrichedSessions = sessions.map(session => ({
+      id: session.id,
+      scheduledAt: session.scheduledAt,
+      durationMinutes: session.durationMinutes,
+      status: session.status,
+      zoomLink: session.zoomLink,
+      zoomMeetingId: session.zoomMeetingId,
+      recordingUrl: session.recordingUrl,
+      recordingStatus: session.recordingStatus,
+      tutorNotes: session.tutorNotes,
+      homeworkAssigned: session.homeworkAssigned,
+      tutor: session.tutor,
+    }));
+
+    // Get attendance summary and recent records
+    const [attendedCount, missedCount, recentAttendance] = await Promise.all([
       prisma.sessionParticipant.count({
         where: {
           enrollment: { studentId },
@@ -960,16 +1119,57 @@ export class AdminService {
           session: { status: 'MISSED' },
         },
       }),
+      prisma.sessionParticipant.findMany({
+        where: {
+          enrollment: { studentId },
+        },
+        include: {
+          session: {
+            select: {
+              scheduledAt: true,
+              status: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      }),
     ]);
 
-    // Get grade summary (approved average + pending count, using maxScore)
-    const approvedGrades = await prisma.grade.findMany({
-      where: {
-        enrollment: { studentId },
-        status: 'APPROVED',
-      },
-      select: { score: true, maxScore: true },
-    });
+    // Get grade summary and recent grades (including PENDING and REJECTED for admin)
+    const [approvedGrades, recentGrades] = await Promise.all([
+      prisma.grade.findMany({
+        where: {
+          enrollment: { studentId },
+          status: 'APPROVED',
+        },
+        select: { score: true, maxScore: true },
+      }),
+      prisma.grade.findMany({
+        where: {
+          enrollment: { studentId },
+        },
+        include: {
+          enrollment: {
+            include: {
+              subject: true,
+            },
+          },
+          assignment: {
+            select: {
+              title: true,
+            },
+          },
+          grader: {
+            select: {
+              fullName: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      }),
+    ]);
 
     const avgGradePercentage = approvedGrades.length > 0
       ? approvedGrades.reduce((sum, g) => {
@@ -978,6 +1178,19 @@ export class AdminService {
         }, 0) / approvedGrades.length
       : null;
 
+    const enrichedRecentGrades = recentGrades.map(grade => ({
+      id: grade.id,
+      score: Number(grade.score),
+      maxScore: Number(grade.maxScore || 100),
+      percentage: (Number(grade.score) / Number(grade.maxScore || 100)) * 100,
+      status: grade.status,
+      subject: grade.enrollment.subject.name,
+      assignmentTitle: grade.assignment?.title,
+      grader: grade.grader.fullName,
+      approvedAt: grade.approvedAt,
+      createdAt: grade.createdAt,
+    }));
+
     const pendingGradesCount = await prisma.grade.count({
       where: {
         enrollment: { studentId },
@@ -985,8 +1198,8 @@ export class AdminService {
       },
     });
 
-    // Get assignment summary
-    const [assignmentsTotal, assignmentsCompleted, assignmentsPending] = await Promise.all([
+    // Get assignment summary and recent items with submission status
+    const [assignmentsTotal, assignmentsCompleted, assignmentsPending, recentAssignments] = await Promise.all([
       prisma.assignment.count({
         where: {
           enrollment: { studentId },
@@ -1004,51 +1217,103 @@ export class AdminService {
           status: 'PENDING',
         },
       }),
+      prisma.assignment.findMany({
+        where: {
+          enrollment: { studentId },
+        },
+        include: {
+          submissions: {
+            select: {
+              submittedAt: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      }),
     ]);
 
-    // Get recent sessions
-    const recentSessions = await prisma.session.findMany({
+    const enrichedRecentAssignments = recentAssignments.map(assignment => ({
+      id: assignment.id,
+      title: assignment.title,
+      type: assignment.type,
+      dueDate: assignment.dueDate,
+      status: assignment.status,
+      hasSubmission: assignment.submissions.length > 0,
+      lastSubmittedAt: assignment.submissions[0]?.submittedAt,
+    }));
+
+    // Get latest progress reports
+    const progressReports = await prisma.progressReport.findMany({
       where: {
-        participants: {
-          some: {
-            enrollment: { studentId },
-          },
-        },
+        enrollment: { studentId },
       },
-      include: {
-        tutor: {
-          select: {
-            id: true,
-            fullName: true,
-          },
-        },
-      },
-      orderBy: { scheduledAt: 'desc' },
+      orderBy: { createdAt: 'desc' },
       take: 5,
     });
 
+    // Get performance data (default period=month, supports ?period= query param)
+    // Admin can view any student's performance
+    const performance = await this.performanceService.getStudentPerformance(
+      studentId,
+      adminId,
+      'ADMIN',
+      { period }
+    );
+
+    const { user, ...studentWithoutUser } = student;
     return {
-      ...student,
-      parent,
-      studentCode: student.user.studentCode,
-      status: student.user.status,
+      student: {
+        id: studentWithoutUser.id,
+        fullName: studentWithoutUser.fullName,
+        dateOfBirth: studentWithoutUser.dateOfBirth,
+        gender: studentWithoutUser.gender,
+        actualGrade: studentWithoutUser.actualGrade,
+        gradeLevel: studentWithoutUser.gradeLevel,
+        gradeBandTier: studentWithoutUser.gradeBandTier,
+        school: studentWithoutUser.school,
+        notes: studentWithoutUser.notes,
+        email: student.user.email,
+        preferredStartDate: studentWithoutUser.preferredStartDate,
+        timezone: student.user.timezone,
+        profilePictureUrl: student.user.profilePicture,
+        createdAt: studentWithoutUser.createdAt,
+        status: student.user.status,
+      },
+      parent: parent ? {
+        id: parent.id,
+        fullName: parent.fullName,
+        email: parent.email,
+        phone: parent.phone,
+        profilePictureUrl: parent.profilePicture,
+      } : null,
+      tutors: uniqueTutors,
       enrollments: enrichedEnrollments,
+      sessions: enrichedSessions,
       attendance: {
         attended: attendedCount,
         missed: missedCount,
         total: attendedCount + missedCount,
+        recent: recentAttendance.map(ra => ({
+          date: ra.session.scheduledAt,
+          attended: ra.attended,
+          status: ra.session.status,
+        })),
       },
       grades: {
         averagePercentage: avgGradePercentage,
         approvedCount: approvedGrades.length,
         pendingCount: pendingGradesCount,
+        recent: enrichedRecentGrades,
       },
       assignments: {
         total: assignmentsTotal,
         completed: assignmentsCompleted,
         pending: assignmentsPending,
+        recent: enrichedRecentAssignments,
       },
-      recentSessions,
+      progressReports,
+      performance,
     };
   }
 
@@ -1232,13 +1497,93 @@ export class AdminService {
     };
   }
 
+  async getStudentAssignments(studentId: string, page = 1, limit = 20) {
+    const skip = (page - 1) * limit;
+
+    const [assignments, total] = await Promise.all([
+      prisma.assignment.findMany({
+        where: {
+          enrollment: { studentId },
+        },
+        include: {
+          enrollment: {
+            include: {
+              subject: true,
+            },
+          },
+          submissions: {
+            select: {
+              id: true,
+              submittedAt: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: Math.min(limit, 100),
+      }),
+      prisma.assignment.count({
+        where: {
+          enrollment: { studentId },
+        },
+      }),
+    ]);
+
+    return {
+      data: assignments,
+      page,
+      limit,
+      total,
+    };
+  }
+
+  async getStudentProgressReports(studentId: string, page = 1, limit = 20) {
+    const skip = (page - 1) * limit;
+
+    const [reports, total] = await Promise.all([
+      prisma.progressReport.findMany({
+        where: {
+          enrollment: { studentId },
+        },
+        include: {
+          enrollment: {
+            include: {
+              subject: true,
+              tutor: {
+                select: {
+                  id: true,
+                  fullName: true,
+                },
+              },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: Math.min(limit, 100),
+      }),
+      prisma.progressReport.count({
+        where: {
+          enrollment: { studentId },
+        },
+      }),
+    ]);
+
+    return {
+      data: reports,
+      page,
+      limit,
+      total,
+    };
+  }
+
   async regenerateStudentPin(studentId: string, adminId: string) {
     // Get the student with their linked user account
     const student = await prisma.student.findUnique({
       where: { id: studentId },
       include: {
         user: {
-          select: { id: true, studentCode: true },
+          select: { id: true },
         },
       },
     });
@@ -1314,7 +1659,6 @@ export class AdminService {
           phone: true,
           role: true,
           status: true,
-          studentCode: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -1361,6 +1705,12 @@ export class AdminService {
         role: true,
         status: true,
       },
+    });
+
+    // Revoke the entire token family on reactivation for security
+    await prisma.refreshToken.updateMany({
+      where: { userId },
+      data: { revokedAt: new Date() },
     });
 
     logger.info({ userId, adminId, newStatus }, 'User reactivated by admin');
@@ -1416,20 +1766,24 @@ export class AdminService {
       }
     }
 
-    // Revoke all refresh tokens for security
-    await prisma.refreshToken.deleteMany({
+    // Revoke the entire token family on suspension for security
+    await prisma.refreshToken.updateMany({
       where: { userId },
+      data: { revokedAt: new Date() },
     });
 
     // Send suspension notification email
     if (user.email) {
-      await this.notificationsService.createNotification({
+      await this.notificationsService.createNotification(
         userId,
-        type: 'ACCOUNT_SUSPENDED',
-        title: 'Account Suspended',
-        message: `Your account has been suspended for the following reason: ${data.reason}`,
-        data: { reason: data.reason },
-      });
+        'ACCOUNT_SUSPENDED',
+        {
+          title: 'Account Suspended',
+          message: `Your account has been suspended for the following reason: ${data.reason}`,
+          relatedType: 'USER',
+          relatedId: userId,
+        }
+      );
 
       // Send email notification
       await sendPasswordResetEmail(user.email, 'account_suspended', {
@@ -1675,18 +2029,16 @@ export class AdminService {
       });
 
       // Send price update notification to parent
-      await this.notificationsService.createNotification({
-        userId: enrollment.student.parentId,
-        type: 'PRICE_UPDATED',
-        title: 'Price Updated',
-        message: `The price for ${enrollment.student.fullName}'s ${enrollment.subject.name} is now ₦${data.yearlyPriceNGN || enrollment.yearlyPriceNGN} / $${data.yearlyPriceUSD || enrollment.yearlyPriceUSD}`,
-        relatedType: 'ENROLLMENT',
-        relatedId: enrollmentId,
-        data: {
-          studentId: enrollment.studentId,
-          enrollmentId: enrollmentId,
-        },
-      });
+      await this.notificationsService.createNotification(
+        enrollment.student.parentId,
+        'PRICE_UPDATED',
+        {
+          title: 'Price Updated',
+          message: `The price for ${enrollment.student.fullName}'s ${enrollment.subject.name} is now ₦${data.yearlyPriceNGN || enrollment.yearlyPriceNGN} / $${data.yearlyPriceUSD || enrollment.yearlyPriceUSD}`,
+          relatedType: 'ENROLLMENT',
+          relatedId: enrollmentId,
+        }
+      );
     }
 
     return prisma.enrollment.update({
@@ -1753,7 +2105,6 @@ export class AdminService {
     return {
       enrollmentId: enrollment.id,
       studentName: enrollment.student.fullName,
-      studentCode: enrollment.student.user.studentCode,
       subject: enrollment.subject.name,
       gradeBandTier: enrollment.student.gradeBandTier,
       effectivePriceNGN,
@@ -1911,8 +2262,8 @@ export class AdminService {
       include: {
         user: {
           select: {
-            studentCode: true,
             status: true,
+            // Explicitly exclude studentCode - admins must never see student codes
           },
         },
         enrollments: {
@@ -1995,8 +2346,10 @@ export class AdminService {
           })
         );
 
+        const { user, ...childWithoutUser } = child;
         return {
-          ...child,
+          ...childWithoutUser,
+          status: user.status,
           enrollments: enrichedEnrollments,
         };
       })

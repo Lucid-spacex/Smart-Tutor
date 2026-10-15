@@ -160,8 +160,9 @@ export class StudentsService {
       select: { email: true, fullName: true },
     });
 
+    let emailSent = false;
     if (parent?.email) {
-      await sendStudentCredentialsEmail(
+      emailSent = await sendStudentCredentialsEmail(
         parent.email,
         parent.fullName,
         data.fullName,
@@ -170,7 +171,7 @@ export class StudentsService {
       );
     }
 
-    logger.info({ parentId, studentId: student.id, studentCode, gradeBandTier }, 'Student created with credentials');
+    logger.info({ parentId, studentId: student.id, studentCode, gradeBandTier, emailSent }, 'Student created with credentials');
 
     return {
       id: student.id,
@@ -181,6 +182,7 @@ export class StudentsService {
       gender: student.gender,
       email: student.email,
       preferredStartDate: student.preferredStartDate,
+      emailSent,
       // Never return the password
     };
   }
@@ -280,18 +282,20 @@ export class StudentsService {
       select: { email: true, fullName: true },
     });
 
+    let emailSent = false;
     if (parent?.email && parent.fullName) {
-      await sendPasswordResetEmail(
+      emailSent = await sendPasswordResetEmail(
         parent.email,
         'password_reset',
         { name: parent.fullName, newPin: plainPin }
       );
     }
 
-    logger.info({ studentId, requestorId, isAdmin }, 'Student PIN regenerated');
+    logger.info({ studentId, requestorId, isAdmin, emailSent }, 'Student PIN regenerated');
 
     return {
       message: 'PIN regenerated successfully. New credentials sent to parent email.',
+      emailSent,
     };
   }
 

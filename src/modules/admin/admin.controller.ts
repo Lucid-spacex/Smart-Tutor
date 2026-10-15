@@ -23,11 +23,17 @@ export class AdminController {
     }
   };
 
-  updateTutorVetting = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  updateTutorVetting = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
+      const adminId = req.user?.userId;
+      if (!adminId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
       const { id } = req.params;
       const data: UpdateTutorVettingInput = req.body;
-      const result = await this.adminService.updateTutorVetting(id, data);
+      const result = await this.adminService.updateTutorVetting(id, data, adminId);
       res.status(200).json(result);
     } catch (error) {
       next(error);
@@ -183,8 +189,15 @@ export class AdminController {
 
   getStudentById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      const adminId = (req as AuthRequest).user?.userId;
+      if (!adminId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
       const { id } = req.params;
-      const student = await this.adminService.getStudentById(id);
+      const period = req.query.period as 'week' | 'month' | 'quarter' | 'year' | 'all' || 'month';
+      const student = await this.adminService.getStudentById(id, adminId, period);
       res.status(200).json(student);
     } catch (error) {
       next(error);
@@ -233,6 +246,30 @@ export class AdminController {
       const page = req.query.page ? parseInt(req.query.page as string) : 1;
       const limit = req.query.limit ? parseInt(req.query.limit as string) : 20;
       const result = await this.adminService.getStudentSessions(id, page, limit);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getStudentAssignments = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const page = req.query.page ? parseInt(req.query.page as string) : 1;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 20;
+      const result = await this.adminService.getStudentAssignments(id, page, limit);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getStudentProgressReports = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const page = req.query.page ? parseInt(req.query.page as string) : 1;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 20;
+      const result = await this.adminService.getStudentProgressReports(id, page, limit);
       res.status(200).json(result);
     } catch (error) {
       next(error);

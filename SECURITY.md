@@ -9,11 +9,13 @@ This platform processes minors' personal data and payment transactions. Security
 ## 1. Authentication Model
 
 ### JWT Token Architecture & Rotation
-- **Access Tokens**: Short-lived (15 minutes or less) to minimize token compromise windows.
+- **Access Tokens**: 1 day lifetime (env-driven via `JWT_ACCESS_EXPIRY`, default `1d`). This provides a balance between convenience and security. The longer lifetime is compensated by session-based revocation.
 - **Refresh Tokens**: 7 days duration. Rotated on every single usage.
 - **Hashing**: Refresh tokens are stored SHA-256 hashed, never in plaintext.
-- **Token Family & Theft Detection**: Tokens are grouped by `tokenFamily`. If a previously used/superseded refresh token is presented (a replay attack/theft signal), the entire session family is instantly revoked.
+- **Token Family & Theft Detection**: Tokens are grouped by `tokenFamily` (session ID). Access tokens include the session ID (`sid`) in their payload. The `authenticate` middleware checks on every request that the session family is not revoked. If a previously used/superseded refresh token is presented (a replay attack/theft signal), the entire session family is instantly revoked.
+- **Session Revocation**: Logout, password change, PIN change, account suspension, and refresh-token reuse detection all revoke the entire token family, immediately invalidating all access tokens in that session.
 - **Per-Request Status Verification**: `authenticate` middleware re-checks `User.status` in PostgreSQL on every request. Even with an unexpired JWT, `SUSPENDED` or `REJECTED` users and unapproved `PENDING_VETTING` tutors are immediately blocked with `403 Forbidden`.
+- **Trade-off Note**: A 1-day access token is riskier than a shorter-lived token because it cannot be revoked by expiry alone. The session-based revocation system compensates for this by checking revocation status on every request. This design prioritizes user convenience (fewer re-authentications) while maintaining security through immediate revocation capabilities.
 
 ### Password Security & Policies
 - **Bcrypt**: Hashed with cost factor of 12+.
@@ -23,6 +25,12 @@ This platform processes minors' personal data and payment transactions. Security
 - **Hashing & Storage**: Stored as SHA-256 hashes with expiration timestamps.
 - **Resend**: `POST /auth/resend-otp` provided for missed or expired verification emails.
 - **Rate Limiting**: Aggressive rate limiting per IP and email.
+
+### Email Provider
+- **Resend API**: Official Resend SDK used for all email sending (verification, student credentials, notifications, password reset)
+- **Configuration**: Requires `RESEND_API_KEY` environment variable
+- **Template-based**: Uses predefined email templates for consistent formatting
+- **From address**: Configured via `EMAIL_FROM` environment variable
 
 ---
 
@@ -45,7 +53,7 @@ Students do not authenticate with standard email/password. Instead, students aut
 
 | Action | Parent | Tutor | Admin | Student |
 |---|---|---|---|---|
-| Register/login with email+password | ✅ | ✅ (after approval) | ✅ (internal seed) | ❌ (uses code+password) |
+| Register/login with email+password | ✅ | ✅ (PENDING_VETTING can login, restricted access) | ✅ (internal seed) | ❌ (uses code+password) |
 | Enroll a child, view own children | ✅ | ❌ | ✅ (all) | — |
 | View own schedule/assignments/progress reports | ✅ (own children) | — | ✅ (all) | ✅ (own only) |
 | View grades | ✅ (own children, approved only) | ✅ (own submissions, any status) | ✅ (all) | ✅ (own, approved only) |
@@ -79,6 +87,10 @@ Students do not authenticate with standard email/password. Instead, students aut
 | Reschedule own sessions (must be createdBy) | ❌ | ✅ (own created only, not admin-created) | ✅ | ❌ |
 | Upload/change profile picture | ✅ | ✅ | ✅ | ✅ |
 | View profile pictures (any user's) | ✅ (own children's tutors) | ✅ (own assigned students) | ✅ (all) | ✅ (own assigned tutors) |
+| Complete tutor application | ❌ | ✅ (PENDING_VETTING only) | ❌ | ❌ |
+| Upload application documents | ❌ | ✅ (PENDING_VETTING only) | ❌ | ❌ |
+| Submit tutor application | ❌ | ✅ (PENDING_VETTING only) | ❌ | ❌ |
+| Approve/reject tutor application | ❌ | ❌ | ✅ | ❌ |
 
 ---
 
@@ -96,6 +108,14 @@ Students do not authenticate with standard email/password. Instead, students aut
 - Tutors can delete/reschedule only sessions they created (not admin-created sessions)
 - All roles can upload/change profile pictures via Cloudinary
 - Profile picture URLs are included in user info responses throughout the app
+
+**Note**: Additional RBAC changes added 2026-10-15:
+- Tutors must complete application process before accessing tutoring features
+- PENDING_VETTING tutors can only access application completion endpoints
+- REJECTED tutors cannot access any tutoring features
+- Tutors can complete application, upload documents, and submit for review
+- Admins can approve/reject tutor applications with rejection reason
+- Tutor approval automatically creates TutorProfile from application data
 
 ## 4. IDOR Defense & Resource-Level Authorization
 
@@ -123,11 +143,14 @@ The platform enforces communication isolation via the single `canMessage(senderI
   - `Parent <-> Parent` (403 Forbidden)
   - `Tutor <-> Tutor` (403 Forbidden)
 
-**Shared Admin Inbox (2026-09-30)**:
+**Shared Admin Inbox (2026-09-30, updated 2026-10-14)**:
 - Parents and tutors message "Admin" as a shared team inbox, not individual admins
-- `GET /messages/admin-contact` returns any active admin's ID for starting new threads
+- `GET /messages/admin-contact` returns any active admin's ID for starting new threads (for compatibility only, the specific admin ID does not affect routing)
 - Admins see all threads with parents and tutors in their thread list, regardless of which specific admin was the original recipient
+- Thread identification uses the non-admin participant's ID for admin-support conversations, ensuring all admins see the same thread
 - Any admin can reply to any parent/tutor thread (shared reply rights)
+- Admin unread count tracks messages from non-admin users that no admin has read yet
+- Opening a thread marks messages as read for all admins (shared read state)
 - This provides a unified "Admin" conversation experience for parents and tutors
 
 **Note (2026-10-12)**: Students no longer have any messaging capability in the platform. Their sole prior messaging contact (their assigned tutor) has been removed.
@@ -417,6 +440,12 @@ The RBAC matrix entry for "Message their assigned tutor / assigned student" has 
 - **Price visibility**: Students and tutors never see prices (only PARENT and ADMIN)
 - **Change notifications**: Parents receive PRICE_UPDATED notifications when prices change
 
+### Public Subjects Endpoint (2026-10-15):
+- **Endpoint**: `GET /subjects/public` - No authentication required
+- **Purpose**: For marketing site and tutor application form
+- **Returns**: Active subjects without pricing information
+- **Security**: Publicly accessible, no sensitive data exposure
+
 ### Endpoints:
 - `GET /admin/subjects` - All subjects with per-grade pricing and drift info
 - `POST /admin/subjects` - Create subject with grade band prices
@@ -461,6 +490,16 @@ The RBAC matrix entry for "Message their assigned tutor / assigned student" has 
 - **Tutor-only availability updates**: Only tutors can set their own availability status
 - **Admin-only suggestion endpoint**: Only admins can see suggested tutors
 - **Capacity enforcement**: Assignments blocked unless `force: true` is provided
+
+### Admin Tutor Detail Expansion (2026-10-15):
+- **Endpoint**: `GET /admin/tutors/:id` now returns comprehensive tutor data
+- **Included data**:
+  - User: id, firstName, lastName, middleName, fullName, email, phone, address, status, profilePictureUrl, timezone, createdAt, updatedAt
+  - Application: status, birthDay, birthMonth, country, city, highestQualification, subjects[], levels[], yearsOfExperience, whyTeach, howHeard, aboutYou[], documents[] (with Cloudinary URLs), submittedAt, reviewedAt, reviewedBy, rejectionReason
+  - Profile: bio, hourlyRate, availability (weekly), availabilityStatus, maxStudents, statusNote, statusUpdatedAt, currentStudentCount, vettingStatus, subjects[]
+  - Metrics: studentsCount, sessionsCompleted, sessionsMissed, sessionsCancelled, avgStudentGradePercentage, avgStudentAttendanceRate, reportsSubmitted, assignmentsCreated
+- **List enhancement**: `GET /admin/tutors` now includes applicationStatus filter and returns application data alongside profile data
+- **Security**: All data respects admin role, no sensitive credential exposure
 
 ---
 
@@ -661,6 +700,132 @@ Type '{ connect: { id: string; }; }' is not assignable to type 'undefined'.
 ### Security Rules:
 - **Ownership enforcement**: Students can only see own performance, parents only own children, tutors only assigned students
 - **Approved-only for students/parents**: Pending/rejected grades never affect student/parent metrics
+- **Admin studentCode exclusion**: Admin responses explicitly exclude `studentCode` from all student data. Only parents receive student codes via email during enrollment. Admins must never see student codes to prevent credential exposure.
+
+### Admin Student Detail Expansion (2026-10-15):
+- **Endpoint**: `GET /admin/students/:id` now returns comprehensive student data
+- **Included data**:
+  - Student: id, fullName, dateOfBirth, gender, actualGrade, gradeLevel, gradeBandTier, school, notes, email, preferredStartDate, timezone, profilePictureUrl, createdAt, status
+  - Parent: id, fullName, email, phone, profilePictureUrl
+  - Tutors[]: each assigned tutor's full profile with subjects they teach this student
+  - Enrollments[]: subject, status, tutor, session frequency, available days, preferred hours, billing frequency, effective price (NGN and USD) with source, payment status
+  - Sessions[] (latest 20, upcoming first): status, meeting link, recording status and link, tutor notes, homework
+  - Attendance: summary and recent records
+  - Grades: summary plus recent grades, including PENDING and REJECTED (admin only), with percentage
+  - Assignments: summary and recent items, with submission status
+  - ProgressReports[]: latest
+  - Performance: same object as GET /admin/students/:id/performance, default period=month, with ?period= supported
+- **Paginated sub-resources**: `/enrollments`, `/sessions`, `/grades`, `/attendance`, `/assignments`, `/progress-reports`
+- **Security**: All data respects admin role, studentCode explicitly excluded
+
+---
+
+## 25. Admin Student Code Exclusion (2026-10-15)
+
+**Security Notice**: As of 2026-10-15, admin responses explicitly exclude `studentCode` from all student data for security reasons.
+
+### Security Rationale:
+- **Credential isolation**: Student codes are sensitive credentials used for student login
+- **Admin role boundary**: Admins have broad access but should not have access to student login credentials
+- **Parent-only distribution**: Student codes are only ever emailed to the linked parent during enrollment
+- **Audit trail separation**: Student authentication remains separate from admin operations
+
+### Implementation:
+- **Admin service methods**: All admin service methods that return student data explicitly exclude `studentCode` in Prisma selects
+- **Affected endpoints**:
+  - `GET /admin/students` - Student list excludes studentCode
+  - `GET /admin/students/:id` - Student detail excludes studentCode
+  - `GET /admin/parents/:id` - Parent's children exclude studentCode
+  - All other admin endpoints returning student data
+- **Swagger schemas**: Admin response schemas do not include studentCode field
+- **Code comments**: Explicit comments added to admin.service.ts: "Explicitly exclude studentCode - admins must never see student codes"
+
+### Verification:
+- **Security test**: `tests/security/admin-no-student-code.test.ts` verifies studentCode is not exposed in admin responses
+- **Parent access**: Parents receive studentCode via email during enrollment and can regenerate via `POST /students/:id/regenerate-pin`
+- **Admin regeneration**: Admins can regenerate student codes via `PATCH /admin/students/:id/regenerate-pin` but never see the existing code
+
+---
+
+## 24. Tutor Application System (2026-10-15)
+
+**Implementation Notice**: As of 2026-10-15, tutors must complete a comprehensive application process before being approved to teach. This system includes document verification, restricted access for pending tutors, and admin review workflow.
+
+### Tutor Registration Flow:
+- **Initial registration**: Tutors register with firstName, lastName, middleName, email, phone, password, role, address
+- **Status on verification**: After OTP verification, tutor status becomes `PENDING_VETTING`
+- **Draft application**: Empty application draft is automatically created for the tutor to complete
+- **Full name derivation**: `fullName` is derived from firstName/lastName/middleName if not provided
+
+### Restricted Access for Pending Tutors:
+- **PENDING_VETTING tutors** can only access:
+  - `/auth/*` - Authentication endpoints
+  - `/tutor-application/*` - Application completion endpoints
+  - `/subjects/public` - Public subjects list
+  - `/notifications` - Notification endpoints
+- **All other tutor routes** return `403 Forbidden` with code `TUTOR_NOT_APPROVED`
+- **REJECTED tutors** get `403 Forbidden` with code `APPLICATION_REJECTED`
+- **Middleware**: `requireApprovedTutor` middleware enforces these restrictions on all tutor routes
+
+### TutorApplication Model:
+- **Status lifecycle**: DRAFT → SUBMITTED → APPROVED/REJECTED
+- **Required fields for submission**:
+  - birthDay, birthMonth (date of birth)
+  - country, city (location)
+  - highestQualification (education level)
+  - subjects[] (subjects they want to teach)
+  - levels[] (grade levels they can teach)
+  - yearsOfExperience
+  - whyTeach (motivation statement)
+  - howHeard (how they heard about the platform)
+  - aboutYou[] (up to 3 paragraphs about themselves)
+  - documents[] (proof of qualifications)
+- **Missing fields detection**: `GET /tutor-application` returns `missingFields[]` list for UI validation
+- **Auto-save**: `PATCH /tutor-application` allows partial updates (autosave pattern)
+
+### Document Upload Security:
+- **Storage**: Cloudinary private/authenticated assets
+- **Allowed types**: PDF, DOC, DOCX, JPG, PNG
+- **Size limits**: Max 5 MB per document, max 5 documents total
+- **Signed URLs**: Download URLs are short-lived (10 minutes expiry)
+- **Deletion**: Deleting a document also deletes the Cloudinary asset
+- **Rate limiting**: All tutor-application endpoints are Tier 2 rate limited (60 req/min)
+- **Max documents**: Enforced at upload time (5 document limit)
+
+### Application Endpoints (PENDING_VETTING only):
+- `GET /tutor-application` - Get draft with missingFields[] list
+- `PATCH /tutor-application` - Partial autosave, returns lastSavedAt
+- `POST /tutor-application/documents` (multipart) - Upload document
+- `DELETE /tutor-application/documents/:id` - Delete document
+- `POST /tutor-application/submit` - Full validation, sets SUBMITTED, notifies admins, emails applicant
+
+### Admin Review Workflow:
+- **Approval queue**: `GET /admin/tutors?status=PENDING_VETTING&applicationStatus=SUBMITTED`
+- **Vetting endpoint**: `PATCH /admin/tutors/:id/vetting {vettingStatus: APPROVED|REJECTED, reason?}`
+- **Approval requirements**: Can only approve when application status is SUBMITTED
+- **On approve**:
+  - User.status = APPROVED
+  - Create/update TutorProfile from application data
+  - Copy subjects to TutorSubject relation
+  - Email and notify tutor
+- **On reject**:
+  - User.status = REJECTED
+  - Send rejection reason by email
+  - Notify tutor
+- **Reactivation**: Reactivating a suspended tutor returns to APPROVED (not ACTIVE)
+
+### Security Rules:
+- **Tutor-only application routes**: Only TUTOR role can access /tutor-application/* endpoints
+- **Bypass middleware**: Application routes bypass requireApprovedTutor middleware (by design)
+- **Admin-only review**: Only ADMIN role can approve/reject applications
+- **Document validation**: Server-side validation of file type and size before Cloudinary upload
+- **No credential exposure**: Application documents are stored as private Cloudinary assets with signed URLs
+- **Email notifications**: All status changes trigger email notifications to the applicant
+
+### RBAC Impact:
+- **New row**: PENDING_VETTING tutors have restricted access to application completion only
+- **Approval gating**: Tutor cannot access any tutoring features until application is APPROVED
+- **Rejection blocking**: REJECTED tutors cannot create new applications (must contact support)
 - **Null vs zero**: Returns `null` (not `0`) when no approved grades exist, with `gradedCount: 0`
 - **Trend calculation**: `null` if no previous period data exists
 - **Admin override**: Admins can include pending grades via `includePending=true` query param

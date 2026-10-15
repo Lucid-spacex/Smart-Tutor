@@ -13,7 +13,7 @@ const adminController = new AdminController();
 const adminSubjectsController = new AdminSubjectsController();
 const complaintsController = new ComplaintsController();
 
-// Tutors management
+// Tutors management - static routes before parameter routes
 router.get('/tutors/pending', authenticate, requireRole('ADMIN'), adminController.getPendingTutors);
 router.get('/tutors', authenticate, requireRole('ADMIN'), validateQuery(getTutorsQuerySchema), adminController.getTutors);
 router.get('/tutors/:id', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.getTutorById);
@@ -23,7 +23,7 @@ router.get('/tutors/:id/grades', authenticate, requireRole('ADMIN'), validateUUI
 router.get('/tutors/:id/progress-reports', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.getTutorProgressReports);
 router.patch('/tutors/:id/vetting', authenticate, requireRole('ADMIN'), validateUUID('id'), validate(updateTutorVettingSchema), adminController.updateTutorVetting);
 
-// Enrollments & Pricing
+// Enrollments & Pricing - static routes before parameter routes
 router.get('/enrollments/unmatched', authenticate, requireRole('ADMIN'), validateQuery(getUnmatchedEnrollmentsQuerySchema), adminController.getUnmatchedEnrollments);
 router.get('/enrollments/:id/pricing', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.getEnrollmentPricingOverride);
 router.patch('/enrollments/:id/pricing', authenticate, requireRole('ADMIN'), validateUUID('id'), validate(updateEnrollmentPricingOverrideSchema), adminController.updateEnrollmentPricingOverride);
@@ -40,11 +40,11 @@ router.delete('/subjects/:id', authenticate, requireRole('ADMIN'), validateUUID(
 // Exchange Rate
 router.get('/exchange-rate/current', authenticate, requireRole('ADMIN'), adminController.getCurrentExchangeRate);
 
-// Payments & Reports
+// Payments & Reports - static routes before parameter routes
 router.get('/payments', authenticate, requireRole('ADMIN'), adminController.getPayments);
-router.get('/payments/:id', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.getPaymentById);
 router.get('/payments/summary', authenticate, requireRole('ADMIN'), adminController.getPaymentsSummary);
 router.get('/payments/failed', authenticate, requireRole('ADMIN'), adminController.getFailedPayments);
+router.get('/payments/:id', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.getPaymentById);
 router.patch('/payments/:id/note', authenticate, requireRole('ADMIN'), validateUUID('id'), validate(addPaymentNoteSchema), adminController.addPaymentNote);
 router.post('/payments/:id/reverify', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.reverifyPayment);
 router.get('/reports/overview', authenticate, requireRole('ADMIN'), adminController.getOverviewReport);
@@ -56,6 +56,8 @@ router.get('/students/:id/enrollments', authenticate, requireRole('ADMIN'), vali
 router.get('/students/:id/grades', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.getStudentGrades);
 router.get('/students/:id/attendance', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.getStudentAttendance);
 router.get('/students/:id/sessions', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.getStudentSessions);
+router.get('/students/:id/assignments', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.getStudentAssignments);
+router.get('/students/:id/progress-reports', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.getStudentProgressReports);
 router.get('/students/:id/performance', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.getStudentPerformance);
 router.patch('/students/:id/regenerate-pin', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.regenerateStudentPin);
 
@@ -63,7 +65,7 @@ router.patch('/students/:id/regenerate-pin', authenticate, requireRole('ADMIN'),
 router.get('/parents', authenticate, requireRole('ADMIN'), adminController.getParents);
 router.get('/parents/:id', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.getParentById);
 
-// Suspended Users Management
+// Suspended Users Management - static routes before parameter routes
 router.get('/users/suspended', authenticate, requireRole('ADMIN'), adminController.getSuspendedUsers);
 router.patch('/users/:id/suspend', authenticate, requireRole('ADMIN'), validateUUID('id'), validate(suspendUserSchema), adminController.suspendUser);
 router.patch('/users/:id/reactivate', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.reactivateUser);

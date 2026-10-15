@@ -121,6 +121,9 @@ export const tier2WriteRateLimit = rateLimit({
   validate: { keyGeneratorIpFallback: false },
 });
 
+// Alias for consistency with other middleware naming
+export const tier2RateLimit = tier2WriteRateLimit;
+
 /**
  * Tier 3 — LOOSE (300 req / 15 min)
  *

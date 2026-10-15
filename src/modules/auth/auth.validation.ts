@@ -1,9 +1,13 @@
 import { z } from 'zod';
 
 export const registerSchema = z.object({
-  fullName: z.string().min(2, 'Full name must be at least 2 characters'),
+  firstName: z.string().min(1, 'First name is required').optional(),
+  lastName: z.string().min(1, 'Last name is required').optional(),
+  middleName: z.string().optional(),
+  fullName: z.string().min(2, 'Full name must be at least 2 characters').optional(), // For backward compatibility
   email: z.string().email('Invalid email address'),
   phone: z.string().min(10, 'Phone number must be at least 10 characters'),
+  address: z.string().min(5, 'Address is required for tutors').optional(), // Required for TUTOR, optional for PARENT
   password: z.string()
     .min(8, 'Password must be at least 8 characters')
     .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
@@ -11,6 +15,21 @@ export const registerSchema = z.object({
     .regex(/[0-9]/, 'Password must contain at least one number')
     .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character'),
   role: z.enum(['PARENT', 'TUTOR']),
+}).refine((data) => {
+  // Either fullName OR (firstName + lastName) must be provided
+  if (data.fullName) return true;
+  if (data.firstName && data.lastName) return true;
+  return false;
+}, {
+  message: 'Either fullName or firstName + lastName must be provided',
+  path: ['fullName'],
+}).refine((data) => {
+  // Address is required for TUTOR
+  if (data.role === 'TUTOR' && !data.address) return false;
+  return true;
+}, {
+  message: 'Address is required for tutors',
+  path: ['address'],
 });
 
 export const verifySchema = z.object({

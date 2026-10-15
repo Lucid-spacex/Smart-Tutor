@@ -147,8 +147,30 @@ export class NotificationsService {
         readAt: null,
         deletedAt: null,
       },
+      data: { readAt: new Date() },
+    });
+  }
+
+  async notifyAdmins(type: string, data: { title: string; message: string; relatedType?: string; relatedId?: string }) {
+    const admins = await prisma.user.findMany({
+      where: { role: 'ADMIN', status: 'ACTIVE' },
+      select: { id: true },
+    });
+
+    for (const admin of admins) {
+      await this.createNotification(admin.id, type, data);
+    }
+  }
+
+  async createNotification(userId: string, type: string, data: { title: string; message: string; relatedType?: string; relatedId?: string }) {
+    await prisma.notification.create({
       data: {
-        readAt: new Date(),
+        userId,
+        type: type as any,
+        title: data.title,
+        message: data.message,
+        relatedType: data.relatedType,
+        relatedId: data.relatedId,
       },
     });
   }
@@ -754,27 +776,6 @@ export class NotificationsService {
       type: 'PRICING_DRIFT_ALERT',
       title: 'Pricing Drift Alert',
       message,
-    });
-  }
-
-  // Generic notification creator for one-off use
-  async createNotification(options: {
-    userId: string;
-    type: string;
-    title: string;
-    message: string;
-    relatedType?: string;
-    relatedId?: string;
-    data?: any;
-  }) {
-    await this.notify({
-      recipients: [options.userId],
-      type: options.type,
-      title: options.title,
-      message: options.message,
-      relatedType: options.relatedType,
-      relatedId: options.relatedId,
-      data: options.data,
     });
   }
 

@@ -7,6 +7,10 @@ import { getSubjectsQuerySchema } from './subjects.validation';
 const router = Router();
 const subjectsController = new SubjectsController();
 
+// Public subjects endpoint (no auth required) - for marketing site and tutor application form
+router.get('/public', validateQuery(getSubjectsQuerySchema), subjectsController.getPublicSubjects);
+
+// Authenticated subjects endpoint
 router.get('/', authenticate, validateQuery(getSubjectsQuerySchema), subjectsController.getSubjects);
 
 export default router;

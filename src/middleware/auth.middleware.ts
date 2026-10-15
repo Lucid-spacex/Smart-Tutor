@@ -22,6 +22,21 @@ export const authenticate = async (
     const token = authHeader.substring(7);
     const payload = verifyAccessToken(token);
 
+    // Check session revocation if session ID is present in token
+    if (payload.sid) {
+      const revokedSession = await prisma.refreshToken.findFirst({
+        where: {
+          tokenFamily: payload.sid,
+          revokedAt: { not: null },
+        },
+      });
+
+      if (revokedSession) {
+        res.status(401).json({ error: 'Session has been revoked' });
+        return;
+      }
+    }
+
     // Re-check user status from database on each request
     // This ensures suspended/rejected users cannot access endpoints even with valid tokens
     const user = await prisma.user.findUnique({
