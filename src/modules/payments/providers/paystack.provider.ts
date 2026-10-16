@@ -134,8 +134,32 @@ export class PaystackProvider implements PaymentProvider {
           statusText: response.statusText,
           error,
           reference,
+          responseBody: responseData,
         }, 'Paystack API request failed');
-        
+
+        // Provide specific error guidance for common issues
+        if (error.includes('channel') || error.includes('merchant')) {
+          throw new Error(
+            'Paystack payment channel error: No active payment channel configured. ' +
+            'Please check your Paystack dashboard at https://dashboard.paystack.co ' +
+            'under Settings → Payment Channels to ensure at least one payment channel is active.'
+          );
+        }
+
+        if (response.status === 401) {
+          throw new Error(
+            'Paystack authentication failed: Invalid or expired secret key. ' +
+            'Please verify PAYSTACK_SECRET_KEY in your environment variables.'
+          );
+        }
+
+        if (response.status === 422) {
+          throw new Error(
+            `Paystack validation error: ${error}. ` +
+            'Please check the payment parameters (email, amount, currency).'
+          );
+        }
+
         throw new Error(`Paystack API error: ${error}`);
       }
 
