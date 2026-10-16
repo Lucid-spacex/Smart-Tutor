@@ -951,14 +951,12 @@ export class AdminService {
       throw new Error('Student not found');
     }
 
-    // Get parent summary with profile picture
+    // Get parent summary - NO email/phone for security
     const parent = await prisma.user.findUnique({
       where: { id: student.parentId },
       select: {
         id: true,
         fullName: true,
-        email: true,
-        phone: true,
         profilePicture: true,
       },
     });
@@ -1026,7 +1024,7 @@ export class AdminService {
         if (enrollment.yearlyPriceNGN && enrollment.yearlyPriceUSD) {
           effectivePriceNGN = Number(enrollment.yearlyPriceNGN);
           effectivePriceUSD = Number(enrollment.yearlyPriceUSD);
-          priceSource = 'override';
+          priceSource = 'custom_override';
         } else {
           const subjectPrice = await prisma.subjectPrice.findUnique({
             where: {
@@ -1136,7 +1134,7 @@ export class AdminService {
       }),
     ]);
 
-    // Get grade summary and recent grades (including PENDING and REJECTED for admin)
+    // Get grade summary and recent grades (only approved grades)
     const [approvedGrades, recentGrades] = await Promise.all([
       prisma.grade.findMany({
         where: {
@@ -1148,6 +1146,7 @@ export class AdminService {
       prisma.grade.findMany({
         where: {
           enrollment: { studentId },
+          status: 'APPROVED',
         },
         include: {
           enrollment: {
@@ -1283,8 +1282,6 @@ export class AdminService {
       parent: parent ? {
         id: parent.id,
         fullName: parent.fullName,
-        email: parent.email,
-        phone: parent.phone,
         profilePictureUrl: parent.profilePicture,
       } : null,
       tutors: uniqueTutors,
@@ -2085,7 +2082,7 @@ export class AdminService {
     if (enrollment.yearlyPriceNGN !== null && enrollment.yearlyPriceUSD !== null) {
       effectivePriceNGN = Number(enrollment.yearlyPriceNGN);
       effectivePriceUSD = Number(enrollment.yearlyPriceUSD);
-      priceSource = 'override';
+      priceSource = 'custom_override';
     } else {
       // Fall back to tier default
       const tier = await prisma.pricingTier.findUnique({
@@ -2318,7 +2315,7 @@ export class AdminService {
             if (enrollment.yearlyPriceNGN && enrollment.yearlyPriceUSD) {
               effectivePriceNGN = Number(enrollment.yearlyPriceNGN);
               effectivePriceUSD = Number(enrollment.yearlyPriceUSD);
-              priceSource = 'override';
+              priceSource = 'custom_override';
             } else {
               const subjectPrice = await prisma.subjectPrice.findUnique({
                 where: {

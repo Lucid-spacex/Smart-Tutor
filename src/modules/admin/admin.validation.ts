@@ -2,7 +2,11 @@ import { z } from 'zod';
 
 export const updateTutorVettingSchema = z.object({
   vettingStatus: z.enum(['APPROVED', 'REJECTED']),
-  rejectionReason: z.string().optional(),
+  rejectionReason: z.string().when('vettingStatus', {
+    is: 'REJECTED',
+    then: z.string().min(1, 'Rejection reason is required when rejecting'),
+    otherwise: z.string().optional(),
+  }),
 });
 
 export const assignTutorSchema = z.object({
@@ -107,6 +111,12 @@ export const addPaymentNoteSchema = z.object({
 });
 
 export type UpdateTutorVettingInput = z.infer<typeof updateTutorVettingSchema>;
+
+// For backward compatibility, also export the individual fields
+export interface UpdateTutorVettingInputCompat {
+  vettingStatus: 'APPROVED' | 'REJECTED';
+  rejectionReason?: string;
+}
 export type AssignTutorInput = z.infer<typeof assignTutorSchema>;
 export type UpdateEnrollmentPricingInput = z.infer<typeof updateEnrollmentPricingSchema>;
 export type UpdatePricingTierInput = z.infer<typeof updatePricingTierSchema>;
