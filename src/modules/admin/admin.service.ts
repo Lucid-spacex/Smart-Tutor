@@ -568,7 +568,7 @@ export class AdminService {
     await this.tutorApplicationService.reviewApplication(
       tutorId,
       adminId,
-      data.vettingStatus,
+      data.vettingStatus as 'APPROVED' | 'REJECTED',
       data.rejectionReason
     );
 
@@ -2076,7 +2076,7 @@ export class AdminService {
     // Determine effective price and source
     let effectivePriceNGN: number | null = null;
     let effectivePriceUSD: number | null = null;
-    let priceSource: 'override' | 'tier default' | 'error' = 'error';
+    let priceSource: 'custom_override' | 'subject_price' | 'error' = 'error';
 
     // Check for override first
     if (enrollment.yearlyPriceNGN !== null && enrollment.yearlyPriceUSD !== null) {
@@ -2084,15 +2084,20 @@ export class AdminService {
       effectivePriceUSD = Number(enrollment.yearlyPriceUSD);
       priceSource = 'custom_override';
     } else {
-      // Fall back to tier default
-      const tier = await prisma.pricingTier.findUnique({
-        where: { gradeBandTier: enrollment.student.gradeBandTier },
+      // Fall back to subject price
+      const subjectPrice = await prisma.subjectPrice.findUnique({
+        where: {
+          subjectId_gradeBandTier: {
+            subjectId: enrollment.subjectId,
+            gradeBandTier: enrollment.student.gradeBandTier,
+          },
+        },
       });
 
-      if (tier) {
-        effectivePriceNGN = Number(tier.yearlyPriceNGN);
-        effectivePriceUSD = Number(tier.yearlyPriceUSD);
-        priceSource = 'tier default';
+      if (subjectPrice && subjectPrice.isActive) {
+        effectivePriceNGN = Number(subjectPrice.yearlyPriceNGN);
+        effectivePriceUSD = Number(subjectPrice.yearlyPriceUSD);
+        priceSource = 'subject_price';
       } else {
         // No pricing available
         throw new Error('No pricing configured for this enrollment');

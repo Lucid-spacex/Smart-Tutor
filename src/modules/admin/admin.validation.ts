@@ -2,11 +2,15 @@ import { z } from 'zod';
 
 export const updateTutorVettingSchema = z.object({
   vettingStatus: z.enum(['APPROVED', 'REJECTED']),
-  rejectionReason: z.string().when('vettingStatus', {
-    is: 'REJECTED',
-    then: z.string().min(1, 'Rejection reason is required when rejecting'),
-    otherwise: z.string().optional(),
-  }),
+  rejectionReason: z.string().optional(),
+}).refine((data) => {
+  if (data.vettingStatus === 'REJECTED' && !data.rejectionReason) {
+    return false;
+  }
+  return true;
+}, {
+  message: 'Rejection reason is required when rejecting',
+  path: ['rejectionReason'],
 });
 
 export const assignTutorSchema = z.object({

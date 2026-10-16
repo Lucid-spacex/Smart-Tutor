@@ -653,7 +653,7 @@
  *
  * /admin/tutors/{id}/vetting:
  *   patch:
- *     summary: Update tutor vetting status
+ *     summary: Update tutor vetting status (approve or reject)
  *     tags: [Admin - Pricing]
  *     security:
  *       - bearerAuth: []
@@ -676,17 +676,44 @@
  *               vettingStatus:
  *                 type: string
  *                 enum: [APPROVED, REJECTED]
+ *                 description: Vet status to set
  *               rejectionReason:
  *                 type: string
+ *                 description: Required when vettingStatus is REJECTED
  *     responses:
  *       200:
- *         description: Tutor vetting updated
+ *         description: Tutor vetting updated successfully
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/TutorProfile'
+ *               type: object
+ *               properties:
+ *                 id:
+ *                   type: string
+ *                   format: uuid
+ *                 fullName:
+ *                   type: string
+ *                 email:
+ *                   type: string
+ *                 role:
+ *                   type: string
+ *                 status:
+ *                   type: string
+ *                 tutorProfile:
+ *                   type: object
+ *                   properties:
+ *                     vettingStatus:
+ *                       type: string
+ *                       enum: [PENDING, APPROVED, REJECTED]
+ *                 tutorApplication:
+ *                   type: object
+ *                   properties:
+ *                     status:
+ *                       type: string
+ *                     rejectionReason:
+ *                       type: string
  *       400:
- *         description: Validation error
+ *         description: Validation error - rejectionReason required when rejecting
  *       401:
  *         description: Not authenticated
  *       403:
@@ -1012,15 +1039,12 @@
  *                       type: string
  *                 parent:
  *                   type: object
+ *                   description: Parent info without contact details for security
  *                   properties:
  *                     id:
  *                       type: string
  *                       format: uuid
  *                     fullName:
- *                       type: string
- *                     email:
- *                       type: string
- *                     phone:
  *                       type: string
  *                     profilePictureUrl:
  *                       type: string
@@ -1999,10 +2023,14 @@
  *                         type: string
  *                       effectivePriceNGN:
  *                         type: number
+ *                         description: Calculated effective price in NGN
  *                       effectivePriceUSD:
  *                         type: number
+ *                         description: Calculated effective price in USD
  *                       priceSource:
  *                         type: string
+ *                         enum: [subject_price, custom_override, error]
+ *                         description: Source of the pricing - subject_price (default), custom_override (enrollment-specific), or error (no pricing found)
  *                 payments:
  *                   type: array
  *                   items:

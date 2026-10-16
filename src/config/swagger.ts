@@ -36,6 +36,10 @@ const options = {
         description: 'Parent profile and account management',
       },
       {
+        name: 'Pricing',
+        description: 'Pricing quotes and cost estimates',
+      },
+      {
         name: 'Student',
         description: 'Student-facing endpoints for profile, schedule, assignments, grades, and notifications',
       },
@@ -46,6 +50,10 @@ const options = {
       {
         name: 'Tutor',
         description: 'Tutor profile, availability, and student assignments',
+      },
+      {
+        name: 'Tutor Application',
+        description: 'Tutor application submission and management',
       },
       {
         name: 'Subjects',
