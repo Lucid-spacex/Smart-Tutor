@@ -6,6 +6,7 @@ export class AppError extends Error {
   constructor(
     public statusCode: number,
     public message: string,
+    public errorCode?: string,
     public isOperational = true
   ) {
     super(message);
@@ -23,15 +24,23 @@ export const errorHandler = (
     // Operational errors (expected: validation failures, not-found, unauthorized)
     logger.info({
       error: err.message,
+      errorCode: err.errorCode,
       statusCode: err.statusCode,
       path: req.path,
       method: req.method,
       ...(config.NODE_ENV === 'development' && { stack: err.stack }),
     }, 'Operational error');
 
-    res.status(err.statusCode).json({
+    const response: any = {
       error: err.message,
-    });
+    };
+
+    // Include errorCode if available for better frontend handling
+    if (err.errorCode) {
+      response.errorCode = err.errorCode;
+    }
+
+    res.status(err.statusCode).json(response);
     return;
   }
 

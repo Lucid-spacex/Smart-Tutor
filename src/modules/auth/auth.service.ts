@@ -245,12 +245,14 @@ export class AuthService {
       });
 
       if (!storedToken || storedToken.userId !== payload.userId) {
-        throw new AppError(401, 'Invalid refresh token');
+        logger.warn({ userId: payload.userId }, 'Invalid refresh token attempt');
+        throw new AppError(401, 'Invalid authentication token. Please login again.', 'TOKEN_INVALID');
       }
 
       if (storedToken.expiresAt < new Date()) {
         await prisma.refreshToken.delete({ where: { id: storedToken.id } });
-        throw new AppError(401, 'Refresh token expired');
+        logger.info({ userId: payload.userId }, 'Refresh token expired');
+        throw new AppError(401, 'Your session has expired. Please login again.', 'TOKEN_EXPIRED');
       }
 
       // Reuse detection: if the token has been revoked, delete the entire family (potential theft)
@@ -258,7 +260,8 @@ export class AuthService {
         await prisma.refreshToken.deleteMany({
           where: { tokenFamily: storedToken.tokenFamily },
         });
-        throw new AppError(401, 'Refresh token revoked due to suspicious activity. Please login again.');
+        logger.warn({ userId: payload.userId, tokenFamily: storedToken.tokenFamily }, 'Refresh token revoked due to suspicious activity');
+        throw new AppError(401, 'Your session was revoked due to suspicious activity. Please login again.', 'TOKEN_REVOKED');
       }
 
       const user = await prisma.user.findUnique({
@@ -292,7 +295,8 @@ export class AuthService {
         });
 
         if (!currentToken || currentToken.revokedAt) {
-          throw new AppError(401, 'Refresh token was already used. Please login again.');
+          logger.warn({ userId: payload.userId }, 'Refresh token was already used in concurrent request');
+          throw new AppError(401, 'Refresh token was already used. Please login again.', 'TOKEN_ALREADY_USED');
         }
 
         // Mark old token as revoked
@@ -320,7 +324,8 @@ export class AuthService {
       if (error instanceof AppError) {
         throw error;
       }
-      throw new AppError(401, 'Invalid or expired refresh token');
+      logger.error({ error }, 'Unexpected error during token refresh');
+      throw new AppError(401, 'Invalid authentication token. Please login again.', 'TOKEN_INVALID');
     }
   }
 

@@ -747,7 +747,7 @@ Type '{ connect: { id: string; }; }' is not assignable to type 'undefined'.
 
 ---
 
-## 24. Tutor Application System (2026-10-15)
+## 26. Tutor Application System (2026-10-15)
 
 **Implementation Notice**: As of 2026-10-15, tutors must complete a comprehensive application process before being approved to teach. This system includes document verification, restricted access for pending tutors, and admin review workflow.
 
@@ -832,7 +832,7 @@ Type '{ connect: { id: string; }; }' is not assignable to type 'undefined'.
 
 ---
 
-## 24. Admin Payment Actions & Audit Logging (2026-10-14)
+## 25. Admin Payment Actions & Audit Logging (2026-10-14)
 
 **Implementation Notice**: As of 2026-10-14, admins have safe, auditable payment management actions while maintaining payment immutability.
 
@@ -865,5 +865,344 @@ Type '{ connect: { id: string; }; }' is not assignable to type 'undefined'.
 - **Idempotency**: Reverify and webhook processing are idempotent
 - **Audit trail**: All payment admin actions logged to AdminActionLog
 - **No refunds**: Refund handling is separate work (not implemented here)
+
+---
+
+## 26. TypeScript Build Fixes & API Documentation Updates (2026-10-16)
+
+**Implementation Notice**: As of 2026-10-16, TypeScript build errors have been resolved and Swagger documentation has been updated to include all existing APIs for frontend implementation.
+
+### Build Error Fixes:
+
+#### 1. Zod Validation Error (admin.validation.ts)
+**Problem**: TypeScript error reported on line 5 about `.when()` property not existing on ZodString.
+
+**Root Cause**: The error was reported in the build logs but did not actually exist in the code. The schema was correctly implemented without using `.when()`.
+
+**Resolution**: After dependency updates (specifically zod@3.25.76), the build passed successfully. The reported error was likely a transpilation issue resolved by the dependency update.
+
+#### 2. Type Assertion Error (admin.service.ts:571)
+**Problem**: TypeScript error about `data.vettingStatus` being of type `unknown` instead of `'APPROVED' | 'REJECTED'`.
+
+**Root Cause**: The type inference from Zod schema needed explicit type assertion.
+
+**Resolution**: Added explicit type assertion `as 'APPROVED' | 'REJECTED'` to ensure type safety while maintaining runtime validation.
+
+#### 3. PriceSource Type Error (admin.service.ts:2085)
+**Problem**: TypeScript error about `'custom_override'` not being assignable to expected type.
+
+**Root Cause**: The type annotation on line 2079 already correctly defined the union type, but the type system was not inferring it correctly.
+
+**Resolution**: The issue was resolved after dependency updates. The explicit type definition `let priceSource: 'custom_override' | 'subject_price' | 'error' = 'error'` ensures type safety.
+
+### Swagger Documentation Updates:
+
+#### New Module: Pricing
+**File**: `src/modules/pricing/pricing.swagger.ts`
+
+**Endpoint Added**:
+- `GET /pricing/quote` - Get pricing quote for a student's subjects
+  - **Authentication**: Required (PARENT role only)
+  - **Parameters**: `studentId` (UUID), `subjectIds` (comma-separated list)
+  - **Returns**: Individual subject prices and totals based on student's grade band tier
+  - **Security**: Parent can only request quotes for their own students
+  - **Response includes**:
+    - Student information (id, name, gradeBandTier)
+    - Individual subject quotes (subjectId, subjectName, category, yearlyPriceNGN, yearlyPriceUSD, source)
+    - Totals (yearlyPriceNGN, yearlyPriceUSD)
+
+#### New Module: Tutor Application
+**File**: `src/modules/tutor-application/tutor-application.swagger.ts`
+
+**Endpoints Added**:
+1. `GET /tutor-application` - Get draft tutor application
+   - **Authentication**: Required (TUTOR role only)
+   - **Access**: Available to PENDING_VETTING tutors (bypasses requireApprovedTutor middleware)
+   - **Returns**: Complete application draft with all fields, including `missingFields[]` for UI validation
+
+2. `PATCH /tutor-application` - Update draft application (autosave)
+   - **Authentication**: Required (TUTOR role only)
+   - **Access**: Available to PENDING_VETTING tutors
+   - **Body**: Partial update of any application fields
+   - **Returns**: Updated application with `lastSavedAt` timestamp
+
+3. `POST /tutor-application/documents` - Upload document
+   - **Authentication**: Required (TUTOR role only)
+   - **Access**: Available to PENDING_VETTING tutors
+   - **Content-Type**: multipart/form-data
+   - **File**: Single file upload (max 5MB)
+   - **Returns**: Document metadata with signed Cloudinary URL (10-minute expiry)
+
+4. `GET /tutor-application/documents/{id}` - Get signed URL for document download
+   - **Authentication**: Required
+   - **Access**: Tutors (own documents) and Admins (all documents)
+   - **Returns**: Document metadata with fresh signed URL
+
+5. `DELETE /tutor-application/documents/{id}` - Delete document
+   - **Authentication**: Required (TUTOR role only)
+   - **Access**: Available to PENDING_VETTING tutors
+   - **Action**: Deletes document from both database and Cloudinary storage
+   - **Returns**: Success confirmation
+
+6. `POST /tutor-application/submit` - Submit application for review
+   - **Authentication**: Required (TUTOR role only)
+   - **Access**: Available to PENDING_VETTING tutors
+   - **Validation**: All required fields must be completed
+   - **Action**: Sets status to SUBMITTED, notifies admins, emails applicant
+   - **Returns**: Submitted application with status
+
+### Swagger Configuration Updates:
+
+**File**: `src/config/swagger.ts`
+
+**New Tags Added**:
+- **Pricing**: Tag for pricing-related endpoints (currently `/pricing/quote`)
+- **Tutor Application**: Tag for tutor application workflow endpoints
+
+**Tag Description**: Both tags include proper descriptions and are integrated into the existing tag list in the Swagger configuration.
+
+### Security Considerations:
+
+#### Pricing Endpoint:
+- **Parent-only access**: Strictly enforced via requireRole('PARENT') middleware
+- **Student ownership verification**: Ensures parent can only request quotes for their own children
+- **No price exposure to students**: Pricing information is parent and admin only
+- **Server-side price calculation**: Client cannot manipulate prices
+
+#### Tutor Application Endpoints:
+- **Tutor-only access**: All endpoints require TUTOR role
+- **PENDING_VETTING bypass**: Application routes intentionally bypass requireApprovedTutor middleware
+- **Document security**: 
+  - Documents stored as private Cloudinary assets
+  - Signed URLs with short expiry (10 minutes)
+  - Max 5 documents per application, 5MB per document
+  - Server-side validation of file type and size
+- **Rate limiting**: All endpoints are Tier 2 rate limited (60 req/min)
+- **No credential exposure**: Application data does not include login credentials
+
+### Frontend Implementation Notes:
+
+#### For Pricing Integration:
+1. Call `GET /pricing/quote?studentId={id}&subjectIds={id1,id2}` from enrollment wizard
+2. Display individual subject prices and totals to parent
+3. Handle 404 error if no pricing configured for the student's grade band
+4. Use effective prices for payment initiation
+
+#### For Tutor Application Integration:
+1. After tutor registration and OTP verification, show application completion wizard
+2. Call `GET /tutor-application` to load draft and check `missingFields[]`
+3. Implement autosave on every field change via `PATCH /tutor-application`
+4. Use file upload component for document uploads with 5MB limit
+5. Enable submit button only when `missingFields[]` is empty
+6. On submission, show confirmation and redirect to tutor dashboard once approved
+7. Handle rejection gracefully with option to contact support
+
+### Build Verification:
+- **Command**: `npm run build` completes successfully
+- **TypeScript compilation**: No errors
+- **Prisma generation**: Successful
+- **Swagger generation**: All swagger files are processed by swagger-jsdoc pattern matching
+
+---
+
+## 27. API Endpoint Summary for Frontend (2026-10-16)
+
+**Frontend Reference**: Complete list of all documented API endpoints organized by module.
+
+### Authentication (`/auth`)
+- `POST /auth/register` - Register parent or tutor
+- `POST /auth/login` - Login with email/password
+- `POST /auth/verify` - Verify email with OTP
+- `POST /auth/resend-otp` - Resend verification OTP
+- `POST /auth/student-login` - Student login with code+PIN
+- `POST /auth/logout` - Logout (revoke session)
+- `POST /auth/forgot-password` - Request password reset
+- `POST /auth/reset-password` - Reset password with token
+- `GET /auth/me` - Get current user profile
+- `PATCH /auth/me` - Update current user profile
+- `PATCH /auth/me/profile-picture` - Upload profile picture
+- `DELETE /auth/me/profile-picture` - Remove profile picture
+
+### Parent (`/me`)
+- `GET /me` - Get parent profile with children
+- `PATCH /me` - Update parent profile
+- `GET /me/notifications` - Get notifications
+- `PATCH /me/notifications/:id/read` - Mark notification as read
+- `GET /me/unread-count` - Get unread notification count
+
+### Students (`/students`)
+- `POST /students` - Create student (generates credentials)
+- `GET /students` - List parent's students
+- `GET /students/:id` - Get student details
+- `PATCH /students/:id` - Update student profile
+- `DELETE /students/:id` - Delete student
+- `POST /students/:id/regenerate-pin` - Regenerate student PIN
+- `GET /students/:id/performance` - Get student performance overview
+- `GET /students/:id/enrollments` - Get student enrollments
+- `GET /students/:id/sessions` - Get student sessions
+- `GET /students/:id/grades` - Get student grades
+- `GET /students/:id/assignments` - Get student assignments
+- `GET /students/:id/attendance` - Get student attendance
+- `GET /students/:id/progress-reports` - Get student progress reports
+
+### Student (`/student`)
+- `GET /student/me` - Get student profile
+- `GET /student/me/schedule` - Get student schedule
+- `GET /student/me/next-class` - Get next upcoming class
+- `GET /student/me/assignments` - Get student assignments
+- `GET /student/me/grades` - Get student grades
+- `GET /student/me/progress-reports` - Get student progress reports
+- `GET /student/me/performance` - Get student performance overview
+- `GET /student/me/notifications` - Get student notifications
+- `GET /student/me/tutors` - Get assigned tutors
+- `GET /student/me/attendance` - Get student attendance
+
+### Tutor (`/tutor`, `/tutor-profile`)
+- `GET /tutor/me` - Get tutor profile
+- `PATCH /tutor/me` - Update tutor profile
+- `PATCH /tutor-profile/availability-status` - Update availability status
+- `GET /tutor/me/students` - Get assigned students
+- `GET /tutor/me/students/:studentId` - Get student details
+- `GET /tutor/me/students/:studentId/assignments` - Get student assignments
+- `GET /tutor/me/students/:studentId/grades` - Get student grades
+- `GET /tutor/me/students/:studentId/performance` - Get student performance
+- `GET /tutor/me/students/:studentId/attendance` - Get student attendance
+- `GET /tutor/me/sessions` - Get tutor sessions
+- `POST /tutor/sessions` - Create session
+- `PATCH /tutor/sessions/:id/reschedule` - Reschedule session
+- `DELETE /tutor/sessions/:id` - Delete session
+- `GET /tutor/me/notifications` - Get tutor notifications
+- `GET /tutor/me/unread-count` - Get unread notification count
+
+### Tutor Application (`/tutor-application`)
+- `GET /tutor-application` - Get draft application
+- `PATCH /tutor-application` - Update draft application
+- `POST /tutor-application/documents` - Upload document
+- `GET /tutor-application/documents/:id` - Get document download URL
+- `DELETE /tutor-application/documents/:id` - Delete document
+- `POST /tutor-application/submit` - Submit application
+
+### Admin (`/admin`)
+- `GET /admin/tutors` - List tutors with filters
+- `GET /admin/tutors/:id` - Get tutor details
+- `PATCH /admin/tutors/:id/vetting` - Approve/reject tutor
+- `PATCH /admin/tutors/:id/suspend` - Suspend tutor
+- `GET /admin/students` - List students with filters
+- `GET /admin/students/:id` - Get student details
+- `PATCH /admin/students/:id/regenerate-pin` - Regenerate student PIN
+- `PATCH /admin/students/:id/suspend` - Suspend student
+- `GET /admin/parents` - List parents with filters
+- `GET /admin/parents/:id` - Get parent details
+- `PATCH /admin/parents/:id/suspend` - Suspend parent
+- `GET /admin/subjects` - List subjects with pricing
+- `POST /admin/subjects` - Create subject
+- `PATCH /admin/subjects/:id` - Update subject
+- `DELETE /admin/subjects/:id` - Delete subject
+- `PUT /admin/subjects/:id/prices/:gradeBandTier` - Upsert subject price
+- `GET /admin/pricing-tiers` - List pricing tiers
+- `PATCH /admin/pricing-tiers/:gradeBandTier` - Update pricing tier
+- `GET /admin/enrollments` - List enrollments
+- `GET /admin/enrollments/:id` - Get enrollment details
+- `PATCH /admin/enrollments/:id/assign-tutor` - Assign tutor
+- `PATCH /admin/enrollments/:id/pricing` - Update enrollment pricing
+- `GET /admin/enrollments/:id/suggested-tutors` - Get suggested tutors
+- `GET /admin/payments` - List payments
+- `GET /admin/payments/:id` - Get payment details
+- `PATCH /admin/payments/:id/note` - Add payment note
+- `POST /admin/payments/:id/reverify` - Reverify payment
+- `GET /admin/payments/summary` - Get payment summary
+- `GET /admin/sessions` - List sessions
+- `POST /admin/sessions` - Create session
+- `PATCH /admin/sessions/:id` - Update session
+- `GET /admin/complaints` - List complaints
+- `PATCH /admin/complaints/:id` - Resolve complaint
+
+### Subjects (`/subjects`)
+- `GET /subjects` - List subjects (public or with pricing)
+- `GET /subjects/public` - List active subjects (no auth required)
+- `GET /subjects/:id` - Get subject details
+
+### Pricing (`/pricing`)
+- `GET /pricing/quote` - Get pricing quote for enrollment
+
+### Enrollments (`/enrollments`)
+- `POST /enrollments` - Create enrollment
+- `GET /enrollments` - List enrollments
+- `GET /enrollments/:id` - Get enrollment details
+- `PATCH /enrollments/:id` - Update enrollment
+- `DELETE /enrollments/:id` - Delete enrollment
+
+### Sessions (`/sessions`)
+- `GET /sessions` - List sessions
+- `GET /sessions/:id` - Get session details
+- `PATCH /sessions/:id` - Update session notes
+- `GET /sessions/:id/recording` - Get session recording URL
+
+### Payments (`/payments`)
+- `POST /payments/initiate` - Initiate payment
+- `GET /payments` - List payments
+- `GET /payments/:id` - Get payment details
+
+### Assignments (`/assignments`)
+- `POST /assignments` - Create assignment
+- `GET /assignments` - List assignments
+- `GET /assignments/:id` - Get assignment details
+- `PATCH /assignments/:id` - Update assignment
+- `DELETE /assignments/:id` - Delete assignment
+- `POST /assignments/:id/submit` - Submit assignment
+
+### Grades (`/grades`)
+- `POST /grades` - Submit grade
+- `GET /grades` - List grades
+- `GET /grades/:id` - Get grade details
+- `PATCH /grades/:id` - Update grade
+- `DELETE /grades/:id` - Delete grade
+- `PATCH /grades/:id/approve` - Approve grade
+- `PATCH /grades/:id/reject` - Reject grade
+
+### Progress Reports (`/progress-reports`)
+- `POST /progress-reports` - Create progress report
+- `GET /progress-reports` - List progress reports
+- `GET /progress-reports/:id` - Get progress report details
+- `PATCH /progress-reports/:id` - Update progress report
+
+### Attendance (`/attendance`)
+- `GET /attendance` - List attendance records
+- `GET /attendance/:id` - Get attendance details
+- `POST /attendance` - Mark attendance
+
+### Notifications (`/notifications`)
+- `GET /notifications` - List notifications
+- `PATCH /notifications/:id/read` - Mark as read
+- `PATCH /notifications/read-all` - Mark all as read
+
+### Complaints (`/complaints`)
+- `POST /complaints` - File complaint
+- `GET /complaints` - List complaints
+- `GET /complaints/:id` - Get complaint details
+
+### Messages (`/messages`)
+- `GET /messages` - List message threads
+- `GET /messages/:id` - Get message thread
+- `POST /messages` - Send message
+- `GET /messages/admin-contact` - Get admin contact ID
+- `GET /messages/unread-count` - Get unread count
+
+### Quiz (`/quiz`)
+- `POST /quiz/start` - Start quiz attempt
+- `GET /quiz/attempts/:id` - Get quiz attempt
+- `POST /quiz/attempts/:id/answer` - Submit quiz answer
+- `POST /quiz/attempts/:id/complete` - Complete quiz
+
+### Performance (`/performance`)
+- `GET /performance/overview` - Get performance overview
+
+### Webhooks (`/webhooks`)
+- `POST /webhooks/paystack` - Paystack webhook handler
+- `POST /webhooks/zoom` - Zoom webhook handler
+
+---
+
+**Note**: All endpoints require JWT authentication unless explicitly marked as public. Role-based access control is enforced via middleware. Rate limiting is applied based on endpoint risk tier.
 
 

@@ -10,6 +10,9 @@ const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string().min(32, 'JWT_REFRESH_SECRET must be at least 32 characters'),
   JWT_ACCESS_EXPIRY: z.string().default('1d'),
   JWT_REFRESH_EXPIRY: z.string().default('7d'),
+  // Extended token expiry for development (optional)
+  JWT_ACCESS_EXPIRY_DEV: z.string().default('7d'),
+  JWT_REFRESH_EXPIRY_DEV: z.string().default('30d'),
 
   // Paystack
   PAYSTACK_SECRET_KEY: z.string().optional(),

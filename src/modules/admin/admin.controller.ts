@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { AdminService } from './admin.service';
-import { UpdateTutorVettingInput, AssignTutorInput, GetTutorsQuery, GetStudentsQuery, UpdateEnrollmentPricingInput, UpdateEnrollmentPricingOverrideInput, GetUnmatchedEnrollmentsQuery, SuspendUserInput, AddPaymentNoteInput } from './admin.validation';
+import { UpdateTutorVettingInput, AssignTutorInput, GetTutorsQuery, GetStudentsQuery, UpdateEnrollmentPricingInput, UpdateEnrollmentPricingOverrideInput, GetUnmatchedEnrollmentsQuery, SuspendUserInput, AddPaymentNoteInput, GetSessionsQuery } from './admin.validation';
 import { AuthRequest } from '../../types/express';
 import { PerformanceService } from '../performance/performance.service';
 import { config } from '../../config/env.config';
@@ -595,6 +595,16 @@ export class AdminController {
       }
 
       const result = await this.adminService.getEmailDiagnostics();
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getSessions = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const query: GetSessionsQuery = req.query as any;
+      const result = await this.adminService.getSessions(query);
       res.status(200).json(result);
     } catch (error) {
       next(error);

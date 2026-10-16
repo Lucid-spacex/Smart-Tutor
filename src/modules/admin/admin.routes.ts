@@ -5,7 +5,7 @@ import { ComplaintsController } from '../complaints/complaints.controller';
 import { validate, validateQuery } from '../../middleware/validation.middleware';
 import { authenticate, requireRole } from '../../middleware/auth.middleware';
 import { validateUUID } from '../../middleware/uuid-validation.middleware';
-import { updateTutorVettingSchema, assignTutorSchema, getTutorsQuerySchema, getStudentsQuerySchema, updateEnrollmentPricingSchema, updateEnrollmentPricingOverrideSchema, createSessionSchema, rescheduleSessionSchema, getUnmatchedEnrollmentsQuerySchema, createSubjectSchema, updateSubjectSchema, upsertSubjectPriceSchema, suspendUserSchema, addPaymentNoteSchema } from './admin.validation';
+import { updateTutorVettingSchema, assignTutorSchema, getTutorsQuerySchema, getStudentsQuerySchema, updateEnrollmentPricingSchema, updateEnrollmentPricingOverrideSchema, createSessionSchema, rescheduleSessionSchema, getUnmatchedEnrollmentsQuerySchema, createSubjectSchema, updateSubjectSchema, upsertSubjectPriceSchema, suspendUserSchema, addPaymentNoteSchema, getSessionsQuerySchema } from './admin.validation';
 import { resolveComplaintSchema } from '../complaints/complaints.validation';
 
 const router = Router();
@@ -74,6 +74,7 @@ router.patch('/users/:id/reactivate', authenticate, requireRole('ADMIN'), valida
 router.get('/diagnostics/email', authenticate, requireRole('ADMIN'), adminController.getEmailDiagnostics);
 
 // Sessions
+router.get('/sessions', authenticate, requireRole('ADMIN'), validateQuery(getSessionsQuerySchema), adminController.getSessions);
 router.post('/sessions', authenticate, requireRole('ADMIN'), validate(createSessionSchema), adminController.createSession);
 router.patch('/sessions/:id/reschedule', authenticate, requireRole('ADMIN'), validateUUID('id'), validate(rescheduleSessionSchema), adminController.rescheduleSession);
 

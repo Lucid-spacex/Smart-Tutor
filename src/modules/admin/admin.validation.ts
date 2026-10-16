@@ -114,6 +114,17 @@ export const addPaymentNoteSchema = z.object({
   note: z.string().min(1, 'Note is required'),
 });
 
+export const getSessionsQuerySchema = z.object({
+  status: z.enum(['SCHEDULED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'MISSED']).optional(),
+  tutorId: z.string().uuid('Invalid tutor ID').optional(),
+  studentId: z.string().uuid('Invalid student ID').optional(),
+  enrollmentId: z.string().uuid('Invalid enrollment ID').optional(),
+  from: z.string().refine((val) => !isNaN(Date.parse(val)), 'Invalid from date').optional(),
+  to: z.string().refine((val) => !isNaN(Date.parse(val)), 'Invalid to date').optional(),
+  page: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().positive().max(100).optional(),
+});
+
 export type UpdateTutorVettingInput = z.infer<typeof updateTutorVettingSchema>;
 
 // For backward compatibility, also export the individual fields
@@ -132,3 +143,4 @@ export type GetStudentsQuery = z.infer<typeof getStudentsQuerySchema>;
 export type GetUnmatchedEnrollmentsQuery = z.infer<typeof getUnmatchedEnrollmentsQuerySchema>;
 export type SuspendUserInput = z.infer<typeof suspendUserSchema>;
 export type AddPaymentNoteInput = z.infer<typeof addPaymentNoteSchema>;
+export type GetSessionsQuery = z.infer<typeof getSessionsQuerySchema>;

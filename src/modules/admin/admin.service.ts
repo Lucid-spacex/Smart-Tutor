@@ -479,6 +479,95 @@ export class AdminService {
     };
   }
 
+  async getSessions(filters?: { status?: string; tutorId?: string; studentId?: string; enrollmentId?: string; from?: string; to?: string; page?: number; limit?: number }) {
+    const { status, tutorId, studentId, enrollmentId, from, to, page = 1, limit = 50 } = filters || {};
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+
+    if (status) {
+      where.status = status;
+    }
+
+    if (tutorId) {
+      where.tutorId = tutorId;
+    }
+
+    if (studentId) {
+      where.participants = {
+        some: {
+          enrollment: {
+            studentId,
+          },
+        },
+      };
+    }
+
+    if (enrollmentId) {
+      where.participants = {
+        some: {
+          enrollmentId,
+        },
+      };
+    }
+
+    if (from || to) {
+      where.scheduledAt = {};
+      if (from) {
+        where.scheduledAt.gte = new Date(from);
+      }
+      if (to) {
+        where.scheduledAt.lte = new Date(to);
+      }
+    }
+
+    const [sessions, total] = await Promise.all([
+      prisma.session.findMany({
+        where,
+        include: {
+          participants: {
+            include: {
+              enrollment: {
+                include: {
+                  student: {
+                    select: {
+                      id: true,
+                      fullName: true,
+                    },
+                  },
+                  subject: {
+                    select: {
+                      id: true,
+                      name: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          tutor: {
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+            },
+          },
+        },
+        orderBy: { scheduledAt: 'desc' },
+        skip,
+        take: Math.min(limit, 100),
+      }),
+      prisma.session.count({ where }),
+    ]);
+
+    return {
+      data: sessions,
+      page,
+      limit,
+      total,
+    };
+  }
+
   async getTutorGrades(tutorId: string, filters?: { status?: string; page?: number; limit?: number }) {
     const { status, page = 1, limit = 20 } = filters || {};
     const skip = (page - 1) * limit;

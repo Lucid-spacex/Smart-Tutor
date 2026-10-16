@@ -18,7 +18,7 @@ import { Request } from 'express';
 // ---------------------------------------------------------------------------
 
 /**
- * Tier 1 — STRICT (7 req / 15 min)
+ * Tier 1 — STRICT (20 req / 15 min) - INCREASED FOR DEVELOPMENT
  *
  * Applied to:
  *   POST /auth/login
@@ -37,7 +37,7 @@ import { Request } from 'express';
  */
 export const tier1AuthRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 7,
+  max: 20, // Increased from 7 to 20 for development
   standardHeaders: true,  // Emit RateLimit-* headers (RFC 6585)
   legacyHeaders: false,   // Disable X-RateLimit-* legacy headers
   message: {
@@ -54,7 +54,7 @@ export const tier1AuthRateLimit = rateLimit({
 });
 
 /**
- * Tier 1b — STUDENT LOGIN STRICT (5 req / 15 min)
+ * Tier 1b — STUDENT LOGIN STRICT (15 req / 15 min) - INCREASED FOR DEVELOPMENT
  *
  * Applied to:
  *   POST /auth/student-login
@@ -69,7 +69,7 @@ export const tier1AuthRateLimit = rateLimit({
  */
 export const studentLoginRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // Stricter than tier1 due to smaller PIN search space
+  max: 15, // Increased from 5 to 15 for development
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -86,7 +86,7 @@ export const studentLoginRateLimit = rateLimit({
 });
 
 /**
- * Tier 2 — MODERATE (60 req / 1 min)
+ * Tier 2 — MODERATE (120 req / 1 min) - INCREASED FOR DEVELOPMENT
  *
  * Applied to:
  *   All non-GET, non-Tier-1 API routes (POST/PATCH/PUT/DELETE for creating
@@ -96,14 +96,14 @@ export const studentLoginRateLimit = rateLimit({
  * any unauthenticated write (which should be rare given RBAC).
  *
  * Purpose: backstop against runaway scripts or bugs, not a user-facing limit.
- * A real parent doing normal actions should never approach 60 writes/minute.
+ * A real parent doing normal actions should never approach 120 writes/minute.
  *
  * Usage: applied centrally in app.ts on all mutating /api routes (after
  * excluding auth and payment initiation which already have Tier 1).
  */
 export const tier2WriteRateLimit = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 60,
+  max: 120, // Increased from 60 to 120 for development
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -125,7 +125,7 @@ export const tier2WriteRateLimit = rateLimit({
 export const tier2RateLimit = tier2WriteRateLimit;
 
 /**
- * Tier 3 — LOOSE (300 req / 15 min)
+ * Tier 3 — LOOSE (1000 req / 15 min) - INCREASED FOR DEVELOPMENT
  *
  * Applied to:
  *   All GET requests under /api (dashboard loads, list views, notification
@@ -135,13 +135,13 @@ export const tier2RateLimit = tier2WriteRateLimit;
  * Key strategy: authenticated userId where available; falls back to IP.
  *
  * Purpose: anti-scraping / abuse backstop only. A real user clicking around
- *   a dashboard should never get close to 300 GETs in 15 minutes.
+ *   a dashboard should never get close to 1000 GETs in 15 minutes.
  *
  * Usage: applied centrally in app.ts on all GET /api routes.
  */
 export const tier3ReadRateLimit = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 300,
+  max: 1000, // Increased from 300 to 1000 for development
   standardHeaders: true,
   legacyHeaders: false,
   message: {
