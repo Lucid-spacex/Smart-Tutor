@@ -87,5 +87,5 @@
 - [ ] Run build and tests
 
 ## Final Report
-- [ ] Update PROGRESS.md
-- [ ] Write final report
+- [x] Update PROGRESS.md
+- [x] Write final report
