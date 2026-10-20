@@ -1,38 +1,98 @@
 import prisma from '../../config/database';
 import { NotificationCoreService } from '../notifications/notification-core.service';
 import { AppError } from '../../middleware/error-handler.middleware';
-import { CloudinaryService } from '../../services/cloudinary.service';
 import { NotificationCategory, NotificationType } from '@prisma/client';
 
-export class GradesService {
+export class NewGradesService {
   private notificationCore: NotificationCoreService;
-  private cloudinaryService: CloudinaryService;
 
   constructor() {
     this.notificationCore = new NotificationCoreService();
-    this.cloudinaryService = new CloudinaryService();
   }
 
   /**
-   * Calculate percentage from score and maxScore
-   * Computed on read, not stored
+   * Compute attendance rate for a grading period
+   * Computed as: attended sessions / expected completed sessions
    */
-  private calculatePercentage(score: number, maxScore: number): number {
-    if (maxScore === 0) return 0;
-    return (score / maxScore) * 100;
+  private async computeAttendanceRate(enrollmentId: string, periodStart: Date, periodEnd: Date): Promise<number> {
+    const totalSessions = await prisma.session.count({
+      where: {
+        participants: {
+          some: {
+            enrollmentId,
+          },
+        },
+        scheduledAt: {
+          gte: periodStart,
+          lte: periodEnd,
+        },
+        status: { in: ['COMPLETED', 'MISSED'] },
+      },
+    });
+
+    if (totalSessions === 0) return 0;
+
+    const attendedSessions = await prisma.session.count({
+      where: {
+        participants: {
+          some: {
+            enrollmentId,
+          },
+        },
+        scheduledAt: {
+          gte: periodStart,
+          lte: periodEnd,
+        },
+        status: 'COMPLETED',
+      },
+    });
+
+    return (attendedSessions / totalSessions) * 100;
   }
 
   /**
-   * Enrich grade with computed percentage
+   * Compute the grade score from components
+   * Server-calculated, never client-supplied
    */
-  private enrichWithPercentage(grade: any) {
-    return {
-      ...grade,
-      percentage: this.calculatePercentage(Number(grade.score), Number(grade.maxScore || 100)),
-    };
+  private async computeGradeScore(gradeId: string): Promise<number> {
+    const components = await prisma.gradeComponent.findMany({
+      where: { gradeId },
+      include: {
+        scoredItem: true,
+      },
+    });
+
+    if (components.length === 0) return 0;
+
+    let totalScore = 0;
+    for (const component of components) {
+      if (component.scoredItem) {
+        const itemScore = Number(component.scoredItem.score) / Number(component.scoredItem.maxScore);
+        totalScore += itemScore * component.weight;
+      } else if (component.type === 'ATTENDANCE') {
+        // Attendance is a special case - use the stored attendance rate
+        totalScore += Number(component.attendanceRate || 0) * component.weight;
+      }
+    }
+
+    return totalScore;
   }
 
-  async createGrade(tutorId: string, data: any) {
+  /**
+   * Create a DRAFT grade with components
+   */
+  async createDraftGrade(tutorId: string, data: {
+    enrollmentId: string;
+    periodStart: Date;
+    periodEnd: Date;
+    components: Array<{
+      type: string;
+      weight: number;
+      scoredItemId?: string;
+      attendanceRate?: number;
+    }>;
+    tutorComment?: string;
+  }) {
     // Verify enrollment exists and tutor is assigned
     const enrollment = await prisma.enrollment.findUnique({
       where: { id: data.enrollmentId },
@@ -50,44 +110,90 @@ export class GradesService {
       throw new AppError(403, 'Not authorized to grade this enrollment');
     }
 
-    // If assignmentId is provided, verify it exists and belongs to the enrollment
-    if (data.assignmentId) {
-      const assignment = await prisma.assignment.findUnique({
-        where: { id: data.assignmentId },
-      });
-      if (!assignment || assignment.enrollmentId !== data.enrollmentId) {
-        throw new AppError(400, 'Assignment not found or does not belong to this enrollment');
-      }
+    // Validate weights total exactly 100
+    const totalWeight = data.components.reduce((sum, c) => sum + c.weight, 0);
+    if (Math.abs(totalWeight - 100) > 0.01) {
+      throw new AppError(400, 'Component weights must total exactly 100');
     }
 
-    let attachmentUrl = null;
-    let attachmentName = null;
-
-    // Upload attachment to Cloudinary if provided
-    if (data.attachmentBase64) {
-      const uploadResult = await this.cloudinaryService.uploadFile(
-        data.attachmentBase64,
-        'grades',
-        'raw'
-      );
-      attachmentUrl = uploadResult.url;
-      attachmentName = uploadResult.filename;
-    }
-
-    // Grade always starts as PENDING_APPROVAL
-    const grade = await prisma.grade.create({
-      data: {
+    // Check for overlapping periods with non-rejected grades
+    const overlappingGrade = await prisma.grade.findFirst({
+      where: {
         enrollmentId: data.enrollmentId,
-        assignmentId: data.assignmentId || null,
-        gradedBy: tutorId,
-        score: data.score,
-        maxScore: data.maxScore || 100,
-        comments: data.comments,
-        attachmentUrl,
-        attachmentName,
-        status: 'PENDING_APPROVAL',
-        visibleToStudent: false, // Not visible until approved
+        status: { in: ['DRAFT', 'PENDING_APPROVAL', 'APPROVED'] },
+        periodStart: { lte: data.periodEnd },
+        periodEnd: { gte: data.periodStart },
       },
+    });
+
+    if (overlappingGrade) {
+      throw new AppError(400, 'A grade for this period already exists or is pending approval');
+    }
+
+    // Create grade and components in a transaction
+    const grade = await prisma.$transaction(async (tx) => {
+      const newGrade = await tx.grade.create({
+        data: {
+          enrollmentId: data.enrollmentId,
+          gradedBy: tutorId,
+          status: 'DRAFT',
+          periodStart: data.periodStart,
+          periodEnd: data.periodEnd,
+          tutorComment: data.tutorComment,
+          visibleToStudent: false,
+        },
+      });
+
+      // Create components
+      for (const component of data.components) {
+        // If attendance component, compute the rate
+        let attendanceRate = component.attendanceRate;
+        if (component.type === 'ATTENDANCE' && attendanceRate === undefined) {
+          attendanceRate = await this.computeAttendanceRate(data.enrollmentId, data.periodStart, data.periodEnd);
+        }
+
+        await tx.gradeComponent.create({
+          data: {
+            gradeId: newGrade.id,
+            type: component.type,
+            weight: component.weight,
+            weightPercent: component.weight, // Legacy field, same as weight
+            itemCount: component.scoredItemId ? 1 : 0,
+            componentPercentage: 0, // Will be computed from final score
+            snapshot: component.scoredItemId ? { scoredItemId: component.scoredItemId } : {},
+            scoredItemId: component.scoredItemId,
+            attendanceRate: attendanceRate ? attendanceRate : null,
+          },
+        });
+
+        // Lock the scored item if provided
+        if (component.scoredItemId) {
+          await tx.scoredItem.update({
+            where: { id: component.scoredItemId },
+            data: { gradeId: newGrade.id },
+          });
+        }
+      }
+
+      // Log the grade creation event
+      await tx.gradeEvent.create({
+        data: {
+          gradeId: newGrade.id,
+          action: 'CREATED',
+          userId: tutorId,
+          details: { componentCount: data.components.length },
+        },
+      });
+
+      return newGrade;
+    });
+
+    // Compute initial score
+    const computedScore = await this.computeGradeScore(grade.id);
+
+    const updatedGrade = await prisma.grade.update({
+      where: { id: grade.id },
+      data: { computedScore },
       include: {
         enrollment: {
           include: {
@@ -95,7 +201,11 @@ export class GradesService {
             subject: true,
           },
         },
-        assignment: true,
+        components: {
+          include: {
+            scoredItem: true,
+          },
+        },
         grader: {
           select: {
             id: true,
@@ -105,24 +215,31 @@ export class GradesService {
       },
     });
 
-    // Notify admins of grade submission
-    await this.notificationCore.notify({
-      recipientRole: 'ADMIN',
-      type: 'GRADE_SUBMITTED' as NotificationType,
-      category: 'GRADES' as NotificationCategory,
-      title: 'Grade Submitted for Approval',
-      body: `A grade for ${grade.enrollment.subject.name} has been submitted and awaits approval`,
-      entityType: 'Grade',
-      entityId: grade.id,
-      dedupeKey: `grade-submitted-${grade.id}`,
-    });
-
-    return this.enrichWithPercentage(grade);
+    return updatedGrade;
   }
 
-  async updateGrade(gradeId: string, tutorId: string, data: any) {
+  /**
+   * Update a DRAFT or REJECTED grade
+   * Recomputes the score
+   */
+  async updateGrade(gradeId: string, tutorId: string, data: {
+    periodStart?: Date;
+    periodEnd?: Date;
+    components?: Array<{
+      type: string;
+      weight: number;
+      scoredItemId?: string;
+      attendanceRate?: number;
+    }>;
+    tutorComment?: string;
+    finalScore?: number;
+    overrideReason?: string;
+  }) {
     const existingGrade = await prisma.grade.findUnique({
       where: { id: gradeId },
+      include: {
+        components: true,
+      },
     });
 
     if (!existingGrade) {
@@ -134,49 +251,116 @@ export class GradesService {
       throw new AppError(403, 'Not authorized to update this grade');
     }
 
-    // Only allow updates when grade is PENDING_APPROVAL or REJECTED
-    if (existingGrade.status === 'APPROVED') {
-      throw new AppError(403, 'Cannot update approved grades');
+    // Only allow updates when grade is DRAFT or REJECTED
+    if (existingGrade.status === 'PENDING_APPROVAL' || existingGrade.status === 'APPROVED') {
+      throw new AppError(403, 'Cannot edit submitted or approved grades');
     }
 
-    const updateData: any = {};
-    if (data.score !== undefined) updateData.score = data.score;
-    if (data.maxScore !== undefined) updateData.maxScore = data.maxScore;
-    if (data.comments !== undefined) updateData.comments = data.comments;
+    // Validate weights if components are provided
+    if (data.components) {
+      const totalWeight = data.components.reduce((sum, c) => sum + c.weight, 0);
+      if (Math.abs(totalWeight - 100) > 0.01) {
+        throw new AppError(400, 'Component weights must total exactly 100');
+      }
+    }
 
-    // Handle attachment update
-    if (data.attachmentBase64) {
-      // Delete old attachment from Cloudinary if it exists
-      if (existingGrade.attachmentUrl) {
-        const publicId = this.extractPublicIdFromUrl(existingGrade.attachmentUrl);
-        if (publicId) {
-          await this.cloudinaryService.deleteFile(publicId);
+    // Validate override reason if finalScore is provided
+    if (data.finalScore !== undefined && data.overrideReason === undefined) {
+      throw new AppError(400, 'Override reason is required when setting finalScore');
+    }
+
+    // Update in a transaction
+    const grade = await prisma.$transaction(async (tx) => {
+      const updateData: any = {};
+      if (data.periodStart) updateData.periodStart = data.periodStart;
+      if (data.periodEnd) updateData.periodEnd = data.periodEnd;
+      if (data.tutorComment !== undefined) updateData.tutorComment = data.tutorComment;
+      if (data.finalScore !== undefined) updateData.finalScore = data.finalScore;
+      if (data.overrideReason !== undefined) updateData.overrideReason = data.overrideReason;
+
+      const updatedGrade = await tx.grade.update({
+        where: { id: gradeId },
+        data: updateData,
+      });
+
+      // If components are provided, replace them
+      if (data.components) {
+        // Delete existing components and unlock items
+        const existingComponents = await tx.gradeComponent.findMany({
+          where: { gradeId },
+          include: {
+            scoredItem: true,
+          },
+        });
+
+        for (const existingComponent of existingComponents) {
+          if (existingComponent.scoredItem) {
+            await tx.scoredItem.update({
+              where: { id: existingComponent.scoredItem.id },
+              data: { gradeId: null },
+            });
+          }
+        }
+
+        await tx.gradeComponent.deleteMany({
+          where: { gradeId },
+        });
+
+        // Create new components
+        for (const component of data.components) {
+          let attendanceRate = component.attendanceRate;
+          if (component.type === 'ATTENDANCE' && attendanceRate === undefined) {
+            const periodStart = data.periodStart || existingGrade.periodStart;
+            const periodEnd = data.periodEnd || existingGrade.periodEnd;
+            if (!periodStart || !periodEnd) {
+              throw new AppError(400, 'Period start and end are required for attendance calculation');
+            }
+            attendanceRate = await this.computeAttendanceRate(existingGrade.enrollmentId, periodStart, periodEnd);
+          }
+
+          await tx.gradeComponent.create({
+            data: {
+              gradeId,
+              type: component.type,
+              weight: component.weight,
+              weightPercent: component.weight, // Legacy field, same as weight
+              itemCount: component.scoredItemId ? 1 : 0,
+              componentPercentage: 0, // Will be computed from final score
+              snapshot: component.scoredItemId ? { scoredItemId: component.scoredItemId } : {},
+              scoredItemId: component.scoredItemId,
+              attendanceRate: attendanceRate ? attendanceRate : null,
+            },
+          });
+
+          // Lock the scored item if provided
+          if (component.scoredItemId) {
+            await tx.scoredItem.update({
+              where: { id: component.scoredItemId },
+              data: { gradeId },
+            });
+          }
         }
       }
 
-      // Upload new attachment
-      const uploadResult = await this.cloudinaryService.uploadFile(
-        data.attachmentBase64,
-        'grades',
-        'raw'
-      );
-      updateData.attachmentUrl = uploadResult.url;
-      updateData.attachmentName = uploadResult.filename;
-    } else if (data.removeAttachment === true) {
-      // Remove attachment
-      if (existingGrade.attachmentUrl) {
-        const publicId = this.extractPublicIdFromUrl(existingGrade.attachmentUrl);
-        if (publicId) {
-          await this.cloudinaryService.deleteFile(publicId);
-        }
-      }
-      updateData.attachmentUrl = null;
-      updateData.attachmentName = null;
-    }
+      // Log the update event
+      await tx.gradeEvent.create({
+        data: {
+          gradeId,
+          action: 'RESUBMITTED',
+          userId: tutorId,
+          details: { componentsUpdated: !!data.components },
+        },
+      });
 
-    const grade = await prisma.grade.update({
-      where: { id: gradeId },
-      data: updateData,
+      return updatedGrade;
+    });
+
+    // Recompute score
+    const computedScore = await this.computeGradeScore(grade.id);
+
+    const finalGrade = await prisma.grade.update({
+      where: { id: grade.id },
+      data: { computedScore },
       include: {
         enrollment: {
           include: {
@@ -184,7 +368,11 @@ export class GradesService {
             subject: true,
           },
         },
-        assignment: true,
+        components: {
+          include: {
+            scoredItem: true,
+          },
+        },
         grader: {
           select: {
             id: true,
@@ -194,32 +382,13 @@ export class GradesService {
       },
     });
 
-    return this.enrichWithPercentage(grade);
+    return finalGrade;
   }
 
   /**
-   * Extract Cloudinary public ID from URL
+   * Delete a DRAFT or REJECTED grade
+   * Releases all locked scored items
    */
-  private extractPublicIdFromUrl(url: string): string | null {
-    try {
-      const urlObj = new URL(url);
-      const pathParts = urlObj.pathname.split('/');
-      
-      const uploadIndex = pathParts.indexOf('upload');
-      if (uploadIndex === -1 || uploadIndex === pathParts.length - 1) {
-        return null;
-      }
-
-      const startIndex = uploadIndex + 2;
-      const publicIdWithExtension = pathParts.slice(startIndex).join('/');
-      const publicId = publicIdWithExtension.replace(/\.[^/.]+$/, '');
-      
-      return publicId;
-    } catch {
-      return null;
-    }
-  }
-
   async deleteGrade(gradeId: string, tutorId: string) {
     const grade = await prisma.grade.findUnique({
       where: { id: gradeId },
@@ -234,53 +403,125 @@ export class GradesService {
       throw new AppError(403, 'Not authorized to delete this grade');
     }
 
-    // Only allow deletion when grade is PENDING_APPROVAL or REJECTED
-    if (grade.status === 'APPROVED') {
-      throw new AppError(403, 'Cannot delete approved grades');
+    // Only allow deletion when grade is DRAFT or REJECTED
+    if (grade.status === 'PENDING_APPROVAL' || grade.status === 'APPROVED') {
+      throw new AppError(403, 'Cannot delete submitted or approved grades');
     }
 
-    // Delete attachment from Cloudinary if it exists
-    if (grade.attachmentUrl) {
-      const publicId = this.extractPublicIdFromUrl(grade.attachmentUrl);
-      if (publicId) {
-        await this.cloudinaryService.deleteFile(publicId);
-      }
-    }
+    // Delete in a transaction to release items
+    await prisma.$transaction(async (tx) => {
+      // Unlock all scored items
+      await tx.scoredItem.updateMany({
+        where: { gradeId },
+        data: { gradeId: null },
+      });
 
-    await prisma.grade.delete({
-      where: { id: gradeId },
+      // Delete components
+      await tx.gradeComponent.deleteMany({
+        where: { gradeId },
+      });
+
+      // Delete events
+      await tx.gradeEvent.deleteMany({
+        where: { gradeId },
+      });
+
+      // Delete the grade
+      await tx.grade.delete({
+        where: { id: gradeId },
+      });
     });
   }
 
-  async getPendingGrades() {
-    const grades = await prisma.grade.findMany({
-      where: {
-        status: 'PENDING_APPROVAL',
-      },
+  /**
+   * Submit a DRAFT or REJECTED grade for approval
+   * Full validation, freeze snapshots, lock items
+   */
+  async submitGrade(gradeId: string, tutorId: string) {
+    const grade = await prisma.grade.findUnique({
+      where: { id: gradeId },
       include: {
+        components: {
+          include: {
+            scoredItem: true,
+          },
+        },
         enrollment: {
           include: {
             student: true,
             subject: true,
           },
         },
-        assignment: true,
-        grader: {
-          select: {
-            id: true,
-            fullName: true,
-          },
-        },
-      },
-      orderBy: {
-        createdAt: 'asc',
       },
     });
 
-    return grades.map(g => this.enrichWithPercentage(g));
+    if (!grade) {
+      throw new AppError(404, 'Grade not found');
+    }
+
+    // Only the grader (tutor) can submit the grade
+    if (grade.gradedBy !== tutorId) {
+      throw new AppError(403, 'Not authorized to submit this grade');
+    }
+
+    // Only allow submission when grade is DRAFT or REJECTED
+    if (grade.status !== 'DRAFT' && grade.status !== 'REJECTED') {
+      throw new AppError(400, 'Can only submit DRAFT or REJECTED grades');
+    }
+
+    // Full validation: ensure every weighted component has data
+    for (const component of grade.components) {
+      if (component.weight > 0) {
+        if (component.type === 'ATTENDANCE' && component.attendanceRate === null) {
+          throw new AppError(400, 'Attendance component is missing data');
+        }
+        if (!component.scoredItem && component.type !== 'ATTENDANCE') {
+          throw new AppError(400, `Component ${component.type} is missing a scored item`);
+        }
+      }
+    }
+
+    // Submit in a transaction
+    await prisma.$transaction(async (tx) => {
+      await tx.grade.update({
+        where: { id: gradeId },
+        data: {
+          status: 'PENDING_APPROVAL',
+          submittedAt: new Date(),
+        },
+      });
+
+      // Log the submission event
+      await tx.gradeEvent.create({
+        data: {
+          gradeId,
+          action: 'SUBMITTED',
+          userId: tutorId,
+          details: { componentCount: grade.components.length },
+        },
+      });
+    });
+
+    // Notify admins of grade submission
+    await this.notificationCore.notify({
+      recipientRole: 'ADMIN',
+      type: 'GRADE_SUBMITTED' as NotificationType,
+      category: 'GRADES' as NotificationCategory,
+      title: 'Grade Submitted for Approval',
+      body: `A grade for ${grade.enrollment.subject.name} has been submitted and awaits approval`,
+      entityType: 'Grade',
+      entityId: gradeId,
+      dedupeKey: `grade-submitted-${gradeId}`,
+    });
+
+    return { message: 'Grade submitted for approval' };
   }
 
-  async approveGrade(gradeId: string, adminId: string) {
+  /**
+   * Withdraw a PENDING_APPROVAL grade back to DRAFT
+   * Unlocks items
+   */
+  async withdrawGrade(gradeId: string, tutorId: string) {
     const grade = await prisma.grade.findUnique({
       where: { id: gradeId },
     });
@@ -289,18 +530,45 @@ export class GradesService {
       throw new AppError(404, 'Grade not found');
     }
 
-    if (grade.status !== 'PENDING_APPROVAL') {
-      throw new AppError(400, 'Grade is not in pending approval status');
+    // Only the grader (tutor) can withdraw the grade
+    if (grade.gradedBy !== tutorId) {
+      throw new AppError(403, 'Not authorized to withdraw this grade');
     }
 
-    const updatedGrade = await prisma.grade.update({
+    // Only allow withdrawal when grade is PENDING_APPROVAL
+    if (grade.status !== 'PENDING_APPROVAL') {
+      throw new AppError(400, 'Can only withdraw PENDING_APPROVAL grades');
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.grade.update({
+        where: { id: gradeId },
+        data: {
+          status: 'DRAFT',
+          submittedAt: null,
+        },
+      });
+
+      // Log the withdrawal event
+      await tx.gradeEvent.create({
+        data: {
+          gradeId,
+          action: 'WITHDRAWN',
+          userId: tutorId,
+          details: {},
+        },
+      });
+    });
+
+    return { message: 'Grade withdrawn to draft' };
+  }
+
+  /**
+   * Preview a grade (read-only, can be called on any status)
+   */
+  async previewGrade(gradeId: string, tutorId: string) {
+    const grade = await prisma.grade.findUnique({
       where: { id: gradeId },
-      data: {
-        status: 'APPROVED',
-        approvedBy: adminId,
-        approvedAt: new Date(),
-        visibleToStudent: true, // Now visible to student/parent
-      },
       include: {
         enrollment: {
           include: {
@@ -308,7 +576,144 @@ export class GradesService {
             subject: true,
           },
         },
-        assignment: true,
+        components: {
+          include: {
+            scoredItem: true,
+          },
+        },
+        grader: {
+          select: {
+            id: true,
+            fullName: true,
+          },
+        },
+      },
+    });
+
+    if (!grade) {
+      throw new AppError(404, 'Grade not found');
+    }
+
+    // Only the grader (tutor) can preview their own grades
+    if (grade.gradedBy !== tutorId) {
+      throw new AppError(403, 'Not authorized to view this grade');
+    }
+
+    return grade;
+  }
+
+  /**
+   * Admin: Get grades (never lists DRAFT)
+   */
+  async getAdminGrades(filters: {
+    status?: string;
+    tutorId?: string;
+    studentId?: string;
+    subjectId?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const { status, tutorId, studentId, subjectId, page = 1, limit = 20 } = filters;
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+
+    // Never list DRAFT grades to admins
+    if (status && status !== 'DRAFT') {
+      where.status = status;
+    } else if (!status) {
+      where.status = { in: ['PENDING_APPROVAL', 'APPROVED', 'REJECTED'] };
+    }
+
+    if (tutorId) {
+      where.gradedBy = tutorId;
+    }
+
+    if (studentId) {
+      where.enrollment = {
+        studentId,
+      };
+    }
+
+    if (subjectId) {
+      where.enrollment = {
+        ...where.enrollment,
+        subjectId,
+      };
+    }
+
+    const [grades, total] = await Promise.all([
+      prisma.grade.findMany({
+        where,
+        include: {
+          enrollment: {
+            include: {
+              student: {
+                select: {
+                  id: true,
+                  fullName: true,
+                },
+              },
+              subject: true,
+            },
+          },
+          components: {
+            include: {
+              scoredItem: true,
+            },
+          },
+          grader: {
+            select: {
+              id: true,
+              fullName: true,
+            },
+          },
+          approver: {
+            select: {
+              id: true,
+              fullName: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: Math.min(limit, 100),
+      }),
+      prisma.grade.count({ where }),
+    ]);
+
+    return {
+      data: grades,
+      page,
+      limit,
+      total,
+    };
+  }
+
+  /**
+   * Admin: Get a single grade with full breakdown
+   * No studentCode exposed
+   */
+  async getAdminGrade(gradeId: string) {
+    const grade = await prisma.grade.findUnique({
+      where: { id: gradeId },
+      include: {
+        enrollment: {
+          include: {
+            student: {
+              select: {
+                id: true,
+                fullName: true,
+              },
+            },
+            subject: true,
+          },
+        },
+        components: {
+          include: {
+            scoredItem: true,
+          },
+        },
         grader: {
           select: {
             id: true,
@@ -321,13 +726,85 @@ export class GradesService {
             fullName: true,
           },
         },
+        events: {
+          orderBy: { createdAt: 'asc' },
+        },
       },
     });
 
+    if (!grade) {
+      throw new AppError(404, 'Grade not found');
+    }
+
+    return grade;
+  }
+
+  /**
+   * Admin: Approve a grade
+   * Only PENDING_APPROVAL grades can be approved
+   */
+  async approveGrade(gradeId: string, adminId: string) {
+    const grade = await prisma.grade.findUnique({
+      where: { id: gradeId },
+      include: {
+        enrollment: {
+          include: {
+            student: true,
+            subject: true,
+          },
+        },
+      },
+    });
+
+    if (!grade) {
+      throw new AppError(404, 'Grade not found');
+    }
+
+    if (grade.status !== 'PENDING_APPROVAL') {
+      throw new AppError(400, 'Grade is not in pending approval status');
+    }
+
+    const updatedGrade = await prisma.$transaction(async (tx) => {
+      const g = await tx.grade.update({
+        where: { id: gradeId },
+        data: {
+          status: 'APPROVED',
+          approvedBy: adminId,
+          approvedAt: new Date(),
+          reviewedBy: adminId,
+          reviewedAt: new Date(),
+          visibleToStudent: true,
+        },
+      });
+
+      // Log admin action
+      await tx.adminActionLog.create({
+        data: {
+          adminId,
+          action: 'GRADE_APPROVED',
+          targetType: 'Grade',
+          targetId: gradeId,
+          details: { gradeId },
+        },
+      });
+
+      // Log grade event
+      await tx.gradeEvent.create({
+        data: {
+          gradeId,
+          action: 'APPROVED',
+          userId: adminId,
+          details: {},
+        },
+      });
+
+      return g;
+    });
+
     // Notify student and parent of grade approval
-    const recipients = [updatedGrade.enrollment.student.userId];
-    if (updatedGrade.enrollment.student.parentId) {
-      recipients.push(updatedGrade.enrollment.student.parentId);
+    const recipients = [grade.enrollment.student.userId];
+    if (grade.enrollment.student.parentId) {
+      recipients.push(grade.enrollment.student.parentId);
     }
 
     await this.notificationCore.notify({
@@ -335,18 +812,30 @@ export class GradesService {
       type: 'GRADE_APPROVED' as NotificationType,
       category: 'GRADES' as NotificationCategory,
       title: 'Grade Approved',
-      body: `Grade for ${updatedGrade.enrollment.subject.name} has been approved`,
+      body: `Grade for ${grade.enrollment.subject.name} has been approved`,
       entityType: 'Grade',
       entityId: gradeId,
       dedupeKey: `grade-approved-${gradeId}`,
     });
 
-    return this.enrichWithPercentage(updatedGrade);
+    return this.getAdminGrade(gradeId);
   }
 
-  async rejectGrade(gradeId: string, adminId: string, reason?: string) {
+  /**
+   * Admin: Reject a grade
+   * Only PENDING_APPROVAL grades can be rejected
+   * Reason is required (validated in controller)
+   */
+  async rejectGrade(gradeId: string, adminId: string, reason: string) {
     const grade = await prisma.grade.findUnique({
       where: { id: gradeId },
+      include: {
+        enrollment: {
+          include: {
+            subject: true,
+          },
+        },
+      },
     });
 
     if (!grade) {
@@ -357,38 +846,50 @@ export class GradesService {
       throw new AppError(400, 'Grade is not in pending approval status');
     }
 
-    const updatedGrade = await prisma.grade.update({
-      where: { id: gradeId },
-      data: {
-        status: 'REJECTED',
-        approvedBy: adminId,
-        approvedAt: new Date(),
-        comments: reason ? `${grade.comments}\n\nRejection reason: ${reason}` : grade.comments,
-      },
-      include: {
-        enrollment: {
-          include: {
-            student: true,
-            subject: true,
-          },
+    const updatedGrade = await prisma.$transaction(async (tx) => {
+      const g = await tx.grade.update({
+        where: { id: gradeId },
+        data: {
+          status: 'REJECTED',
+          approvedBy: adminId,
+          approvedAt: new Date(),
+          reviewedBy: adminId,
+          reviewedAt: new Date(),
+          rejectionReason: reason,
         },
-        assignment: true,
-        grader: {
-          select: {
-            id: true,
-            fullName: true,
-          },
+      });
+
+      // Unlock scored items
+      await tx.scoredItem.updateMany({
+        where: { gradeId },
+        data: { gradeId: null },
+      });
+
+      // Log admin action
+      await tx.adminActionLog.create({
+        data: {
+          adminId,
+          action: 'GRADE_REJECTED',
+          targetType: 'Grade',
+          targetId: gradeId,
+          details: { gradeId, reason },
         },
-        approver: {
-          select: {
-            id: true,
-            fullName: true,
-          },
+      });
+
+      // Log grade event
+      await tx.gradeEvent.create({
+        data: {
+          gradeId,
+          action: 'REJECTED',
+          userId: adminId,
+          details: { reason },
         },
-      },
+      });
+
+      return g;
     });
 
-    // Notify tutor of grade rejection (only tutor, not student/parent)
+    // Notify tutor ONLY (not student or parent)
     await this.notificationCore.notify({
       recipientIds: [updatedGrade.gradedBy],
       type: 'GRADE_REJECTED' as NotificationType,
@@ -400,9 +901,37 @@ export class GradesService {
       dedupeKey: `grade-rejected-${gradeId}`,
     });
 
-    return this.enrichWithPercentage(updatedGrade);
+    return this.getAdminGrade(gradeId);
   }
 
+  /**
+   * Admin: Bulk approve grades
+   * One transaction per grade with per-item results
+   */
+  async bulkApproveGrades(gradeIds: string[], adminId: string) {
+    const results = [];
+
+    for (const gradeId of gradeIds) {
+      try {
+        const result = await this.approveGrade(gradeId, adminId);
+        results.push({ gradeId, success: true, grade: result });
+      } catch (error: any) {
+        results.push({ gradeId, success: false, error: error.message });
+      }
+    }
+
+    return {
+      total: gradeIds.length,
+      approved: results.filter(r => r.success).length,
+      failed: results.filter(r => !r.success).length,
+      results,
+    };
+  }
+
+  /**
+   * Legacy: Get grades for students/parents/tutors
+   * Only APPROVED grades for students/parents
+   */
   async getGrades(userId: string, userRole: string, filters?: { studentId?: string; enrollmentId?: string }) {
     const where: any = {
       visibleToStudent: true, // Only show approved grades to students/parents
@@ -453,7 +982,6 @@ export class GradesService {
             subject: true,
           },
         },
-        assignment: true,
         grader: {
           select: {
             id: true,
@@ -472,13 +1000,12 @@ export class GradesService {
       },
     });
 
-    return grades.map(g => this.enrichWithPercentage(g));
+    return grades;
   }
 
   /**
-   * Calculate average grade percentage for a student or enrollment
+   * Legacy: Calculate average grade percentage
    * Only APPROVED grades count
-   * Returns null if no approved grades exist
    */
   async calculateAverageGrade(filters: { studentId?: string; enrollmentId?: string; tutorId?: string }) {
     const where: any = {
@@ -516,11 +1043,11 @@ export class GradesService {
       };
     }
 
-    const percentages = grades.map(g => this.calculatePercentage(Number(g.score), Number(g.maxScore || 100)));
+    const percentages = grades.map(g => (Number(g.score) / Number(g.maxScore || 100)) * 100);
     const averagePercentage = percentages.reduce((sum, p) => sum + p, 0) / percentages.length;
 
     return {
-      averagePercentage: Math.round(averagePercentage * 10) / 10, // Round to 1 decimal
+      averagePercentage: Math.round(averagePercentage * 10) / 10,
       gradedCount: grades.length,
     };
   }

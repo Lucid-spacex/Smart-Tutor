@@ -6,7 +6,7 @@ import { logger } from '../../config/logger';
 import crypto from 'crypto';
 import { EnrollmentsService } from '../enrollments/enrollments.service';
 import { SessionsService } from '../sessions/sessions.service';
-import { GradesService } from '../grades/grades.service';
+import { NewGradesService } from '../grades/grades.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationCoreService } from '../notifications/notification-core.service';
 import { PerformanceService } from '../performance/performance.service';
@@ -18,7 +18,7 @@ import { config } from '../../config/env.config';
 export class AdminService {
   private enrollmentsService: EnrollmentsService;
   private sessionsService: SessionsService;
-  private gradesService: GradesService;
+  private gradesService: NewGradesService;
   private notificationsService: NotificationsService;
   private notificationCore: NotificationCoreService;
   private performanceService: PerformanceService;
@@ -27,7 +27,7 @@ export class AdminService {
   constructor() {
     this.enrollmentsService = new EnrollmentsService();
     this.sessionsService = new SessionsService();
-    this.gradesService = new GradesService();
+    this.gradesService = new NewGradesService();
     this.notificationsService = new NotificationsService();
     this.notificationCore = new NotificationCoreService();
     this.performanceService = new PerformanceService();
@@ -2005,7 +2005,7 @@ export class AdminService {
   }
 
   async getPendingGrades() {
-    return this.gradesService.getPendingGrades();
+    return this.gradesService.getAdminGrades({ status: 'PENDING_APPROVAL' });
   }
 
   async approveGrade(gradeId: string, adminId: string) {
@@ -2013,7 +2013,7 @@ export class AdminService {
   }
 
   async rejectGrade(gradeId: string, adminId: string, reason?: string) {
-    return this.gradesService.rejectGrade(gradeId, adminId, reason);
+    return this.gradesService.rejectGrade(gradeId, adminId, reason || '');
   }
 
   // Pricing Tier Management (DEPRECATED - use Subject/SubjectPrice-based pricing instead)

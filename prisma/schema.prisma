@@ -648,9 +648,9 @@ model Grade {
   assignment       Assignment? @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   gradedBy         String
   grader           User        @relation("GradeGrader", fields: [gradedBy], references: [id], onDelete: Cascade)
-  score            Decimal     @db.Decimal(10, 2)
-  maxScore         Decimal     @db.Decimal(10, 2) @default(100)
-  comments         String
+  score            Decimal?    @db.Decimal(10, 2) // Legacy field, made optional
+  maxScore         Decimal?    @db.Decimal(10, 2) // Legacy field, made optional
+  comments         String?     // Legacy field, made optional
   attachmentUrl    String?
   attachmentName   String?
   status           GradeStatus @default(DRAFT)
@@ -948,6 +948,7 @@ model ScoredItem {
   scoredAt      DateTime      @default(now())
   gradeId       String?
   grade         Grade?        @relation("GradeScoredItems", fields: [gradeId], references: [id], onDelete: SetNull)
+  gradeComponents GradeComponent[] @relation("ComponentScoredItem")
 
   @@index([tutorId])
   @@index([studentId])
@@ -962,12 +963,17 @@ model GradeComponent {
   gradeId          String
   grade            Grade   @relation("GradeComponents", fields: [gradeId], references: [id], onDelete: Cascade)
   type             String  // QUIZ | ASSIGNMENT | TEST | PARTICIPATION | ATTENDANCE
-  weightPercent    Int
+  weight           Int     // Weight percentage (0-100)
+  weightPercent    Int     // Legacy field, kept for compatibility
   itemCount        Int
   componentPercentage Decimal @db.Decimal(10, 2)
   snapshot         Json    // Frozen item scores or attendance numbers
+  scoredItemId     String? // Reference to ScoredItem for non-attendance components
+  scoredItem       ScoredItem? @relation("ComponentScoredItem", fields: [scoredItemId], references: [id], onDelete: SetNull)
+  attendanceRate   Decimal? @db.Decimal(10, 2) // Stored attendance rate for ATTENDANCE type
 
   @@index([gradeId])
+  @@index([scoredItemId])
 }
 
 model GradeEvent {

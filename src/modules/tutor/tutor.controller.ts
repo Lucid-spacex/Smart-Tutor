@@ -4,17 +4,20 @@ import { CreateTutorProfileInput, UpdateAvailabilityInput } from './tutor.valida
 import { SessionsService } from '../sessions/sessions.service';
 import { CreateTutorSessionInput, RescheduleTutorSessionInput } from '../sessions/sessions.validation';
 import { PerformanceService } from '../performance/performance.service';
+import { ScoredItemsService } from '../scored-items/scored-items.service';
 import { AuthRequest } from '../../types/express';
 
 export class TutorController {
   private tutorService: TutorService;
   private sessionsService: SessionsService;
   private performanceService: PerformanceService;
+  private scoredItemsService: ScoredItemsService;
 
   constructor() {
     this.tutorService = new TutorService();
     this.sessionsService = new SessionsService();
     this.performanceService = new PerformanceService();
+    this.scoredItemsService = new ScoredItemsService();
   }
 
   createTutorProfile = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -201,6 +204,75 @@ export class TutorController {
       );
 
       res.status(200).json(performance);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getStudentScoredItems = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const tutorId = req.user?.userId;
+      if (!tutorId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { studentId } = req.params;
+      const filters = {
+        enrollmentId: req.query.enrollmentId as string,
+        type: req.query.type as any,
+        unassigned: req.query.unassigned === 'true',
+      };
+
+      const result = await this.scoredItemsService.getStudentScoredItems(studentId, tutorId, filters);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  createScoredItem = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const tutorId = req.user?.userId;
+      if (!tutorId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const result = await this.scoredItemsService.createScoredItem(tutorId, req.body);
+      res.status(201).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  updateScoredItem = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const tutorId = req.user?.userId;
+      if (!tutorId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id } = req.params;
+      const result = await this.scoredItemsService.updateScoredItem(id, tutorId, req.body);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  deleteScoredItem = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const tutorId = req.user?.userId;
+      if (!tutorId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id } = req.params;
+      await this.scoredItemsService.deleteScoredItem(id, tutorId);
+      res.status(200).json({ message: 'Scored item deleted' });
     } catch (error) {
       next(error);
     }

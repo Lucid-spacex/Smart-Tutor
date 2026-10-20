@@ -22,15 +22,15 @@
 - [x] Move all existing notification creation to notify()
 - [x] Wire ADMIN events (registration, session creation, messages, complaints, enrollment, payments, grades, change requests, scheduling failures, existing alerts)
 - [x] Wire OTHER events (tutor assigned, session changes, price updates, assignments, quiz, grades, complaints, admin replies, recordings, payments, change requests)
-- [ ] Run build and tests
+- [x] Run build and tests
 
 ## SECTION 2: Grading Workflow
-- [ ] Fix quiz module to create ScoredItem instead of Grade
-- [ ] Implement ScoredItem service
-- [ ] GET /tutor/students/:studentId/scored-items
-- [ ] POST /tutor/scored-items
-- [ ] PATCH /tutor/scored-items/:id
-- [ ] DELETE /tutor/scored-items/:id
+- [x] Fix quiz module to create ScoredItem instead of Grade
+- [x] Implement ScoredItem service
+- [x] GET /tutor/students/:studentId/scored-items
+- [x] POST /tutor/scored-items
+- [x] PATCH /tutor/scored-items/:id
+- [x] DELETE /tutor/scored-items/:id
 - [ ] Implement Grade compile service
 - [ ] POST /grades (DRAFT)
 - [ ] PATCH /grades/:id

@@ -1,15 +1,17 @@
 import { Response, NextFunction } from 'express';
-import { GradesService } from './grades.service';
+import { NewGradesService } from './grades.service';
 import { AuthRequest } from '../../types/express';
 
 export class GradesController {
-  private gradesService: GradesService;
+  private gradesService: NewGradesService;
 
   constructor() {
-    this.gradesService = new GradesService();
+    this.gradesService = new NewGradesService();
   }
 
-  createGrade = async (req: any, res: Response, next: NextFunction): Promise<void> => {
+  // Tutor endpoints
+
+  createDraftGrade = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const tutorId = req.user?.userId;
       if (!tutorId) {
@@ -17,41 +19,118 @@ export class GradesController {
         return;
       }
 
-      const data = req.body;
-      
-      // Handle file attachment if present (convert to base64 for Cloudinary)
-      if (req.file) {
-        data.attachmentBase64 = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
-      }
-
-      const grade = await this.gradesService.createGrade(tutorId, data);
+      const grade = await this.gradesService.createDraftGrade(tutorId, req.body);
       res.status(201).json(grade);
     } catch (error) {
       next(error);
     }
   };
 
-  getGrades = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  updateGrade = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const userId = req.user?.userId;
-      const userRole = req.user?.role;
-      if (!userId || !userRole) {
+      const tutorId = req.user?.userId;
+      if (!tutorId) {
         res.status(401).json({ error: 'Not authenticated' });
         return;
       }
 
-      const filters = req.query as any;
-      const grades = await this.gradesService.getGrades(userId, userRole, filters);
-      res.status(200).json(grades);
+      const { id } = req.params;
+      const grade = await this.gradesService.updateGrade(id, tutorId, req.body);
+      res.status(200).json(grade);
     } catch (error) {
       next(error);
     }
   };
 
-  getPendingGrades = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  deleteGrade = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const grades = await this.gradesService.getPendingGrades();
-      res.status(200).json(grades);
+      const tutorId = req.user?.userId;
+      if (!tutorId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id } = req.params;
+      await this.gradesService.deleteGrade(id, tutorId);
+      res.status(200).json({ message: 'Grade deleted successfully' });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  submitGrade = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const tutorId = req.user?.userId;
+      if (!tutorId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id } = req.params;
+      const result = await this.gradesService.submitGrade(id, tutorId);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  withdrawGrade = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const tutorId = req.user?.userId;
+      if (!tutorId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id } = req.params;
+      const result = await this.gradesService.withdrawGrade(id, tutorId);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  previewGrade = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const tutorId = req.user?.userId;
+      if (!tutorId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id } = req.params;
+      const grade = await this.gradesService.previewGrade(id, tutorId);
+      res.status(200).json(grade);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // Admin endpoints
+
+  getAdminGrades = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const filters = {
+        status: req.query.status as string,
+        tutorId: req.query.tutorId as string,
+        studentId: req.query.studentId as string,
+        subjectId: req.query.subjectId as string,
+        page: req.query.page ? parseInt(req.query.page as string) : 1,
+        limit: req.query.limit ? parseInt(req.query.limit as string) : 20,
+      };
+
+      const result = await this.gradesService.getAdminGrades(filters);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getAdminGrade = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const grade = await this.gradesService.getAdminGrade(id);
+      res.status(200).json(grade);
     } catch (error) {
       next(error);
     }
@@ -90,40 +169,35 @@ export class GradesController {
     }
   };
 
-  updateGrade = async (req: any, res: Response, next: NextFunction): Promise<void> => {
+  bulkApproveGrades = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const tutorId = req.user?.userId;
-      if (!tutorId) {
+      const adminId = req.user?.userId;
+      if (!adminId) {
         res.status(401).json({ error: 'Not authenticated' });
         return;
       }
 
-      const { id } = req.params;
-      const data = req.body;
-      
-      // Handle file attachment if present (convert to base64 for Cloudinary)
-      if (req.file) {
-        data.attachmentBase64 = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
-      }
-
-      const grade = await this.gradesService.updateGrade(id, tutorId, data);
-      res.status(200).json(grade);
+      const { gradeIds } = req.body;
+      const result = await this.gradesService.bulkApproveGrades(gradeIds, adminId);
+      res.status(200).json(result);
     } catch (error) {
       next(error);
     }
   };
 
-  deleteGrade = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  // Legacy endpoints (keep for backward compatibility if needed)
+  getGrades = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const tutorId = req.user?.userId;
-      if (!tutorId) {
+      const userId = req.user?.userId;
+      const userRole = req.user?.role;
+      if (!userId || !userRole) {
         res.status(401).json({ error: 'Not authenticated' });
         return;
       }
 
-      const { id } = req.params;
-      await this.gradesService.deleteGrade(id, tutorId);
-      res.status(200).json({ message: 'Grade deleted successfully' });
+      const filters = req.query as any;
+      const grades = await this.gradesService.getGrades(userId, userRole, filters);
+      res.status(200).json(grades);
     } catch (error) {
       next(error);
     }

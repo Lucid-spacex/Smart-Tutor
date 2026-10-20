@@ -25,6 +25,7 @@ import pricingRoutes from './modules/pricing/pricing.routes';
 import attendanceRoutes from './modules/attendance/attendance.routes';
 import assignmentRoutes from './modules/assignments/assignments.routes';
 import gradesRoutes from './modules/grades/grades.routes';
+import { adminGradesRouter } from './modules/grades/grades.routes';
 import notificationsRoutes from './modules/notifications/notifications.routes';
 import complaintsRoutes from './modules/complaints/complaints.routes';
 import messagesRoutes from './modules/messages/messages.routes';
@@ -142,6 +143,7 @@ const mountRoutes = (prefix: string = '') => {
   app.use(`${prefix}/tutor-profile`, tutorRoutes);
   app.use(`${prefix}/tutor-application`, tutorApplicationRoutes);
   app.use(`${prefix}/admin`, adminRoutes);
+  app.use(`${prefix}/admin/grades`, adminGradesRouter);
   app.use(`${prefix}/subjects`, subjectsRoutes);
   app.use(`${prefix}/pricing`, pricingRoutes);
   app.use(`${prefix}/attendance`, attendanceRoutes);

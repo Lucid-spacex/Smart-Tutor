@@ -1,0 +1,527 @@
+import prisma from '../../config/database';
+import { NotificationCoreService } from '../notifications/notification-core.service';
+import { AppError } from '../../middleware/error-handler.middleware';
+import { CloudinaryService } from '../../services/cloudinary.service';
+import { NotificationCategory, NotificationType } from '@prisma/client';
+
+export class GradesService {
+  private notificationCore: NotificationCoreService;
+  private cloudinaryService: CloudinaryService;
+
+  constructor() {
+    this.notificationCore = new NotificationCoreService();
+    this.cloudinaryService = new CloudinaryService();
+  }
+
+  /**
+   * Calculate percentage from score and maxScore
+   * Computed on read, not stored
+   */
+  private calculatePercentage(score: number, maxScore: number): number {
+    if (maxScore === 0) return 0;
+    return (score / maxScore) * 100;
+  }
+
+  /**
+   * Enrich grade with computed percentage
+   */
+  private enrichWithPercentage(grade: any) {
+    return {
+      ...grade,
+      percentage: this.calculatePercentage(Number(grade.score), Number(grade.maxScore || 100)),
+    };
+  }
+
+  async createGrade(tutorId: string, data: any) {
+    // Verify enrollment exists and tutor is assigned
+    const enrollment = await prisma.enrollment.findUnique({
+      where: { id: data.enrollmentId },
+      include: {
+        student: true,
+        subject: true,
+      },
+    });
+
+    if (!enrollment) {
+      throw new AppError(404, 'Enrollment not found');
+    }
+
+    if (enrollment.tutorId !== tutorId) {
+      throw new AppError(403, 'Not authorized to grade this enrollment');
+    }
+
+    // If assignmentId is provided, verify it exists and belongs to the enrollment
+    if (data.assignmentId) {
+      const assignment = await prisma.assignment.findUnique({
+        where: { id: data.assignmentId },
+      });
+      if (!assignment || assignment.enrollmentId !== data.enrollmentId) {
+        throw new AppError(400, 'Assignment not found or does not belong to this enrollment');
+      }
+    }
+
+    let attachmentUrl = null;
+    let attachmentName = null;
+
+    // Upload attachment to Cloudinary if provided
+    if (data.attachmentBase64) {
+      const uploadResult = await this.cloudinaryService.uploadFile(
+        data.attachmentBase64,
+        'grades',
+        'raw'
+      );
+      attachmentUrl = uploadResult.url;
+      attachmentName = uploadResult.filename;
+    }
+
+    // Grade always starts as PENDING_APPROVAL
+    const grade = await prisma.grade.create({
+      data: {
+        enrollmentId: data.enrollmentId,
+        assignmentId: data.assignmentId || null,
+        gradedBy: tutorId,
+        score: data.score,
+        maxScore: data.maxScore || 100,
+        comments: data.comments,
+        attachmentUrl,
+        attachmentName,
+        status: 'PENDING_APPROVAL',
+        visibleToStudent: false, // Not visible until approved
+      },
+      include: {
+        enrollment: {
+          include: {
+            student: true,
+            subject: true,
+          },
+        },
+        assignment: true,
+        grader: {
+          select: {
+            id: true,
+            fullName: true,
+          },
+        },
+      },
+    });
+
+    // Notify admins of grade submission
+    await this.notificationCore.notify({
+      recipientRole: 'ADMIN',
+      type: 'GRADE_SUBMITTED' as NotificationType,
+      category: 'GRADES' as NotificationCategory,
+      title: 'Grade Submitted for Approval',
+      body: `A grade for ${grade.enrollment.subject.name} has been submitted and awaits approval`,
+      entityType: 'Grade',
+      entityId: grade.id,
+      dedupeKey: `grade-submitted-${grade.id}`,
+    });
+
+    return this.enrichWithPercentage(grade);
+  }
+
+  async updateGrade(gradeId: string, tutorId: string, data: any) {
+    const existingGrade = await prisma.grade.findUnique({
+      where: { id: gradeId },
+    });
+
+    if (!existingGrade) {
+      throw new AppError(404, 'Grade not found');
+    }
+
+    // Only the grader (tutor) can update the grade
+    if (existingGrade.gradedBy !== tutorId) {
+      throw new AppError(403, 'Not authorized to update this grade');
+    }
+
+    // Only allow updates when grade is PENDING_APPROVAL or REJECTED
+    if (existingGrade.status === 'APPROVED') {
+      throw new AppError(403, 'Cannot update approved grades');
+    }
+
+    const updateData: any = {};
+    if (data.score !== undefined) updateData.score = data.score;
+    if (data.maxScore !== undefined) updateData.maxScore = data.maxScore;
+    if (data.comments !== undefined) updateData.comments = data.comments;
+
+    // Handle attachment update
+    if (data.attachmentBase64) {
+      // Delete old attachment from Cloudinary if it exists
+      if (existingGrade.attachmentUrl) {
+        const publicId = this.extractPublicIdFromUrl(existingGrade.attachmentUrl);
+        if (publicId) {
+          await this.cloudinaryService.deleteFile(publicId);
+        }
+      }
+
+      // Upload new attachment
+      const uploadResult = await this.cloudinaryService.uploadFile(
+        data.attachmentBase64,
+        'grades',
+        'raw'
+      );
+      updateData.attachmentUrl = uploadResult.url;
+      updateData.attachmentName = uploadResult.filename;
+    } else if (data.removeAttachment === true) {
+      // Remove attachment
+      if (existingGrade.attachmentUrl) {
+        const publicId = this.extractPublicIdFromUrl(existingGrade.attachmentUrl);
+        if (publicId) {
+          await this.cloudinaryService.deleteFile(publicId);
+        }
+      }
+      updateData.attachmentUrl = null;
+      updateData.attachmentName = null;
+    }
+
+    const grade = await prisma.grade.update({
+      where: { id: gradeId },
+      data: updateData,
+      include: {
+        enrollment: {
+          include: {
+            student: true,
+            subject: true,
+          },
+        },
+        assignment: true,
+        grader: {
+          select: {
+            id: true,
+            fullName: true,
+          },
+        },
+      },
+    });
+
+    return this.enrichWithPercentage(grade);
+  }
+
+  /**
+   * Extract Cloudinary public ID from URL
+   */
+  private extractPublicIdFromUrl(url: string): string | null {
+    try {
+      const urlObj = new URL(url);
+      const pathParts = urlObj.pathname.split('/');
+      
+      const uploadIndex = pathParts.indexOf('upload');
+      if (uploadIndex === -1 || uploadIndex === pathParts.length - 1) {
+        return null;
+      }
+
+      const startIndex = uploadIndex + 2;
+      const publicIdWithExtension = pathParts.slice(startIndex).join('/');
+      const publicId = publicIdWithExtension.replace(/\.[^/.]+$/, '');
+      
+      return publicId;
+    } catch {
+      return null;
+    }
+  }
+
+  async deleteGrade(gradeId: string, tutorId: string) {
+    const grade = await prisma.grade.findUnique({
+      where: { id: gradeId },
+    });
+
+    if (!grade) {
+      throw new AppError(404, 'Grade not found');
+    }
+
+    // Only the grader (tutor) can delete the grade
+    if (grade.gradedBy !== tutorId) {
+      throw new AppError(403, 'Not authorized to delete this grade');
+    }
+
+    // Only allow deletion when grade is PENDING_APPROVAL or REJECTED
+    if (grade.status === 'APPROVED') {
+      throw new AppError(403, 'Cannot delete approved grades');
+    }
+
+    // Delete attachment from Cloudinary if it exists
+    if (grade.attachmentUrl) {
+      const publicId = this.extractPublicIdFromUrl(grade.attachmentUrl);
+      if (publicId) {
+        await this.cloudinaryService.deleteFile(publicId);
+      }
+    }
+
+    await prisma.grade.delete({
+      where: { id: gradeId },
+    });
+  }
+
+  async getPendingGrades() {
+    const grades = await prisma.grade.findMany({
+      where: {
+        status: 'PENDING_APPROVAL',
+      },
+      include: {
+        enrollment: {
+          include: {
+            student: true,
+            subject: true,
+          },
+        },
+        assignment: true,
+        grader: {
+          select: {
+            id: true,
+            fullName: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
+    });
+
+    return grades.map(g => this.enrichWithPercentage(g));
+  }
+
+  async approveGrade(gradeId: string, adminId: string) {
+    const grade = await prisma.grade.findUnique({
+      where: { id: gradeId },
+    });
+
+    if (!grade) {
+      throw new AppError(404, 'Grade not found');
+    }
+
+    if (grade.status !== 'PENDING_APPROVAL') {
+      throw new AppError(400, 'Grade is not in pending approval status');
+    }
+
+    const updatedGrade = await prisma.grade.update({
+      where: { id: gradeId },
+      data: {
+        status: 'APPROVED',
+        approvedBy: adminId,
+        approvedAt: new Date(),
+        visibleToStudent: true, // Now visible to student/parent
+      },
+      include: {
+        enrollment: {
+          include: {
+            student: true,
+            subject: true,
+          },
+        },
+        assignment: true,
+        grader: {
+          select: {
+            id: true,
+            fullName: true,
+          },
+        },
+        approver: {
+          select: {
+            id: true,
+            fullName: true,
+          },
+        },
+      },
+    });
+
+    // Notify student and parent of grade approval
+    const recipients = [updatedGrade.enrollment.student.userId];
+    if (updatedGrade.enrollment.student.parentId) {
+      recipients.push(updatedGrade.enrollment.student.parentId);
+    }
+
+    await this.notificationCore.notify({
+      recipientIds: recipients,
+      type: 'GRADE_APPROVED' as NotificationType,
+      category: 'GRADES' as NotificationCategory,
+      title: 'Grade Approved',
+      body: `Grade for ${updatedGrade.enrollment.subject.name} has been approved`,
+      entityType: 'Grade',
+      entityId: gradeId,
+      dedupeKey: `grade-approved-${gradeId}`,
+    });
+
+    return this.enrichWithPercentage(updatedGrade);
+  }
+
+  async rejectGrade(gradeId: string, adminId: string, reason?: string) {
+    const grade = await prisma.grade.findUnique({
+      where: { id: gradeId },
+    });
+
+    if (!grade) {
+      throw new AppError(404, 'Grade not found');
+    }
+
+    if (grade.status !== 'PENDING_APPROVAL') {
+      throw new AppError(400, 'Grade is not in pending approval status');
+    }
+
+    const updatedGrade = await prisma.grade.update({
+      where: { id: gradeId },
+      data: {
+        status: 'REJECTED',
+        approvedBy: adminId,
+        approvedAt: new Date(),
+        comments: reason ? `${grade.comments}\n\nRejection reason: ${reason}` : grade.comments,
+      },
+      include: {
+        enrollment: {
+          include: {
+            student: true,
+            subject: true,
+          },
+        },
+        assignment: true,
+        grader: {
+          select: {
+            id: true,
+            fullName: true,
+          },
+        },
+        approver: {
+          select: {
+            id: true,
+            fullName: true,
+          },
+        },
+      },
+    });
+
+    // Notify tutor of grade rejection (only tutor, not student/parent)
+    await this.notificationCore.notify({
+      recipientIds: [updatedGrade.gradedBy],
+      type: 'GRADE_REJECTED' as NotificationType,
+      category: 'GRADES' as NotificationCategory,
+      title: 'Grade Rejected',
+      body: reason ? `Your submitted grade has been rejected. Reason: ${reason}` : 'Your submitted grade has been rejected. Please review and resubmit.',
+      entityType: 'Grade',
+      entityId: gradeId,
+      dedupeKey: `grade-rejected-${gradeId}`,
+    });
+
+    return this.enrichWithPercentage(updatedGrade);
+  }
+
+  async getGrades(userId: string, userRole: string, filters?: { studentId?: string; enrollmentId?: string }) {
+    const where: any = {
+      visibleToStudent: true, // Only show approved grades to students/parents
+    };
+
+    if (filters?.studentId) {
+      where.enrollment = {
+        studentId: filters.studentId,
+      };
+    }
+
+    if (filters?.enrollmentId) {
+      where.enrollmentId = filters.enrollmentId;
+    }
+
+    // Filter based on user role
+    if (userRole === 'TUTOR') {
+      // Tutors see all grades for their enrollments (any status)
+      delete where.visibleToStudent;
+      where.enrollment = {
+        tutorId: userId,
+      };
+    } else if (userRole === 'PARENT') {
+      // Parents see approved grades for their children
+      where.enrollment = {
+        student: {
+          parentId: userId,
+        },
+      };
+    } else if (userRole === 'STUDENT') {
+      // Students see approved grades for their own enrollments
+      where.enrollment = {
+        student: {
+          userId,
+        },
+      };
+    } else if (userRole === 'ADMIN') {
+      // Admins see all grades (any status)
+      delete where.visibleToStudent;
+    }
+
+    const grades = await prisma.grade.findMany({
+      where,
+      include: {
+        enrollment: {
+          include: {
+            student: true,
+            subject: true,
+          },
+        },
+        assignment: true,
+        grader: {
+          select: {
+            id: true,
+            fullName: true,
+          },
+        },
+        approver: {
+          select: {
+            id: true,
+            fullName: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    return grades.map(g => this.enrichWithPercentage(g));
+  }
+
+  /**
+   * Calculate average grade percentage for a student or enrollment
+   * Only APPROVED grades count
+   * Returns null if no approved grades exist
+   */
+  async calculateAverageGrade(filters: { studentId?: string; enrollmentId?: string; tutorId?: string }) {
+    const where: any = {
+      status: 'APPROVED',
+    };
+
+    if (filters.studentId) {
+      where.enrollment = {
+        studentId: filters.studentId,
+      };
+    }
+
+    if (filters.enrollmentId) {
+      where.enrollmentId = filters.enrollmentId;
+    }
+
+    if (filters.tutorId) {
+      where.enrollment = {
+        tutorId: filters.tutorId,
+      };
+    }
+
+    const grades = await prisma.grade.findMany({
+      where,
+      select: {
+        score: true,
+        maxScore: true,
+      },
+    });
+
+    if (grades.length === 0) {
+      return {
+        averagePercentage: null,
+        gradedCount: 0,
+      };
+    }
+
+    const percentages = grades.map(g => this.calculatePercentage(Number(g.score), Number(g.maxScore || 100)));
+    const averagePercentage = percentages.reduce((sum, p) => sum + p, 0) / percentages.length;
+
+    return {
+      averagePercentage: Math.round(averagePercentage * 10) / 10, // Round to 1 decimal
+      gradedCount: grades.length,
+    };
+  }
+}

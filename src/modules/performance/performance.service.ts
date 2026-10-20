@@ -1,12 +1,12 @@
 import prisma from '../../config/database';
 import { AppError } from '../../middleware/error-handler.middleware';
-import { GradesService } from '../grades/grades.service';
+import { NewGradesService } from '../grades/grades.service';
 
 export class PerformanceService {
-  private gradesService: GradesService;
+  private gradesService: NewGradesService;
 
   constructor() {
-    this.gradesService = new GradesService();
+    this.gradesService = new NewGradesService();
   }
 
   /**
