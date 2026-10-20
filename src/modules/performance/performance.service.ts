@@ -466,10 +466,29 @@ export class PerformanceService {
 
   /**
    * Calculate assignment metrics
+   * Only counts assignments whose ScoredItems belong to APPROVED grades
    */
   private async calculateAssignments(enrollmentIds: string[], fromDate: Date, toDate: Date) {
+    // Get ScoredItems that belong to APPROVED grades for these enrollments
+    const scoredItems = await prisma.scoredItem.findMany({
+      where: {
+        enrollmentId: { in: enrollmentIds },
+        type: 'ASSIGNMENT',
+        grade: {
+          status: 'APPROVED',
+        },
+      },
+      select: {
+        sourceId: true, // Assignment ID
+      },
+    });
+
+    const assignmentIds = scoredItems.map(si => si.sourceId).filter((id): id is string => id !== null);
+
+    // Get assignments associated with these approved ScoredItems
     const assignments = await prisma.assignment.findMany({
       where: {
+        id: { in: assignmentIds },
         enrollmentId: { in: enrollmentIds },
         createdAt: { gte: fromDate, lte: toDate },
       },
@@ -500,10 +519,29 @@ export class PerformanceService {
 
   /**
    * Calculate quiz statistics
+   * Only counts quiz attempts whose ScoredItems belong to APPROVED grades
    */
   private async calculateQuizzes(enrollmentIds: string[], fromDate: Date, toDate: Date) {
+    // Get ScoredItems that belong to APPROVED grades for these enrollments
+    const scoredItems = await prisma.scoredItem.findMany({
+      where: {
+        enrollmentId: { in: enrollmentIds },
+        type: 'QUIZ',
+        grade: {
+          status: 'APPROVED',
+        },
+      },
+      select: {
+        sourceId: true, // QuizAttempt ID
+      },
+    });
+
+    const quizAttemptIds = scoredItems.map(si => si.sourceId).filter((id): id is string => id !== null);
+
+    // Get quiz attempts associated with these approved ScoredItems
     const quizAttempts = await prisma.quizAttempt.findMany({
       where: {
+        id: { in: quizAttemptIds },
         assignment: {
           enrollmentId: { in: enrollmentIds },
         },

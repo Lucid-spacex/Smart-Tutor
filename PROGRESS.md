@@ -31,21 +31,21 @@
 - [x] POST /tutor/scored-items
 - [x] PATCH /tutor/scored-items/:id
 - [x] DELETE /tutor/scored-items/:id
-- [ ] Implement Grade compile service
-- [ ] POST /grades (DRAFT)
-- [ ] PATCH /grades/:id
-- [ ] DELETE /grades/:id
-- [ ] POST /grades/:id/submit
-- [ ] POST /grades/:id/withdraw
-- [ ] GET /grades/:id/preview
-- [ ] Implement Admin review
-- [ ] GET /admin/grades
-- [ ] GET /admin/grades/:id
-- [ ] PATCH /admin/grades/:id/approve
-- [ ] PATCH /admin/grades/:id/reject
-- [ ] POST /admin/grades/bulk-approve
-- [ ] Update performance endpoints for APPROVED grades only
-- [ ] Run build and tests
+- [x] Implement Grade compile service
+- [x] POST /grades (DRAFT)
+- [x] PATCH /grades/:id
+- [x] DELETE /grades/:id
+- [x] POST /grades/:id/submit
+- [x] POST /grades/:id/withdraw
+- [x] GET /grades/:id/preview
+- [x] Implement Admin review
+- [x] GET /admin/grades
+- [x] GET /admin/grades/:id
+- [x] PATCH /admin/grades/:id/approve
+- [x] PATCH /admin/grades/:id/reject
+- [x] POST /admin/grades/bulk-approve
+- [x] Update performance endpoints for APPROVED grades only
+- [x] Run build and tests
 
 ## SECTION 3: Class Reminders
 - [ ] Implement 15-minute reminder job
