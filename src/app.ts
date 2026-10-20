@@ -31,6 +31,10 @@ import complaintsRoutes from './modules/complaints/complaints.routes';
 import messagesRoutes from './modules/messages/messages.routes';
 import webhooksRoutes from './modules/webhooks/webhooks.routes';
 import quizRoutes from './modules/quiz/quiz.routes';
+import classRemindersRoutes from './modules/class-reminders/class-reminders.routes';
+import { adminClassScheduleRouter } from './modules/class-reminders/class-reminders.routes';
+import enrollmentChangeRequestsRoutes from './modules/enrollment-change-requests/enrollment-change-requests.routes';
+import { adminChangeRequestsRouter } from './modules/enrollment-change-requests/enrollment-change-requests.routes';
 import { initializeScheduler } from './jobs/scheduler';
 import { logger } from './config/logger';
 import { tier2WriteRateLimit, tier3ReadRateLimit } from './middleware/rate-limit.middleware';
@@ -136,6 +140,7 @@ const mountRoutes = (prefix: string = '') => {
   app.use(`${prefix}/students`, studentRoutes);
   app.use(`${prefix}/student`, studentFacingRoutes);
   app.use(`${prefix}/enrollments`, enrollmentRoutes);
+  app.use(`${prefix}/enrollments`, enrollmentChangeRequestsRoutes);
   app.use(`${prefix}/sessions`, sessionRoutes);
   app.use(`${prefix}/payments`, paymentRoutes);
   app.use(`${prefix}/progress-reports`, progressReportRoutes);
@@ -144,6 +149,8 @@ const mountRoutes = (prefix: string = '') => {
   app.use(`${prefix}/tutor-application`, tutorApplicationRoutes);
   app.use(`${prefix}/admin`, adminRoutes);
   app.use(`${prefix}/admin/grades`, adminGradesRouter);
+  app.use(`${prefix}/admin/class-schedule`, adminClassScheduleRouter);
+  app.use(`${prefix}/admin/change-requests`, adminChangeRequestsRouter);
   app.use(`${prefix}/subjects`, subjectsRoutes);
   app.use(`${prefix}/pricing`, pricingRoutes);
   app.use(`${prefix}/attendance`, attendanceRoutes);
@@ -154,6 +161,7 @@ const mountRoutes = (prefix: string = '') => {
   app.use(`${prefix}/messages`, messagesRoutes);
   app.use(`${prefix}/webhooks`, webhooksRoutes);
   app.use(`${prefix}/quiz`, quizRoutes);
+  app.use(`${prefix}/tutor`, classRemindersRoutes);
 };
 
 mountRoutes('/api');

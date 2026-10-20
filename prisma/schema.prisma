@@ -165,6 +165,8 @@ model User {
   threads             Thread[]               @relation("ThreadParticipant")
   scoredItems         ScoredItem[]    @relation("ScoredItemTutor")
   gradeEvents         GradeEvent[]    @relation("GradeEventUser")
+  requestedChangeRequests  EnrollmentChangeRequest[] @relation("ChangeRequestRequestedBy")
+  reviewedChangeRequests   EnrollmentChangeRequest[] @relation("ChangeRequestReviewedBy")
 
   @@index([email])
   @@index([role])
@@ -1006,11 +1008,13 @@ model EnrollmentChangeRequest {
   enrollmentId     String
   enrollment       Enrollment       @relation("EnrollmentChangeRequests", fields: [enrollmentId], references: [id], onDelete: Cascade)
   requestedBy      String
+  requestedByUser  User             @relation("ChangeRequestRequestedBy", fields: [requestedBy], references: [id], onDelete: Cascade)
   requestedValues  Json             // Proposed: startDate, endDate, days, hours
   previousSnapshot Json             // Before snapshot
   status           ChangeRequestStatus @default(PENDING)
   rejectionReason  String?
   reviewedBy       String?
+  reviewedByUser   User?            @relation("ChangeRequestReviewedBy", fields: [reviewedBy], references: [id], onDelete: SetNull)
   reviewedAt       DateTime?
   createdAt        DateTime         @default(now())
 

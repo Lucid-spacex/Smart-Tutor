@@ -4,6 +4,7 @@ import { runAssignmentDueNotifications } from './assignment-due.job';
 import { runExchangeRateCheck } from './exchange-rate-check.job';
 import { runZoomRecordingSync } from './zoom-recording-sync.job';
 import { runNotificationCleanup } from './notification-cleanup.job';
+import { runClassRemindersJob } from './class-reminders.job';
 import { logger } from '../config/logger';
 
 export function initializeScheduler(): void {
@@ -61,6 +62,16 @@ export function initializeScheduler(): void {
       await runNotificationCleanup();
     } catch (error) {
       logger.error({ error }, 'Error in notification cleanup job');
+    }
+  });
+
+  // 6. Every 15 minutes - Class reminders (notify tutors to schedule, notify before sessions)
+  cron.schedule('*/15 * * * *', async () => {
+    logger.info('Running scheduled job: Class Reminders');
+    try {
+      await runClassRemindersJob();
+    } catch (error) {
+      logger.error({ error }, 'Error in class reminders job');
     }
   });
 

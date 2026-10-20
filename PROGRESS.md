@@ -48,19 +48,19 @@
 - [x] Run build and tests
 
 ## SECTION 3: Class Reminders
-- [ ] Implement 15-minute reminder job
-- [ ] GET /tutor/upcoming-classes
-- [ ] GET /admin/class-schedule
+- [x] Implement 15-minute reminder job
+- [x] GET /tutor/upcoming-classes
+- [x] GET /admin/class-schedule
 - [ ] Run build and tests
 
 ## SECTION 4: Enrollment Change Requests
-- [ ] POST /enrollments/:id/change-requests
-- [ ] GET /enrollments/:id/change-requests
-- [ ] PATCH /change-requests/:id/cancel
-- [ ] GET /admin/change-requests
-- [ ] GET /admin/change-requests/:id
-- [ ] PATCH /admin/change-requests/:id/approve
-- [ ] PATCH /admin/change-requests/:id/reject
+- [x] POST /enrollments/:id/change-requests
+- [x] GET /enrollments/:id/change-requests
+- [x] PATCH /change-requests/:id/cancel
+- [x] GET /admin/change-requests
+- [x] GET /admin/change-requests/:id
+- [x] PATCH /admin/change-requests/:id/approve
+- [x] PATCH /admin/change-requests/:id/reject
 - [ ] Run build and tests
 
 ## SECTION 5: Google Meet
