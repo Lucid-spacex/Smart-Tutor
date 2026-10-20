@@ -8,9 +8,10 @@ import { EnrollmentsService } from '../enrollments/enrollments.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { GradesService } from '../grades/grades.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationCoreService } from '../notifications/notification-core.service';
 import { PerformanceService } from '../performance/performance.service';
 import { TutorApplicationService } from '../tutor-application/tutor-application.service';
-import { GradeBandTier } from '@prisma/client';
+import { GradeBandTier, NotificationCategory, NotificationType } from '@prisma/client';
 import { CreateSessionInput, RescheduleSessionInput } from '../sessions/sessions.validation';
 import { config } from '../../config/env.config';
 
@@ -19,6 +20,7 @@ export class AdminService {
   private sessionsService: SessionsService;
   private gradesService: GradesService;
   private notificationsService: NotificationsService;
+  private notificationCore: NotificationCoreService;
   private performanceService: PerformanceService;
   private tutorApplicationService: TutorApplicationService;
 
@@ -27,6 +29,7 @@ export class AdminService {
     this.sessionsService = new SessionsService();
     this.gradesService = new GradesService();
     this.notificationsService = new NotificationsService();
+    this.notificationCore = new NotificationCoreService();
     this.performanceService = new PerformanceService();
     this.tutorApplicationService = new TutorApplicationService();
   }
@@ -1966,16 +1969,23 @@ export class AdminService {
     });
 
     // Activate enrollment(s) idempotently
+    let enrollmentIds: string[] = [];
     if (payment.enrollmentId) {
       await prisma.enrollment.update({
         where: { id: payment.enrollmentId },
         data: { status: 'ACTIVE' },
       });
+      enrollmentIds.push(payment.enrollmentId);
     } else if (payment.enrollmentGroupId) {
+      const enrollments = await prisma.enrollment.findMany({
+        where: { enrollmentGroupId: payment.enrollmentGroupId },
+        select: { id: true },
+      });
       await prisma.enrollment.updateMany({
         where: { enrollmentGroupId: payment.enrollmentGroupId },
         data: { status: 'ACTIVE' },
       });
+      enrollmentIds = enrollments.map(e => e.id);
     }
 
     // Log to admin action log

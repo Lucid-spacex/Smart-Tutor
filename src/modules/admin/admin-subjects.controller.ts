@@ -35,7 +35,16 @@ export class AdminSubjectsController {
       const data = req.body;
       const subject = await this.subjectsService.createSubject(data, adminId);
       res.status(201).json(subject);
-    } catch (error) {
+    } catch (error: any) {
+      // Handle Prisma unique constraint error
+      if (error.code === 'P2002') {
+        res.status(409).json({
+          error: 'DUPLICATE_SUBJECT',
+          message: 'A subject with this name already exists. Please use a different name or update the existing subject.',
+        });
+        return;
+      }
+
       next(error);
     }
   };
@@ -47,7 +56,16 @@ export class AdminSubjectsController {
 
       const subject = await this.subjectsService.updateSubject(id, data);
       res.status(200).json(subject);
-    } catch (error) {
+    } catch (error: any) {
+      // Handle Prisma unique constraint error
+      if (error.code === 'P2002') {
+        res.status(409).json({
+          error: 'DUPLICATE_SUBJECT',
+          message: 'A subject with this name already exists. Please use a different name.',
+        });
+        return;
+      }
+
       next(error);
     }
   };

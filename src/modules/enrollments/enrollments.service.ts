@@ -3,10 +3,17 @@ import prisma from '../../config/database';
 import { CreateEnrollmentInput, GetEnrollmentsQuery, UpdateEnrollmentPricingInput } from './enrollments.validation';
 import { computeLagosEquivalentWindow } from '../../utils/timezone.util';
 import { AppError } from '../../middleware/error-handler.middleware';
+import { NotificationCoreService } from '../notifications/notification-core.service';
+import { NotificationCategory, NotificationType } from '@prisma/client';
 
 export { computeLagosEquivalentWindow };
 
 export class EnrollmentsService {
+  private notificationCore: NotificationCoreService;
+
+  constructor() {
+    this.notificationCore = new NotificationCoreService();
+  }
   async createEnrollment(parentId: string, data: CreateEnrollmentInput) {
     // 1. Verify student belongs to parent
     const student = await prisma.student.findUnique({
@@ -80,6 +87,18 @@ export class EnrollmentsService {
         })
       )
     );
+
+    // Notify admins of new enrollment (payment pending)
+    await this.notificationCore.notify({
+      recipientRole: 'ADMIN',
+      type: 'ENROLLMENT_CREATED' as NotificationType,
+      category: 'ENROLLMENTS' as NotificationCategory,
+      title: 'New Enrollment Created',
+      body: `New enrollment for ${enrollments[0].student.fullName} - payment pending`,
+      entityType: 'Enrollment',
+      entityId: enrollments[0].id,
+      dedupeKey: `enrollment-created-${enrollmentGroupId}`,
+    });
 
     return {
       enrollmentGroupId,

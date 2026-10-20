@@ -1,7 +1,15 @@
 import prisma from '../../config/database';
 import { logger } from '../../config/logger';
+import { NotificationCoreService } from '../notifications/notification-core.service';
+import { NotificationCategory, NotificationType } from '@prisma/client';
 
 export class PricingService {
+  private notificationCore: NotificationCoreService;
+
+  constructor() {
+    this.notificationCore = new NotificationCoreService();
+  }
+
   /**
    * Map grade level string to grade band tier
    */
@@ -159,13 +167,17 @@ export class PricingService {
   async updateEnrollmentPricing(enrollmentId: string, data: { yearlyPriceNGN?: number; yearlyPriceUSD?: number; billingFrequency?: string }) {
     const enrollment = await prisma.enrollment.findUnique({
       where: { id: enrollmentId },
+      include: {
+        student: true,
+        subject: true,
+      },
     });
 
     if (!enrollment) {
       throw new Error('Enrollment not found');
     }
 
-    return prisma.enrollment.update({
+    const updatedEnrollment = await prisma.enrollment.update({
       where: { id: enrollmentId },
       data: {
         yearlyPriceNGN: data.yearlyPriceNGN !== undefined ? data.yearlyPriceNGN : enrollment.yearlyPriceNGN,
@@ -173,6 +185,29 @@ export class PricingService {
         billingFrequency: (data.billingFrequency || enrollment.billingFrequency) as any,
       },
     });
+
+    // Notify parent of price update (if prices changed)
+    if ((data.yearlyPriceNGN !== undefined && data.yearlyPriceNGN !== Number(enrollment.yearlyPriceNGN)) ||
+        (data.yearlyPriceUSD !== undefined && data.yearlyPriceUSD !== Number(enrollment.yearlyPriceUSD))) {
+      const priceNGN = updatedEnrollment.yearlyPriceNGN || 0;
+      const priceUSD = updatedEnrollment.yearlyPriceUSD || 0;
+
+      await this.notificationCore.notify({
+        recipientIds: [enrollment.student.parentId],
+        type: 'PRICE_UPDATED' as NotificationType,
+        category: 'PRICING' as NotificationCategory,
+        title: 'Price Updated',
+        body: `The price for ${enrollment.student.fullName}'s ${enrollment.subject.name} is now ₦${priceNGN} / $${priceUSD}`,
+        entityType: 'Enrollment',
+        entityId: enrollmentId,
+        dedupeKey: `price-updated-${enrollmentId}`,
+        sensitiveData: {
+          prices: true, // Ensure this doesn't leak to students/tutors
+        },
+      });
+    }
+
+    return updatedEnrollment;
   }
 
   /**
@@ -261,23 +296,17 @@ export class PricingService {
       const driftPercentage = Math.abs((impliedRate - Number(marketRate)) / Number(marketRate) * 100);
 
       if (driftPercentage > thresholdPercent) {
-        // Create admin notification
-        const admins = await prisma.user.findMany({
-          where: { role: 'ADMIN' },
-          select: { id: true },
+        // Create admin notification using the centralized service
+        await this.notificationCore.notify({
+          recipientRole: 'ADMIN',
+          type: 'PRICING_DRIFT_ALERT' as NotificationType,
+          category: 'PRICING' as NotificationCategory,
+          title: 'Pricing Drift Alert',
+          body: `Pricing tier ${tier.gradeBandTier} is ${driftPercentage.toFixed(1)}% off the current market exchange rate (${impliedRate.toFixed(2)} vs ${marketRate.toFixed(2)}). Consider reviewing pricing.`,
+          entityType: 'PricingTier',
+          entityId: tier.id,
+          dedupeKey: `pricing-drift-${tier.id}`,
         });
-
-        for (const admin of admins) {
-          await prisma.notification.create({
-            data: {
-              userId: admin.id,
-              type: 'PRICING_DRIFT_ALERT',
-              title: 'Pricing Drift Alert',
-              message: `Pricing tier ${tier.gradeBandTier} is ${driftPercentage.toFixed(1)}% off the current market exchange rate (${impliedRate.toFixed(2)} vs ${marketRate.toFixed(2)}). Consider reviewing pricing.`,
-              relatedId: tier.id,
-            },
-          });
-        }
 
         alertsCreated++;
         logger.warn(
@@ -303,22 +332,16 @@ export class PricingService {
       const driftPercentage = Math.abs((impliedRate - Number(marketRate)) / Number(marketRate) * 100);
 
       if (driftPercentage > thresholdPercent) {
-        const admins = await prisma.user.findMany({
-          where: { role: 'ADMIN' },
-          select: { id: true },
+        await this.notificationCore.notify({
+          recipientRole: 'ADMIN',
+          type: 'PRICING_DRIFT_ALERT' as NotificationType,
+          category: 'PRICING' as NotificationCategory,
+          title: 'Pricing Drift Alert',
+          body: `Enrollment ${enrollment.id} for student ${enrollment.student.fullName} has custom pricing that is ${driftPercentage.toFixed(1)}% off market rate. Consider reviewing.`,
+          entityType: 'Enrollment',
+          entityId: enrollment.id,
+          dedupeKey: `pricing-drift-enrollment-${enrollment.id}`,
         });
-
-        for (const admin of admins) {
-          await prisma.notification.create({
-            data: {
-              userId: admin.id,
-              type: 'PRICING_DRIFT_ALERT',
-              title: 'Pricing Drift Alert',
-              message: `Enrollment ${enrollment.id} for student ${enrollment.student.fullName} has custom pricing that is ${driftPercentage.toFixed(1)}% off market rate. Consider reviewing.`,
-              relatedId: enrollment.id,
-            },
-          });
-        }
 
         alertsCreated++;
         logger.warn(

@@ -5,14 +5,18 @@ import { PaymentProvider } from './providers/payment-provider.interface';
 import { InitiatePaymentInput } from './payments.validation';
 import { AppError } from '../../middleware/error-handler.middleware';
 import { SubjectsService } from '../subjects/subjects.service';
+import { NotificationCoreService } from '../notifications/notification-core.service';
+import { NotificationCategory, NotificationType } from '@prisma/client';
 
 export class PaymentsService {
   private paymentProvider: PaymentProvider;
   private subjectsService: SubjectsService;
+  private notificationCore: NotificationCoreService;
 
   constructor() {
     this.paymentProvider = new PaystackProvider();
     this.subjectsService = new SubjectsService();
+    this.notificationCore = new NotificationCoreService();
   }
 
   async initiatePayment(parentId: string, data: InitiatePaymentInput) {
@@ -338,6 +342,57 @@ export class PaymentsService {
       return p;
     });
 
+    // Send notifications after the transaction commits
+    if (isSuccess) {
+      await this.notificationCore.notify({
+        recipientIds: [payment.parentId],
+        type: 'PAYMENT_SUCCESS' as NotificationType,
+        category: 'PAYMENTS' as NotificationCategory,
+        title: 'Payment Successful',
+        body: `Your payment of ${payment.currency} ${payment.amount} was successful`,
+        entityType: 'Payment',
+        entityId: payment.id,
+        dedupeKey: `payment-success-${payment.id}`,
+      });
+
+      // Notify admins on EXPIRED → SUCCESS transitions for review
+      if (payment.status === 'EXPIRED') {
+        await this.notificationCore.notify({
+          recipientRole: 'ADMIN',
+          type: 'PAYMENT_EXPIRED' as NotificationType,
+          category: 'PAYMENTS' as NotificationCategory,
+          title: 'Payment Success After Expiry',
+          body: `Payment ${payment.id} confirmed success after being marked EXPIRED - needs review`,
+          entityType: 'Payment',
+          entityId: payment.id,
+          dedupeKey: `payment-expired-review-${payment.id}`,
+        });
+      }
+    } else {
+      await this.notificationCore.notify({
+        recipientIds: [payment.parentId],
+        type: 'PAYMENT_FAILED' as NotificationType,
+        category: 'PAYMENTS' as NotificationCategory,
+        title: 'Payment Failed',
+        body: `Your payment of ${payment.currency} ${payment.amount} failed. Please try again.`,
+        entityType: 'Payment',
+        entityId: payment.id,
+        dedupeKey: `payment-failed-${payment.id}`,
+      });
+
+      // Notify admins on failed payments
+      await this.notificationCore.notify({
+        recipientRole: 'ADMIN',
+        type: 'PAYMENT_FAILED' as NotificationType,
+        category: 'PAYMENTS' as NotificationCategory,
+        title: 'Payment Failed',
+        body: `Payment failed for parent`,
+        entityType: 'Payment',
+        entityId: payment.id,
+        dedupeKey: `payment-failed-admin-${payment.id}`,
+      });
+    }
+
     return updatedPayment;
   }
 
@@ -412,6 +467,18 @@ export class PaymentsService {
             }
 
             return p;
+          });
+
+          // Send notification after transaction commits
+          await this.notificationCore.notify({
+            recipientIds: [payment.parentId],
+            type: 'PAYMENT_SUCCESS' as NotificationType,
+            category: 'PAYMENTS' as NotificationCategory,
+            title: 'Payment Successful',
+            body: `Your payment of ${payment.currency} ${payment.amount} was successful`,
+            entityType: 'Payment',
+            entityId: payment.id,
+            dedupeKey: `payment-success-${payment.id}`,
           });
 
           // Return updated payment with relations

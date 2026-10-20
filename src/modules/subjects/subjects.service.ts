@@ -110,6 +110,20 @@ export class SubjectsService {
       throw new Error('At least one grade band price is required');
     }
 
+    // Check if subject with same name already exists (case-insensitive)
+    const existingSubject = await prisma.subject.findFirst({
+      where: {
+        name: {
+          equals: data.name,
+          mode: 'insensitive',
+        },
+      },
+    });
+
+    if (existingSubject) {
+      throw new Error(`Subject with name "${data.name}" already exists. Please use a different name or update the existing subject.`);
+    }
+
     return prisma.subject.create({
       data: {
         name: data.name,
@@ -139,6 +153,25 @@ export class SubjectsService {
     category?: string;
     isActive?: boolean;
   }) {
+    // If updating name, check for duplicates (excluding current subject)
+    if (data.name) {
+      const existingSubject = await prisma.subject.findFirst({
+        where: {
+          name: {
+            equals: data.name,
+            mode: 'insensitive',
+          },
+          id: {
+            not: subjectId, // Exclude current subject
+          },
+        },
+      });
+
+      if (existingSubject) {
+        throw new Error(`Subject with name "${data.name}" already exists. Please use a different name.`);
+      }
+    }
+
     const updateData: any = {
       name: data.name,
       description: data.description,

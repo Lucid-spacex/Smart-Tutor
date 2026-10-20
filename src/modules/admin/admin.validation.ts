@@ -74,7 +74,7 @@ export const getStudentsQuerySchema = z.object({
 });
 
 export const createSubjectSchema = z.object({
-  name: z.string().min(1, 'Subject name is required'),
+  name: z.string().min(1, 'Subject name is required').trim(),
   description: z.string().optional(),
   category: z.string().transform((val) => val.toUpperCase()).refine((val) => ['CORE', 'ENRICHMENT', 'TEST_PREP'].includes(val), {
     message: 'Category must be one of: CORE, ENRICHMENT, TEST_PREP',
@@ -87,7 +87,7 @@ export const createSubjectSchema = z.object({
 });
 
 export const updateSubjectSchema = z.object({
-  name: z.string().min(1, 'Subject name is required').optional(),
+  name: z.string().min(1, 'Subject name is required').trim().optional(),
   description: z.string().optional(),
   category: z.string().transform((val) => val.toUpperCase()).refine((val) => ['CORE', 'ENRICHMENT', 'TEST_PREP'].includes(val), {
     message: 'Category must be one of: CORE, ENRICHMENT, TEST_PREP',

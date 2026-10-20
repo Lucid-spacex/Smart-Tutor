@@ -3,8 +3,16 @@ import { CreateMessageInput } from './messages.validation';
 import crypto from 'crypto';
 import { logger } from '../../config/logger';
 import { AppError } from '../../middleware/error-handler.middleware';
+import { NotificationCoreService } from '../notifications/notification-core.service';
+import { NotificationCategory, NotificationType } from '@prisma/client';
 
 export class MessagesService {
+  private notificationCore: NotificationCoreService;
+
+  constructor() {
+    this.notificationCore = new NotificationCoreService();
+  }
+
   /**
    * Evaluates whether sender is permitted to message recipient.
    * Strictly enforced permission matrix:
@@ -191,6 +199,32 @@ export class MessagesService {
         },
       },
     });
+
+    // Notify recipient of new message
+    await this.notificationCore.notify({
+      recipientIds: [data.recipientId],
+      type: 'NEW_MESSAGE' as NotificationType,
+      category: 'MESSAGES' as NotificationCategory,
+      title: 'New Message',
+      body: `You have a new message from ${message.sender.fullName}`,
+      entityType: 'Message',
+      entityId: message.id,
+      dedupeKey: `message-${message.id}`,
+    });
+
+    // If admin is replying to parent/tutor, use a different notification type
+    if (message.sender.role === 'ADMIN' && ['PARENT', 'TUTOR'].includes(message.recipient.role)) {
+      await this.notificationCore.notify({
+        recipientIds: [data.recipientId],
+        type: 'GENERAL' as NotificationType,
+        category: 'MESSAGES' as NotificationCategory,
+        title: 'Admin Reply',
+        body: `An admin has replied to your message`,
+        entityType: 'Message',
+        entityId: message.id,
+        dedupeKey: `admin-reply-${message.id}`,
+      });
+    }
 
     logger.info({ senderId, recipientId: data.recipientId, threadId }, 'Message sent successfully');
     return message;

@@ -1,11 +1,18 @@
 import prisma from '../../config/database';
-import { CreateQuizQuestionInput, SubmitQuizAnswerInput, StartQuizInput, CompleteQuizInput } from './quiz.validation';
+import { CreateQuizQuestionInput, SubmitQuizAnswerInput, StartQuizInput, CompleteQuizInput, QuizCompleteResult } from './quiz.validation';
 import { logger } from '../../config/logger';
+import { NotificationCoreService } from '../notifications/notification-core.service';
+import { NotificationCategory, NotificationType } from '@prisma/client';
 
 const MAX_TIME_SECONDS = 30; // Default max time per question
 const SPEED_MULTIPLIER_FLOOR = 0.5; // Minimum multiplier even at max time
 
 export class QuizService {
+  private notificationCore: NotificationCoreService;
+
+  constructor() {
+    this.notificationCore = new NotificationCoreService();
+  }
   /**
    * Create a quiz question for an assignment (TUTOR only)
    */
@@ -239,9 +246,9 @@ export class QuizService {
 
   /**
    * Complete a quiz attempt (STUDENT only)
-   * Creates a Grade record with PENDING_APPROVAL status
+   * Creates a ScoredItem instead of a Grade
    */
-  async completeQuiz(attemptId: string, studentId: string) {
+  async completeQuiz(attemptId: string, studentId: string): Promise<QuizCompleteResult> {
     // Verify attempt exists and belongs to student
     const attempt = await prisma.quizAttempt.findUnique({
       where: { id: attemptId },
@@ -292,29 +299,45 @@ export class QuizService {
       },
     });
 
-    // Create Grade record with PENDING_APPROVAL status
-    const grade = await prisma.grade.create({
+    // Create ScoredItem instead of Grade (quiz is an input, not a grade)
+    const scoredItem = await prisma.scoredItem.create({
       data: {
         enrollmentId: attempt.assignment.enrollmentId,
-        assignmentId: attempt.assignmentId,
-        gradedBy: studentId, // Self-graded, but needs admin approval
+        studentId: attempt.studentId,
+        tutorId: attempt.assignment.enrollment.tutorId || studentId, // If no tutor, self-scored
+        type: 'QUIZ',
+        sourceType: 'QuizAttempt',
+        sourceId: attemptId,
+        autoScore: totalScore,
         score: totalScore,
-        maxScore: maxScore || 100, // Default to 100 if no questions
-        comments: 'Auto-graded quiz. Pending admin approval.',
-        status: 'PENDING_APPROVAL',
-        visibleToStudent: false, // Hidden until approved
+        maxScore: maxScore || 100,
+        comment: 'Auto-graded quiz.',
       },
     });
+
+    // Notify tutor of quiz completion
+    if (attempt.assignment.enrollment.tutorId) {
+      await this.notificationCore.notify({
+        recipientIds: [attempt.assignment.enrollment.tutorId],
+        type: 'QUIZ_COMPLETED' as NotificationType,
+        category: 'QUIZZES' as NotificationCategory,
+        title: 'Quiz Completed',
+        body: `Student completed quiz for assignment "${attempt.assignment.title}"`,
+        entityType: 'QuizAttempt',
+        entityId: attemptId,
+        dedupeKey: `quiz-completed-${attemptId}`,
+      });
+    }
 
     logger.info({
       attemptId,
       totalScore,
-      gradeId: grade.id,
-    }, 'Quiz completed and grade created');
+      scoredItemId: scoredItem.id,
+    }, 'Quiz completed and ScoredItem created');
 
     return {
       attempt: updatedAttempt,
-      grade,
+      scoredItem,
     };
   }
 

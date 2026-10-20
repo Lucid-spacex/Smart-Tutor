@@ -22,3 +22,8 @@ export type CreateQuizQuestionInput = z.infer<typeof createQuizQuestionSchema>;
 export type SubmitQuizAnswerInput = z.infer<typeof submitQuizAnswerSchema>;
 export type StartQuizInput = z.infer<typeof startQuizSchema>;
 export type CompleteQuizInput = z.infer<typeof completeQuizSchema>;
+
+export type QuizCompleteResult = {
+  attempt: any;
+  scoredItem: any;
+};

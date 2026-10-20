@@ -1,11 +1,12 @@
 import prisma from '../../config/database';
-import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationCoreService } from '../notifications/notification-core.service';
+import { NotificationCategory, NotificationType } from '@prisma/client';
 
 export class ComplaintsService {
-  private notificationsService: NotificationsService;
+  private notificationCore: NotificationCoreService;
 
   constructor() {
-    this.notificationsService = new NotificationsService();
+    this.notificationCore = new NotificationCoreService();
   }
 
   async createComplaint(userId: string, userRole: string, data: any) {
@@ -14,7 +15,7 @@ export class ComplaintsService {
       throw new Error('Not authorized to file complaints');
     }
 
-    return prisma.complaint.create({
+    const complaint = await prisma.complaint.create({
       data: {
         filedBy: userId,
         aboutType: data.aboutType,
@@ -34,6 +35,20 @@ export class ComplaintsService {
         },
       },
     });
+
+    // Notify admins of new complaint
+    await this.notificationCore.notify({
+      recipientRole: 'ADMIN',
+      type: 'GENERAL' as NotificationType,
+      category: 'COMPLAINTS' as NotificationCategory,
+      title: 'New Complaint Filed',
+      body: `Complaint "${data.subject}" filed by ${complaint.filer.fullName}`,
+      entityType: 'Complaint',
+      entityId: complaint.id,
+      dedupeKey: `complaint-filed-${complaint.id}`,
+    });
+
+    return complaint;
   }
 
   async getComplaints(userId: string, userRole: string) {
@@ -114,8 +129,17 @@ export class ComplaintsService {
       },
     });
 
-    // Create notification for the filer
-    await this.notificationsService.createComplaintResolvedNotification(complaintId, complaint.filedBy);
+    // Notify the filer that complaint is resolved
+    await this.notificationCore.notify({
+      recipientIds: [complaint.filedBy],
+      type: 'COMPLAINT_RESOLVED' as NotificationType,
+      category: 'COMPLAINTS' as NotificationCategory,
+      title: 'Complaint Resolved',
+      body: `Your complaint "${complaint.subject}" has been resolved`,
+      entityType: 'Complaint',
+      entityId: complaint.id,
+      dedupeKey: `complaint-resolved-${complaint.id}`,
+    });
 
     return updatedComplaint;
   }

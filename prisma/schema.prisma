@@ -163,6 +163,8 @@ model User {
   notifications       Notification[]
   subjectPricesUpdated SubjectPrice[]
   threads             Thread[]               @relation("ThreadParticipant")
+  scoredItems         ScoredItem[]    @relation("ScoredItemTutor")
+  gradeEvents         GradeEvent[]    @relation("GradeEventUser")
 
   @@index([email])
   @@index([role])
@@ -338,6 +340,7 @@ model Student {
   enrollments  Enrollment[]
   quizAttempts QuizAttempt[]
   submissions  AssignmentSubmission[]
+  scoredItems ScoredItem[] @relation("ScoredItemStudent")
 
   @@index([parentId])
   @@index([userId])
@@ -436,6 +439,8 @@ model Enrollment {
   progressReports     ProgressReport[]
   assignments         Assignment[]
   grades              Grade[]
+  scoredItems         ScoredItem[]    @relation("ScoredItemEnrollment")
+  changeRequests      EnrollmentChangeRequest[] @relation("EnrollmentChangeRequests")
 
   @@index([studentId])
   @@index([subjectId])
@@ -453,13 +458,17 @@ model Session {
   creator          User            @relation("SessionCreator", fields: [createdBy], references: [id], onDelete: Cascade)
   scheduledAt      DateTime
   durationMinutes  Int
-  zoomLink         String?
-  zoomMeetingId    String?
+  zoomLink         String?         // DEPRECATED: Use googleMeetLink instead
+  zoomMeetingId    String?         // DEPRECATED: Use googleEventId instead
+  googleEventId    String?         // Google Calendar event ID
+  googleMeetLink   String?         // Google Meet link
+  googleDriveFileId String?        // Recording file ID in Google Drive
   recordingUrl     String?
   recordingStatus  RecordingStatus @default(NONE)
   status           SessionStatus   @default(SCHEDULED)
   tutorNotes       String?
   homeworkAssigned String?
+  needsReschedule  Boolean         @default(false) // Flagged if no longer fits schedule
   createdAt        DateTime        @default(now())
 
   participants SessionParticipant[]
@@ -469,6 +478,8 @@ model Session {
   @@index([scheduledAt])
   @@index([status])
   @@index([zoomMeetingId])
+  @@index([googleEventId])
+  @@index([needsReschedule])
 }
 
 model SessionParticipant {
@@ -642,21 +653,37 @@ model Grade {
   comments         String
   attachmentUrl    String?
   attachmentName   String?
-  status           GradeStatus @default(PENDING_APPROVAL)
+  status           GradeStatus @default(DRAFT)
   approvedBy       String?
   approver         User?       @relation("GradeApprover", fields: [approvedBy], references: [id], onDelete: SetNull)
   approvedAt       DateTime?
   visibleToStudent Boolean     @default(false)
   createdAt        DateTime    @default(now())
+  // New fields for grading workflow
+  periodStart      DateTime?
+  periodEnd        DateTime?
+  computedScore    Decimal?    @db.Decimal(10, 2)
+  finalScore       Decimal?    @db.Decimal(10, 2)
+  overrideReason   String?
+  tutorComment     String?
+  rejectionReason  String?
+  submittedAt      DateTime?
+  reviewedBy       String?
+  reviewedAt       DateTime?
+  components       GradeComponent[] @relation("GradeComponents")
+  events           GradeEvent[] @relation("GradeEvents")
+  scoredItems      ScoredItem[] @relation("GradeScoredItems")
 
   @@index([enrollmentId])
   @@index([assignmentId])
   @@index([gradedBy])
   @@index([status])
   @@index([visibleToStudent])
+  @@index([periodStart, periodEnd])
 }
 
 enum GradeStatus {
+  DRAFT
   PENDING_APPROVAL
   APPROVED
   REJECTED
@@ -667,18 +694,36 @@ model Notification {
   userId     String
   user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   type       NotificationType
+  category   NotificationCategory
   title      String
-  message    String
-  relatedType String?
-  relatedId  String?
-  data       Json?
+  body       String
+  entityType String?
+  entityId   String?
+  isRead     Boolean          @default(false)
   readAt     DateTime?
-  deletedAt  DateTime?
+  dedupeKey  String?
   createdAt  DateTime         @default(now())
 
-  @@index([userId, readAt, createdAt])
+  @@index([userId, isRead, createdAt])
   @@index([type])
-  @@index([deletedAt])
+  @@index([category])
+  @@index([entityType, entityId])
+  @@index([dedupeKey])
+  @@unique([userId, dedupeKey], name: "Notification_userId_dedupeKey_key")
+}
+
+enum NotificationCategory {
+  USERS
+  SESSIONS
+  MESSAGES
+  COMPLAINTS
+  ENROLLMENTS
+  PAYMENTS
+  GRADES
+  PRICING
+  SCHEDULE
+  QUIZZES
+  ASSIGNMENTS
 }
 
 enum NotificationType {
@@ -693,6 +738,7 @@ enum NotificationType {
   ENROLLMENT_AWAITING_TUTOR
   PAYMENT_SUCCESS
   PAYMENT_FAILED
+  PAYMENT_EXPIRED
   ENROLLMENT_ACTIVATED
   SESSION_SCHEDULED
   SESSION_RESCHEDULED
@@ -711,6 +757,16 @@ enum NotificationType {
   NEW_MESSAGE
   ACCOUNT_SUSPENDED
   ACCOUNT_REACTIVATED
+  USER_REGISTERED
+  USER_VERIFIED
+  ENROLLMENT_CREATED
+  SESSION_CREATED
+  SESSION_MISSED
+  RECORDING_AVAILABLE
+  QUIZ_COMPLETED
+  ENROLLMENT_CHANGE_SUBMITTED
+  ENROLLMENT_CHANGE_APPROVED
+  ENROLLMENT_CHANGE_REJECTED
 }
 
 model Complaint {
@@ -863,4 +919,98 @@ model AdminActionLog {
   @@index([action])
   @@index([targetType, targetId])
   @@index([createdAt])
+}
+
+// SECTION 2: Grading Workflow Models
+
+enum ScoredItemType {
+  QUIZ
+  ASSIGNMENT
+  TEST
+  PARTICIPATION
+}
+
+model ScoredItem {
+  id            String        @id @default(uuid())
+  tutorId       String
+  tutor         User          @relation("ScoredItemTutor", fields: [tutorId], references: [id], onDelete: Cascade)
+  studentId     String
+  student       Student       @relation("ScoredItemStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  enrollmentId  String
+  enrollment    Enrollment    @relation("ScoredItemEnrollment", fields: [enrollmentId], references: [id], onDelete: Cascade)
+  type          ScoredItemType
+  sourceType    String?       // "QuizAttempt" or "AssignmentSubmission"
+  sourceId      String?       // ID of the source record
+  autoScore     Decimal?     @db.Decimal(10, 2) // Server-computed, immutable once set
+  score         Decimal       @db.Decimal(10, 2)
+  maxScore      Decimal       @db.Decimal(10, 2)
+  comment       String?
+  scoredAt      DateTime      @default(now())
+  gradeId       String?
+  grade         Grade?        @relation("GradeScoredItems", fields: [gradeId], references: [id], onDelete: SetNull)
+
+  @@index([tutorId])
+  @@index([studentId])
+  @@index([enrollmentId])
+  @@index([gradeId])
+  @@index([type])
+  @@index([sourceType, sourceId])
+}
+
+model GradeComponent {
+  id               String  @id @default(uuid())
+  gradeId          String
+  grade            Grade   @relation("GradeComponents", fields: [gradeId], references: [id], onDelete: Cascade)
+  type             String  // QUIZ | ASSIGNMENT | TEST | PARTICIPATION | ATTENDANCE
+  weightPercent    Int
+  itemCount        Int
+  componentPercentage Decimal @db.Decimal(10, 2)
+  snapshot         Json    // Frozen item scores or attendance numbers
+
+  @@index([gradeId])
+}
+
+model GradeEvent {
+  id        String   @id @default(uuid())
+  gradeId   String
+  grade     Grade    @relation("GradeEvents", fields: [gradeId], references: [id], onDelete: Cascade)
+  action    String   // CREATED | SUBMITTED | WITHDRAWN | RESUBMITTED
+  userId    String
+  user      User     @relation("GradeEventUser", fields: [userId], references: [id], onDelete: Cascade)
+  details   Json?
+  createdAt DateTime @default(now())
+
+  @@index([gradeId])
+  @@index([action])
+  @@index([createdAt])
+  @@index([userId])
+}
+
+// SECTION 4: Enrollment Change Request Model
+
+enum ChangeRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model EnrollmentChangeRequest {
+  id               String           @id @default(uuid())
+  enrollmentId     String
+  enrollment       Enrollment       @relation("EnrollmentChangeRequests", fields: [enrollmentId], references: [id], onDelete: Cascade)
+  requestedBy      String
+  requestedValues  Json             // Proposed: startDate, endDate, days, hours
+  previousSnapshot Json             // Before snapshot
+  status           ChangeRequestStatus @default(PENDING)
+  rejectionReason  String?
+  reviewedBy       String?
+  reviewedAt       DateTime?
+  createdAt        DateTime         @default(now())
+
+  @@index([enrollmentId])
+  @@index([requestedBy])
+  @@index([status])
+  @@index([createdAt])
+  // Partial unique index added in migration: only one PENDING request per enrollment
 }

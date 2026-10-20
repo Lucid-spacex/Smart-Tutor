@@ -1,12 +1,16 @@
 import prisma from '../../config/database';
 import { AppError } from '../../middleware/error-handler.middleware';
 import { CloudinaryService } from '../../services/cloudinary.service';
+import { NotificationCoreService } from '../notifications/notification-core.service';
+import { NotificationCategory, NotificationType } from '@prisma/client';
 
 export class AssignmentsService {
   private cloudinaryService: CloudinaryService;
+  private notificationCore: NotificationCoreService;
 
   constructor() {
     this.cloudinaryService = new CloudinaryService();
+    this.notificationCore = new NotificationCoreService();
   }
 
   async createAssignment(tutorId: string, data: any) {
@@ -41,7 +45,7 @@ export class AssignmentsService {
       attachmentName = uploadResult.filename;
     }
 
-    return prisma.assignment.create({
+    const assignment = await prisma.assignment.create({
       data: {
         enrollmentId: data.enrollmentId,
         createdBy: tutorId,
@@ -62,6 +66,25 @@ export class AssignmentsService {
         },
       },
     });
+
+    // Notify student and parent of new assignment
+    const recipients = [assignment.enrollment.student.userId];
+    if (assignment.enrollment.student.parentId) {
+      recipients.push(assignment.enrollment.student.parentId);
+    }
+
+    await this.notificationCore.notify({
+      recipientIds: recipients,
+      type: 'ASSIGNMENT_POSTED' as NotificationType,
+      category: 'ASSIGNMENTS' as NotificationCategory,
+      title: 'New Assignment Posted',
+      body: `A new assignment "${assignment.title}" has been posted`,
+      entityType: 'Assignment',
+      entityId: assignment.id,
+      dedupeKey: `assignment-posted-${assignment.id}`,
+    });
+
+    return assignment;
   }
 
   async getAssignments(userId: string, userRole: string, filters?: { enrollmentId?: string; status?: string }) {
@@ -348,7 +371,7 @@ export class AssignmentsService {
       attachmentName = uploadResult.filename;
     }
 
-    return prisma.assignmentSubmission.create({
+    const submission = await prisma.assignmentSubmission.create({
       data: {
         assignmentId,
         studentId: student.id,
@@ -362,12 +385,29 @@ export class AssignmentsService {
             enrollment: {
               include: {
                 subject: true,
+                tutor: true,
               },
             },
           },
         },
       },
     });
+
+    // Notify tutor of assignment submission
+    if (submission.assignment.enrollment.tutorId) {
+      await this.notificationCore.notify({
+        recipientIds: [submission.assignment.enrollment.tutorId],
+        type: 'ASSIGNMENT_SUBMITTED' as NotificationType,
+        category: 'ASSIGNMENTS' as NotificationCategory,
+        title: 'Assignment Submitted',
+        body: `Assignment "${assignment.title}" has been submitted`,
+        entityType: 'Assignment',
+        entityId: assignmentId,
+        dedupeKey: `assignment-submitted-${submission.id}`,
+      });
+    }
+
+    return submission;
   }
 
   async provideFeedback(assignmentId: string, submissionId: string, tutorId: string, data: any) {

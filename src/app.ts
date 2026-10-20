@@ -51,6 +51,8 @@ app.use(express.urlencoded({ extended: true }));
 // this block runs, so there's no double-counting.
 //
 // Tier 3 (Loose / 300 req per 15 min) covers all GET requests.
+//
+// Notification SSE stream is exempt from Tier 3 with its own connection cap (max 3 per user).
 app.use((req, res, next) => {
   // Webhooks must always be reachable by Paystack / Zoom — skip entirely.
   if (req.path.startsWith('/webhooks') || req.path.startsWith('/api/webhooks')) {
@@ -58,6 +60,10 @@ app.use((req, res, next) => {
   }
   // Swagger docs and health checks skip rate limiting
   if (req.path.startsWith('/api-docs') || req.path === '/health') {
+    return next();
+  }
+  // Notification SSE stream has its own connection cap in the broadcaster
+  if (req.path.includes('/notifications/stream')) {
     return next();
   }
   // GET requests → Tier 3 (loose read limit).

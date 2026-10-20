@@ -3,12 +3,16 @@ import { UpdateSessionInput, GetSessionsQuery, CreateSessionInput, CreateTutorSe
 import { ZoomService } from '../../services/zoom.service';
 import { AppError } from '../../middleware/error-handler.middleware';
 import { logger } from '../../config/logger';
+import { NotificationCoreService } from '../notifications/notification-core.service';
+import { NotificationCategory, NotificationType } from '@prisma/client';
 
 export class SessionsService {
   private zoomService: ZoomService;
+  private notificationCore: NotificationCoreService;
 
   constructor() {
     this.zoomService = new ZoomService();
+    this.notificationCore = new NotificationCoreService();
   }
 
   // Tutor-only: Create a session for their own assigned student (single enrollment)
@@ -75,6 +79,18 @@ export class SessionsService {
       return newSession;
     });
 
+    // Notify admins of session creation by tutor
+    await this.notificationCore.notify({
+      recipientRole: 'ADMIN',
+      type: 'SESSION_CREATED' as NotificationType,
+      category: 'SESSIONS' as NotificationCategory,
+      title: 'Session Created',
+      body: `Tutor created session for ${enrollment.student.fullName}`,
+      entityType: 'Session',
+      entityId: session.id,
+      dedupeKey: `session-created-${session.id}`,
+    });
+
     return session;
   }
 
@@ -82,6 +98,17 @@ export class SessionsService {
   async rescheduleTutorSession(sessionId: string, tutorId: string, data: RescheduleTutorSessionInput) {
     const session = await prisma.session.findUnique({
       where: { id: sessionId },
+      include: {
+        participants: {
+          include: {
+            enrollment: {
+              include: {
+                student: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     if (!session) {
@@ -107,10 +134,44 @@ export class SessionsService {
       updateData.durationMinutes = data.durationMinutes;
     }
 
-    return prisma.session.update({
+    const updatedSession = await prisma.session.update({
       where: { id: sessionId },
       data: updateData,
     });
+
+    // Notify participants of rescheduled session
+    const recipients = [session.tutorId];
+    session.participants.forEach(p => {
+      recipients.push(p.enrollment.student.userId);
+      if (p.enrollment.student.parentId) {
+        recipients.push(p.enrollment.student.parentId);
+      }
+    });
+
+    await this.notificationCore.notify({
+      recipientIds: recipients,
+      type: 'SESSION_RESCHEDULED' as NotificationType,
+      category: 'SESSIONS' as NotificationCategory,
+      title: 'Session Rescheduled',
+      body: `Your session has been rescheduled to ${updatedSession.scheduledAt.toISOString()}`,
+      entityType: 'Session',
+      entityId: sessionId,
+      dedupeKey: `session-rescheduled-${sessionId}`,
+    });
+
+    // Notify admins of rescheduled session
+    await this.notificationCore.notify({
+      recipientRole: 'ADMIN',
+      type: 'SESSION_RESCHEDULED' as NotificationType,
+      category: 'SESSIONS' as NotificationCategory,
+      title: 'Session Rescheduled',
+      body: `Tutor rescheduled session for ${session.participants.map(p => p.enrollment.student.fullName).join(', ')}`,
+      entityType: 'Session',
+      entityId: sessionId,
+      dedupeKey: `session-rescheduled-admin-${sessionId}`,
+    });
+
+    return updatedSession;
   }
 
   // Admin-only: Create a new session with multiple participants
@@ -196,6 +257,18 @@ export class SessionsService {
       });
 
       return newSession;
+    });
+
+    // Notify admins of session creation by admin
+    await this.notificationCore.notify({
+      recipientRole: 'ADMIN',
+      type: 'SESSION_CREATED' as NotificationType,
+      category: 'SESSIONS' as NotificationCategory,
+      title: 'Session Created',
+      body: `Admin created session for ${enrollments.map(e => e.student.fullName).join(', ')}`,
+      entityType: 'Session',
+      entityId: session.id,
+      dedupeKey: `session-created-${session.id}`,
     });
 
     return session;
@@ -454,6 +527,17 @@ export class SessionsService {
   async deleteSession(id: string, tutorId: string) {
     const session = await prisma.session.findUnique({
       where: { id },
+      include: {
+        participants: {
+          include: {
+            enrollment: {
+              include: {
+                student: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     if (!session) {
@@ -477,6 +561,38 @@ export class SessionsService {
 
     await prisma.session.delete({
       where: { id },
+    });
+
+    // Notify participants of session cancellation
+    const recipients = [session.tutorId];
+    session.participants.forEach(p => {
+      recipients.push(p.enrollment.student.userId);
+      if (p.enrollment.student.parentId) {
+        recipients.push(p.enrollment.student.parentId);
+      }
+    });
+
+    await this.notificationCore.notify({
+      recipientIds: recipients,
+      type: 'SESSION_CANCELLED' as NotificationType,
+      category: 'SESSIONS' as NotificationCategory,
+      title: 'Session Cancelled',
+      body: `Your session scheduled for ${session.scheduledAt.toISOString()} has been cancelled`,
+      entityType: 'Session',
+      entityId: id,
+      dedupeKey: `session-cancelled-${id}`,
+    });
+
+    // Notify admins of session cancellation
+    await this.notificationCore.notify({
+      recipientRole: 'ADMIN',
+      type: 'SESSION_CANCELLED' as NotificationType,
+      category: 'SESSIONS' as NotificationCategory,
+      title: 'Session Cancelled',
+      body: `Tutor cancelled session for ${session.participants.map(p => p.enrollment.student.fullName).join(', ')}`,
+      entityType: 'Session',
+      entityId: id,
+      dedupeKey: `session-cancelled-admin-${id}`,
     });
   }
 }

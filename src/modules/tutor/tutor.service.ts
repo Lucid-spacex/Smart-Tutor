@@ -1,8 +1,15 @@
 import prisma from '../../config/database';
 import { CreateTutorProfileInput, UpdateAvailabilityInput } from './tutor.validation';
 import { AppError } from '../../middleware/error-handler.middleware';
+import { NotificationCoreService } from '../notifications/notification-core.service';
+import { NotificationCategory, NotificationType } from '@prisma/client';
 
 export class TutorService {
+  private notificationCore: NotificationCoreService;
+
+  constructor() {
+    this.notificationCore = new NotificationCoreService();
+  }
   async createTutorProfile(tutorId: string, data: CreateTutorProfileInput) {
     // Check if profile already exists
     const existingProfile = await prisma.tutorProfile.findUnique({
@@ -68,10 +75,16 @@ export class TutorService {
       });
 
       if (activeStudentCount > 0) {
-        // Import here to avoid circular dependency
-        const { NotificationsService } = require('../notifications/notifications.service');
-        const notificationsService = new NotificationsService();
-        await notificationsService.createTutorUnavailableNotification(tutorId, activeStudentCount);
+        await this.notificationCore.notify({
+          recipientRole: 'ADMIN',
+          type: 'TUTOR_UNAVAILABLE' as NotificationType,
+          category: 'USERS' as NotificationCategory,
+          title: 'Tutor Set to Unavailable',
+          body: `Tutor has set status to UNAVAILABLE while having ${activeStudentCount} active students`,
+          entityType: 'User',
+          entityId: tutorId,
+          dedupeKey: `tutor-unavailable-${tutorId}`,
+        });
       }
     }
 

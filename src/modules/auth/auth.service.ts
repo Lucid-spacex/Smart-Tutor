@@ -9,14 +9,18 @@ import { logger } from '../../config/logger';
 import { AppError } from '../../middleware/error-handler.middleware';
 import { CloudinaryService } from '../../services/cloudinary.service';
 import { TutorApplicationService } from '../tutor-application/tutor-application.service';
+import { NotificationCoreService } from '../notifications/notification-core.service';
+import { NotificationCategory, NotificationType } from '@prisma/client';
 
 export class AuthService {
   private cloudinaryService: CloudinaryService;
   private tutorApplicationService: TutorApplicationService;
+  private notificationCore: NotificationCoreService;
 
   constructor() {
     this.cloudinaryService = new CloudinaryService();
     this.tutorApplicationService = new TutorApplicationService();
+    this.notificationCore = new NotificationCoreService();
   }
 
   async register(data: RegisterData): Promise<{ message: string; userId: string; emailSent: boolean }> {
@@ -57,6 +61,18 @@ export class AuthService {
     // Send OTP via email
     const emailSent = await sendVerificationEmail(data.email, otp);
 
+    // Notify admins of new user registration (include role)
+    await this.notificationCore.notify({
+      recipientRole: 'ADMIN',
+      type: 'USER_REGISTERED' as NotificationType,
+      category: 'USERS' as NotificationCategory,
+      title: 'New User Registration',
+      body: `New ${data.role} registered: ${data.email}`,
+      entityType: 'User',
+      entityId: user.id,
+      dedupeKey: `user-registered-${user.id}`,
+    });
+
     logger.info({ email: data.email, emailSent }, 'User registered successfully');
 
     return {
@@ -95,6 +111,18 @@ export class AuthService {
     if (user.role === 'TUTOR') {
       await this.tutorApplicationService.createDraftApplication(user.id);
     }
+
+    // Notify admins of user verification (include role)
+    await this.notificationCore.notify({
+      recipientRole: 'ADMIN',
+      type: 'USER_VERIFIED' as NotificationType,
+      category: 'USERS' as NotificationCategory,
+      title: 'User Verified',
+      body: `${user.role} verified email: ${user.email}`,
+      entityType: 'User',
+      entityId: user.id,
+      dedupeKey: `user-verified-${user.id}`,
+    });
 
     return {
       message: 'Email verified successfully',

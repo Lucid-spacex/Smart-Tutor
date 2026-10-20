@@ -1,14 +1,15 @@
 import prisma from '../../config/database';
-import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationCoreService } from '../notifications/notification-core.service';
 import { AppError } from '../../middleware/error-handler.middleware';
 import { CloudinaryService } from '../../services/cloudinary.service';
+import { NotificationCategory, NotificationType } from '@prisma/client';
 
 export class GradesService {
-  private notificationsService: NotificationsService;
+  private notificationCore: NotificationCoreService;
   private cloudinaryService: CloudinaryService;
 
   constructor() {
-    this.notificationsService = new NotificationsService();
+    this.notificationCore = new NotificationCoreService();
     this.cloudinaryService = new CloudinaryService();
   }
 
@@ -102,6 +103,18 @@ export class GradesService {
           },
         },
       },
+    });
+
+    // Notify admins of grade submission
+    await this.notificationCore.notify({
+      recipientRole: 'ADMIN',
+      type: 'GRADE_SUBMITTED' as NotificationType,
+      category: 'GRADES' as NotificationCategory,
+      title: 'Grade Submitted for Approval',
+      body: `A grade for ${grade.enrollment.subject.name} has been submitted and awaits approval`,
+      entityType: 'Grade',
+      entityId: grade.id,
+      dedupeKey: `grade-submitted-${grade.id}`,
     });
 
     return this.enrichWithPercentage(grade);
@@ -311,8 +324,22 @@ export class GradesService {
       },
     });
 
-    // Create notification for student and parent
-    await this.notificationsService.createGradeApprovedNotification(gradeId);
+    // Notify student and parent of grade approval
+    const recipients = [updatedGrade.enrollment.student.userId];
+    if (updatedGrade.enrollment.student.parentId) {
+      recipients.push(updatedGrade.enrollment.student.parentId);
+    }
+
+    await this.notificationCore.notify({
+      recipientIds: recipients,
+      type: 'GRADE_APPROVED' as NotificationType,
+      category: 'GRADES' as NotificationCategory,
+      title: 'Grade Approved',
+      body: `Grade for ${updatedGrade.enrollment.subject.name} has been approved`,
+      entityType: 'Grade',
+      entityId: gradeId,
+      dedupeKey: `grade-approved-${gradeId}`,
+    });
 
     return this.enrichWithPercentage(updatedGrade);
   }
@@ -359,6 +386,18 @@ export class GradesService {
           },
         },
       },
+    });
+
+    // Notify tutor of grade rejection (only tutor, not student/parent)
+    await this.notificationCore.notify({
+      recipientIds: [updatedGrade.gradedBy],
+      type: 'GRADE_REJECTED' as NotificationType,
+      category: 'GRADES' as NotificationCategory,
+      title: 'Grade Rejected',
+      body: reason ? `Your submitted grade has been rejected. Reason: ${reason}` : 'Your submitted grade has been rejected. Please review and resubmit.',
+      entityType: 'Grade',
+      entityId: gradeId,
+      dedupeKey: `grade-rejected-${gradeId}`,
     });
 
     return this.enrichWithPercentage(updatedGrade);

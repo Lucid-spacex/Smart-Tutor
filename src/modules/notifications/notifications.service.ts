@@ -1,61 +1,51 @@
 import prisma from '../../config/database';
 import { sendNotificationEmail } from '../../utils/email.util';
 import { logger } from '../../config/logger';
+import { NotificationCoreService, NotifyOptions } from './notification-core.service';
+import { NotificationCategory, NotificationType } from '@prisma/client';
 
-interface NotifyOptions {
-  recipients: string[]; // Array of user IDs
-  type: string;
-  title: string;
-  message: string;
-  relatedType?: string;
-  relatedId?: string;
-  data?: any;
-  sendEmail?: boolean;
-}
-
+// Old service kept for backward compatibility - delegates to NotificationCoreService
 export class NotificationsService {
+  private notificationCore: NotificationCoreService;
+
+  constructor() {
+    this.notificationCore = new NotificationCoreService();
+  }
+
   /**
-   * Central notification method - best-effort, never fails the calling action
+   * Central notification method - delegates to NotificationCoreService
+   * Kept for backward compatibility
    */
-  async notify(options: NotifyOptions): Promise<void> {
-    const { recipients, type, title, message, relatedType, relatedId, data, sendEmail = false } = options;
+  async notify(options: {
+    recipients: string[];
+    type: string;
+    title: string;
+    message: string;
+    relatedType?: string;
+    relatedId?: string;
+    data?: any;
+    sendEmail?: boolean;
+  }): Promise<void> {
+    const { recipients, type, title, message, relatedType, relatedId, sendEmail = false } = options;
 
-    // Avoid duplicates for the same event and recipient
-    const deduplicationKey = relatedId ? `${type}-${relatedId}` : type;
+    // Map old field names to new ones
+    const notifyOptions: NotifyOptions = {
+      recipientIds: recipients,
+      type: type as NotificationType,
+      category: this.mapTypeToCategory(type as NotificationType),
+      title,
+      body: message,
+      entityType: relatedType,
+      entityId: relatedId,
+      dedupeKey: relatedId ? `${type}-${relatedId}` : undefined,
+    };
 
-    for (const userId of recipients) {
-      try {
-        // Check for duplicate notification in last 24 hours
-        const existing = await prisma.notification.findFirst({
-          where: {
-            userId,
-            type: type as any,
-            relatedId,
-            createdAt: {
-              gte: new Date(Date.now() - 24 * 60 * 60 * 1000), // 24 hours ago
-            },
-          },
-        });
+    await this.notificationCore.notify(notifyOptions);
 
-        if (existing) {
-          logger.debug({ userId, type, relatedId }, 'Duplicate notification skipped');
-          continue;
-        }
-
-        await prisma.notification.create({
-          data: {
-            userId,
-            type: type as any,
-            title,
-            message,
-            relatedType,
-            relatedId,
-            data: data || {},
-          },
-        });
-
-        // Send email if requested
-        if (sendEmail) {
+    // Send email if requested (email functionality kept separate)
+    if (sendEmail) {
+      for (const userId of recipients) {
+        try {
           const user = await prisma.user.findUnique({
             where: { id: userId },
             select: { email: true, fullName: true },
@@ -64,12 +54,61 @@ export class NotificationsService {
           if (user?.email && user.fullName) {
             await sendNotificationEmail(user.email, user.fullName, title, message);
           }
+        } catch (error) {
+          logger.error({ error, userId }, 'Failed to send notification email');
         }
-      } catch (error) {
-        // Best-effort: log error but don't throw
-        logger.error({ error, userId, type }, 'Failed to create notification');
       }
     }
+  }
+
+  /**
+   * Map notification type to category
+   */
+  private mapTypeToCategory(type: NotificationType): NotificationCategory {
+    const categoryMap: Record<NotificationType, NotificationCategory> = {
+      ASSIGNMENT_DUE_SOON: 'ASSIGNMENTS',
+      ASSIGNMENT_OVERDUE: 'ASSIGNMENTS',
+      GRADE_APPROVED: 'GRADES',
+      COMPLAINT_RESOLVED: 'COMPLAINTS',
+      GENERAL: 'USERS',
+      PRICING_DRIFT_ALERT: 'PRICING',
+      TUTOR_ASSIGNED: 'USERS',
+      STUDENT_ASSIGNED: 'USERS',
+      ENROLLMENT_AWAITING_TUTOR: 'ENROLLMENTS',
+      PAYMENT_SUCCESS: 'PAYMENTS',
+      PAYMENT_FAILED: 'PAYMENTS',
+      PAYMENT_EXPIRED: 'PAYMENTS',
+      ENROLLMENT_ACTIVATED: 'ENROLLMENTS',
+      SESSION_SCHEDULED: 'SESSIONS',
+      SESSION_RESCHEDULED: 'SESSIONS',
+      SESSION_CANCELLED: 'SESSIONS',
+      SESSION_REMINDER: 'SESSIONS',
+      ASSIGNMENT_POSTED: 'ASSIGNMENTS',
+      ASSIGNMENT_SUBMITTED: 'ASSIGNMENTS',
+      ASSIGNMENT_REVIEWED: 'ASSIGNMENTS',
+      GRADE_SUBMITTED: 'GRADES',
+      GRADE_REJECTED: 'GRADES',
+      NEW_TUTOR_APPLICATION: 'USERS',
+      TUTOR_APPROVED: 'USERS',
+      TUTOR_REJECTED: 'USERS',
+      PRICE_UPDATED: 'PRICING',
+      TUTOR_UNAVAILABLE: 'USERS',
+      NEW_MESSAGE: 'MESSAGES',
+      ACCOUNT_SUSPENDED: 'USERS',
+      ACCOUNT_REACTIVATED: 'USERS',
+      USER_REGISTERED: 'USERS',
+      USER_VERIFIED: 'USERS',
+      ENROLLMENT_CREATED: 'ENROLLMENTS',
+      SESSION_CREATED: 'SESSIONS',
+      SESSION_MISSED: 'SESSIONS',
+      RECORDING_AVAILABLE: 'SESSIONS',
+      QUIZ_COMPLETED: 'QUIZZES',
+      ENROLLMENT_CHANGE_SUBMITTED: 'ENROLLMENTS',
+      ENROLLMENT_CHANGE_APPROVED: 'ENROLLMENTS',
+      ENROLLMENT_CHANGE_REJECTED: 'ENROLLMENTS',
+    };
+
+    return categoryMap[type] || 'USERS';
   }
 
   async getNotifications(userId: string, filters: { unreadOnly?: boolean; type?: string; page?: number; limit?: number } = {}) {
@@ -78,11 +117,10 @@ export class NotificationsService {
 
     const where: any = {
       userId,
-      deletedAt: null,
     };
 
     if (unreadOnly) {
-      where.readAt = null;
+      where.isRead = false;
     }
 
     if (type) {
@@ -113,8 +151,7 @@ export class NotificationsService {
     const count = await prisma.notification.count({
       where: {
         userId,
-        readAt: null,
-        deletedAt: null,
+        isRead: false,
       },
     });
 
@@ -122,33 +159,11 @@ export class NotificationsService {
   }
 
   async markAsRead(notificationId: string, userId: string) {
-    const notification = await prisma.notification.findUnique({
-      where: { id: notificationId },
-    });
-
-    if (!notification) {
-      throw new Error('Notification not found');
-    }
-
-    if (notification.userId !== userId) {
-      throw new Error('Not authorized to mark this notification as read');
-    }
-
-    return prisma.notification.update({
-      where: { id: notificationId },
-      data: { readAt: new Date() },
-    });
+    return this.notificationCore.markAsRead(notificationId, userId);
   }
 
   async markAllAsRead(userId: string) {
-    return prisma.notification.updateMany({
-      where: {
-        userId,
-        readAt: null,
-        deletedAt: null,
-      },
-      data: { readAt: new Date() },
-    });
+    return this.notificationCore.markAllAsRead(userId);
   }
 
   async notifyAdmins(type: string, data: { title: string; message: string; relatedType?: string; relatedId?: string }) {
@@ -163,15 +178,13 @@ export class NotificationsService {
   }
 
   async createNotification(userId: string, type: string, data: { title: string; message: string; relatedType?: string; relatedId?: string }) {
-    await prisma.notification.create({
-      data: {
-        userId,
-        type: type as any,
-        title: data.title,
-        message: data.message,
-        relatedType: data.relatedType,
-        relatedId: data.relatedId,
-      },
+    await this.notify({
+      recipients: [userId],
+      type,
+      title: data.title,
+      message: data.message,
+      relatedType: data.relatedType,
+      relatedId: data.relatedId,
     });
   }
 
@@ -188,9 +201,9 @@ export class NotificationsService {
       throw new Error('Not authorized to delete this notification');
     }
 
-    return prisma.notification.update({
+    // New schema doesn't have deletedAt - just delete the row
+    return prisma.notification.delete({
       where: { id: notificationId },
-      data: { deletedAt: new Date() },
     });
   }
 
@@ -200,11 +213,11 @@ export class NotificationsService {
 
     const result = await prisma.notification.deleteMany({
       where: {
+        isRead: true,
         readAt: {
           not: null,
           lte: ninetyDaysAgo,
         },
-        deletedAt: null,
       },
     });
 
@@ -819,8 +832,8 @@ export class NotificationsService {
       where: {
         userId: recipientId,
         type: 'NEW_MESSAGE',
-        relatedId: threadId,
-        readAt: null,
+        entityId: threadId,
+        isRead: false,
       },
     });
 

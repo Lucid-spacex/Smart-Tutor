@@ -1,24 +1,23 @@
 import { Router } from 'express';
-import { NotificationsController } from './notifications.controller';
+import { NotificationController } from './notification.controller';
+import { NotificationSSEController } from './notification-sse.controller';
 import { authenticate } from '../../middleware/auth.middleware';
-import { validateUUID } from '../../middleware/uuid-validation.middleware';
+import { validate } from '../../middleware/validation.middleware';
+import { markByEntityAsReadSchema } from './notifications.validation';
 
 const router = Router();
-const notificationsController = new NotificationsController();
+const notificationController = new NotificationController();
+const notificationSSEController = new NotificationSSEController();
 
-// Authenticated users can view their own notifications
-router.get('/', authenticate, notificationsController.getNotifications);
+// Notification endpoints (exempt from Tier 3 limiter - handled in app.ts)
+router.get('/unread-count', authenticate, notificationController.getUnreadCount);
+router.get('/', authenticate, notificationController.getNotifications);
+router.patch('/:id/read', authenticate, notificationController.markAsRead);
+router.patch('/read-all', authenticate, notificationController.markAllAsRead);
+router.patch('/read-by-entity', authenticate, validate(markByEntityAsReadSchema), notificationController.markByEntityAsRead);
 
-// Get unread count (lightweight endpoint for polling)
-router.get('/unread-count', authenticate, notificationsController.getUnreadCount);
-
-// Mark notification as read
-router.patch('/:id/read', authenticate, validateUUID('id'), notificationsController.markAsRead);
-
-// Mark all notifications as read
-router.patch('/read-all', authenticate, notificationsController.markAllAsRead);
-
-// Delete notification (soft delete)
-router.delete('/:id', authenticate, validateUUID('id'), notificationsController.deleteNotification);
+// SSE endpoints (exempt from Tier 3 limiter with own connection cap - handled in app.ts)
+router.post('/stream-ticket', authenticate, notificationSSEController.createStreamTicket);
+router.get('/stream', notificationSSEController.streamNotifications);
 
 export default router;
