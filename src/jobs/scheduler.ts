@@ -2,9 +2,9 @@ import cron from 'node-cron';
 import { runParentInactivityCheck } from './inactivity-check.job';
 import { runAssignmentDueNotifications } from './assignment-due.job';
 import { runExchangeRateCheck } from './exchange-rate-check.job';
-import { runZoomRecordingSync } from './zoom-recording-sync.job';
 import { runNotificationCleanup } from './notification-cleanup.job';
 import { runClassRemindersJob } from './class-reminders.job';
+import { runGoogleRecordingSync } from './google-recording-sync.job';
 import { logger } from '../config/logger';
 
 export function initializeScheduler(): void {
@@ -45,13 +45,13 @@ export function initializeScheduler(): void {
     }
   });
 
-  // 4. Hourly - Zoom recording sync (polling fallback)
+  // 4. Hourly - Google Meet recording sync (polling for recordings)
   cron.schedule('0 * * * *', async () => {
-    logger.info('Running scheduled job: Zoom Recording Sync');
+    logger.info('Running scheduled job: Google Meet Recording Sync');
     try {
-      await runZoomRecordingSync();
+      await runGoogleRecordingSync();
     } catch (error) {
-      logger.error({ error }, 'Error in Zoom recording sync job');
+      logger.error({ error }, 'Error in Google Meet recording sync job');
     }
   });
 

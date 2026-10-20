@@ -1,17 +1,17 @@
 import prisma from '../../config/database';
 import { UpdateSessionInput, GetSessionsQuery, CreateSessionInput, CreateTutorSessionInput, RescheduleSessionInput, RescheduleTutorSessionInput } from './sessions.validation';
-import { ZoomService } from '../../services/zoom.service';
+import { GoogleCalendarProvider } from '../meetings/google-calendar.provider';
 import { AppError } from '../../middleware/error-handler.middleware';
 import { logger } from '../../config/logger';
 import { NotificationCoreService } from '../notifications/notification-core.service';
 import { NotificationCategory, NotificationType } from '@prisma/client';
 
 export class SessionsService {
-  private zoomService: ZoomService;
+  private meetingProvider: GoogleCalendarProvider;
   private notificationCore: NotificationCoreService;
 
   constructor() {
-    this.zoomService = new ZoomService();
+    this.meetingProvider = new GoogleCalendarProvider();
     this.notificationCore = new NotificationCoreService();
   }
 
@@ -36,21 +36,23 @@ export class SessionsService {
 
     // Create session with single participant
     const session = await prisma.$transaction(async (tx) => {
-      // Auto-create Zoom meeting (with fallback for test environment)
-      let zoomLink: string | null = null;
-      let zoomMeetingId: string | null = null;
+      // Auto-create Google Meet meeting (with fallback for test environment)
+      let googleMeetLink: string | null = null;
+      let googleEventId: string | null = null;
 
       try {
-        const zoomMeeting = await this.zoomService.createMeeting(
-          new Date(data.scheduledAt),
-          data.durationMinutes
+        const meeting = await this.meetingProvider.createMeeting(
+          data.scheduledAt,
+          data.durationMinutes,
+          `Session with ${enrollment.student.fullName} - ${enrollment.subject.name}`,
+          `Tutoring session for ${enrollment.subject.name}`
         );
-        zoomLink = zoomMeeting.zoomLink;
-        zoomMeetingId = zoomMeeting.zoomMeetingId;
+        googleMeetLink = meeting.meetingUrl;
+        googleEventId = meeting.eventId;
       } catch (error) {
-        // In test environment, allow session creation without Zoom
+        // In test environment, allow session creation without Google Meet
         if (process.env.NODE_ENV === 'test') {
-          logger.warn({ error }, 'Zoom meeting creation failed in test environment, proceeding without Zoom');
+          logger.warn({ error }, 'Google Meet creation failed in test environment, proceeding without Google Meet');
         } else {
           throw error;
         }
@@ -62,8 +64,8 @@ export class SessionsService {
           createdBy: tutorId, // Track that this session was created by the tutor
           scheduledAt: new Date(data.scheduledAt),
           durationMinutes: data.durationMinutes,
-          zoomLink,
-          zoomMeetingId,
+          googleMeetLink,
+          googleEventId,
           status: 'SCHEDULED',
         },
       });
@@ -125,8 +127,24 @@ export class SessionsService {
       throw new AppError(400, 'Can only reschedule scheduled sessions');
     }
 
+    const newScheduledAt = new Date(data.scheduledAt);
+    const newDuration = data.durationMinutes !== undefined ? data.durationMinutes : session.durationMinutes;
+
+    // Update Google Meet event if exists
+    if (session.googleEventId) {
+      try {
+        await this.meetingProvider.rescheduleMeeting(
+          session.googleEventId,
+          newScheduledAt.toISOString(),
+          newDuration
+        );
+      } catch (error) {
+        logger.warn({ error, sessionId }, 'Failed to reschedule Google Meet event');
+      }
+    }
+
     const updateData: any = {
-      scheduledAt: new Date(data.scheduledAt),
+      scheduledAt: newScheduledAt,
     };
 
     // Allow updating duration if provided
@@ -554,9 +572,13 @@ export class SessionsService {
       throw new AppError(400, 'Can only delete scheduled sessions');
     }
 
-    // Cancel the Zoom meeting if it exists
-    if (session.zoomMeetingId) {
-      await this.zoomService.deleteMeeting(session.zoomMeetingId);
+    // Delete the Google Calendar event if it exists
+    if (session.googleEventId) {
+      try {
+        await this.meetingProvider.deleteMeeting(session.googleEventId);
+      } catch (error) {
+        logger.warn({ error, sessionId: id }, 'Failed to delete Google Calendar event');
+      }
     }
 
     await prisma.session.delete({
@@ -594,5 +616,62 @@ export class SessionsService {
       entityId: id,
       dedupeKey: `session-cancelled-admin-${id}`,
     });
+  }
+
+  /**
+   * Get session recording
+   * Authorizes: student's parent, assigned tutor, admin, students per existing rules
+   */
+  async getSessionRecording(sessionId: string, userId: string, userRole: string): Promise<string | null> {
+    const session = await prisma.session.findUnique({
+      where: { id: sessionId },
+      include: {
+        participants: {
+          include: {
+            enrollment: {
+              include: {
+                student: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!session) {
+      throw new AppError(404, 'Session not found');
+    }
+
+    // Authorization check
+    if (userRole === 'ADMIN') {
+      // Admins can access all recordings
+    } else if (userRole === 'TUTOR') {
+      // Tutors can access recordings for their assigned students
+      const isAssigned = session.participants.some(p => p.enrollment.tutorId === userId);
+      if (!isAssigned) {
+        throw new AppError(403, 'Not authorized to access this recording');
+      }
+    } else if (userRole === 'PARENT') {
+      // Parents can access recordings for their children
+      const isParent = session.participants.some(p => p.enrollment.student.parentId === userId);
+      if (!isParent) {
+        throw new AppError(403, 'Not authorized to access this recording');
+      }
+    } else if (userRole === 'STUDENT') {
+      // Students can access recordings for their own sessions
+      const isStudent = session.participants.some(p => p.enrollment.student.userId === userId);
+      if (!isStudent) {
+        throw new AppError(403, 'Not authorized to access this recording');
+      }
+    } else {
+      throw new AppError(403, 'Not authorized to access this recording');
+    }
+
+    // Get recording from Google Calendar provider
+    if (session.googleEventId) {
+      return await this.meetingProvider.getRecording(session.googleEventId);
+    }
+
+    return null;
   }
 }

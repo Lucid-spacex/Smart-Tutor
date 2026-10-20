@@ -64,16 +64,16 @@
 - [ ] Run build and tests
 
 ## SECTION 5: Google Meet
-- [ ] Create MeetingProvider interface
-- [ ] Implement Google Calendar service
-- [ ] Update Session creation to use Google Meet
-- [ ] Update Session reschedule to update Google Meet
-- [ ] Update Session deletion to remove Google Meet
-- [ ] Implement hourly recording poll job
-- [ ] GET /sessions/:id/recording
-- [ ] Remove /webhooks/zoom
-- [ ] Remove ZOOM_* usage from active code
-- [ ] Remove Zoom jobs from active code
+- [x] Create MeetingProvider interface
+- [x] Implement Google Calendar service
+- [x] Update Session creation to use Google Meet
+- [x] Update Session reschedule to update Google Meet
+- [x] Update Session deletion to remove Google Meet
+- [x] Implement hourly recording poll job
+- [x] GET /sessions/:id/recording
+- [x] Remove /webhooks/zoom
+- [x] Remove ZOOM_* usage from active code
+- [x] Remove Zoom jobs from active code
 - [ ] Run build and tests
 
 ## SECTION 6: Docs and Tests

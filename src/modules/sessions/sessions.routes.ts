@@ -14,4 +14,7 @@ router.get('/', authenticate, validateQuery(getSessionsQuerySchema), sessionsCon
 // Tutor access
 router.patch('/:id', authenticate, requireRole('TUTOR'), validateUUID('id'), validate(updateSessionSchema), sessionsController.updateSession);
 
+// Recording access (all authenticated users with proper authorization)
+router.get('/:id/recording', authenticate, validateUUID('id'), sessionsController.getRecording);
+
 export default router;

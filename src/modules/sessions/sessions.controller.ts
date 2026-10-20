@@ -89,5 +89,24 @@ export class SessionsController {
     }
   };
 
+  // Get session recording
+  getRecording = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const userId = req.user?.userId;
+      const userRole = req.user?.role;
+
+      if (!userId || !userRole) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id } = req.params;
+      const recording = await this.sessionsService.getSessionRecording(id, userId, userRole);
+      res.status(200).json({ recordingUrl: recording });
+    } catch (error) {
+      next(error);
+    }
+  };
+
 
 }
