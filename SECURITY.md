@@ -187,7 +187,14 @@ The platform enforces communication isolation via the single `canMessage(senderI
 - **Parent Inactivity Job**: Daily runner identifies `PARENT` accounts active > 7 days with 0 child enrollments and sets `status = SUSPENDED`.
 - **Assignment Due Alerts**: Daily runner creates notifications for pending assignments due within 48 hours or overdue, with built-in deduplication.
 - **Exchange Rate Monitoring**: Daily runner fetches current USD→NGN rate, computes pricing drift for all tiers and overrides, and creates admin notifications if drift exceeds threshold.
-- **Zoom Recording Sync**: Hourly runner polls Zoom API for completed sessions without recordings (fallback if webhook unavailable).
+- **Class Reminders**: Every 15 minutes, the class reminders job checks for upcoming sessions and sends notifications:
+  - 24 hours before: CLASS_NEEDS_SCHEDULING to tutor if no session scheduled
+  - 2 hours before: CLASS_NEEDS_SCHEDULING to tutor if no session scheduled
+  - 1 hour before: CLASS_UNSCHEDULED to admin if still unscheduled
+  - After slot passes: CLASS_MISSED to admin if no session was created
+  - 30 minutes before: CLASS_REMINDER to tutor if session exists
+- **Notification Cleanup**: Daily job deletes notifications older than 90 days to prevent database bloat
+- **Google Meet Recording Poll**: Hourly runner polls Google Calendar API for completed sessions without recordings (fallback if webhook unavailable)
 
 ---
 
@@ -221,18 +228,17 @@ Students are otherwise fully read-only, but quiz mode provides a **deliberate, n
 
 ---
 
-## 11. Zoom Recording Security
+## 11. Google Meet Recording Security
 
 ### Recording Sync Architecture:
-- **Webhook-First**: Preferred approach—Zoom `recording.completed` webhook triggers immediate recording URL storage. Webhook signature verified via HMAC before processing.
-- **Polling Fallback**: Hourly job checks completed sessions without recordings and polls Zoom API if webhook setup isn't feasible.
-- **No Video Rehosting**: Only the recording URL is stored. Videos remain hosted on Zoom's infrastructure. The platform links out to Zoom's hosted recording URL surfaced in the UI.
+- **Polling Only**: Hourly job checks completed sessions without recordings and polls Google Calendar API to fetch recording URLs.
+- **No Video Rehosting**: Only the recording URL is stored. Videos remain hosted on Google's infrastructure. The platform links out to Google's hosted recording URL surfaced in the UI.
 
 ### Security Rules:
-- **Webhook Signature Verification**: Zoom webhook signatures are verified using `ZOOM_WEBHOOK_SECRET` via HMAC before trusting any payload.
-- **Meeting ID Tracking**: Sessions store `zoomMeetingId` for recording lookup. This is set by admin when creating sessions.
+- **OAuth2 Authentication**: Google Calendar API uses OAuth2 with service account credentials. Credentials are stored securely in environment variables (`GOOGLE_CLIENT_EMAIL`, `GOOGLE_PRIVATE_KEY`, `GOOGLE_CALENDAR_ID`).
+- **Meeting ID Tracking**: Sessions store `googleEventId` for recording lookup. This is set automatically when creating sessions.
 - **No Unauthorized Recording Access**: Recording URLs are included in session responses for completed sessions to authorized users (student's parent, assigned tutor, admin).
-- **Rate Limiting**: Zoom API polling is batched (50 sessions per run) to avoid overwhelming the API or triggering rate limits.
+- **Rate Limiting**: Google Calendar API polling is batched (50 sessions per run) to avoid overwhelming the API or triggering rate limits.
 
 ---
 
@@ -243,12 +249,12 @@ Students are otherwise fully read-only, but quiz mode provides a **deliberate, n
 ### Updated Session Scheduling Rules:
 - **Tutors**: Can create and reschedule sessions for their own assigned students only (single enrollment sessions)
 - **Admins**: Retain full scheduling power across all enrollments, including shared/multi-student sessions
-- **Ownership Checks**: 
+- **Ownership Checks**:
   - `POST /tutor/sessions` requires the `enrollmentId` to belong to the requesting tutor
   - `PATCH /tutor/sessions/:id/reschedule` requires the session's `tutorId` to match the requesting tutor
   - Tutors cannot create sessions for students they don't teach
   - Tutors cannot reschedule sessions created by other tutors or admins
-- **Zoom Integration**: Tutor-created sessions auto-generate Zoom meetings using the same logic as admin-created sessions
+- **Google Meet Integration**: Tutor-created sessions auto-generate Google Meet events using the same logic as admin-created sessions
 - **Scope**: Tutor-created sessions are single-student only. Multi-student shared sessions remain admin-only
 
 ### Security Considerations:
@@ -1005,6 +1011,93 @@ Type '{ connect: { id: string; }; }' is not assignable to type 'undefined'.
 
 ---
 
+## 28. Grading Workflow & Scored Items (2026-10-21)
+
+**Implementation Notice**: As of 2026-10-21, the grading system has been refactored to separate scored items (quiz attempts, assignments) from final grades, providing better audit trails and admin oversight.
+
+### ScoredItem Model:
+- **Purpose**: Tracks individual scored activities (quiz attempts, assignment submissions) before they're compiled into final grades
+- **Types**: QUIZ, ASSIGNMENT, ATTENDANCE, PARTICIPATION
+- **Locking**: ScoredItems can be locked to a specific grade to prevent double-counting
+- **Double-counting prevention**: Unique constraint on `(enrollmentId, sourceType, sourceId)` prevents item reuse
+
+### Grade Model:
+- **Status lifecycle**: DRAFT → PENDING_APPROVAL → APPROVED/REJECTED
+- **Components**: Grades consist of weighted components (quizzes, assignments, attendance)
+- **Weight validation**: Component weights must total exactly 100, each weight 0-100
+- **Server-side scoring**: Final score is computed server-side from component scores, never client-supplied
+- **Override protection**: If `finalScore` differs from `computedScore`, `overrideReason` is required
+
+### Grade Workflow:
+1. **Tutor creates DRAFT grade**: `POST /grades` with components (scoredItems, weights, optional attendance rate)
+2. **Tutor submits for approval**: `POST /grades/:id/submit` → status becomes PENDING_APPROVAL
+3. **Admin reviews**: `GET /admin/grades` lists pending grades
+4. **Admin approves**: `PATCH /admin/grades/:id/approve` → status becomes APPROVED, visible to student/parent
+5. **Admin rejects**: `PATCH /admin/grades/:id/reject` → status becomes REJECTED, notifies tutor only
+6. **Tutor resubmits**: Can edit REJECTED grades and resubmit
+
+### Security Rules:
+- **Weights validation**: Weights must total exactly 100, enforced at both schema and service levels
+- **Override reason required**: Setting `finalScore` requires `overrideReason` (min 10 characters)
+- **PENDING_APPROVAL immutability**: Tutors cannot edit grades once submitted (only withdraw to DRAFT)
+- **Visibility enforcement**: Students and parents never see DRAFT, PENDING_APPROVAL, or REJECTED grades
+- **Admin studentCode exclusion**: Admin grade responses explicitly exclude `studentCode`
+- **Tutor ownership**: Tutors can only grade their own assigned students
+- **Performance endpoint filtering**: Performance endpoints count only APPROVED grades
+
+### Quiz Integration:
+- **Server-side scoring**: Quiz correctness and points are computed server-side, never trusted from client
+- **Answer leak prevention**: Students never receive `correctOptionIndex` in quiz questions
+- **ScoredItem creation**: Quiz completion creates ScoredItem, not Grade
+- **Attempt isolation**: Students can only access their own quiz attempts
+
+---
+
+## 29. Enrollment Change Requests (2026-10-21)
+
+**Implementation Notice**: As of 2026-10-21, enrollment changes (frequency, schedule, pricing) go through a formal change request workflow for audit and approval.
+
+### Change Request Model:
+- **Status lifecycle**: PENDING → APPROVED/REJECTED/CANCELLED
+- **Requested values**: Stores proposed changes in JSON (`requestedValues`)
+- **Previous snapshot**: Stores original values for rollback/comparison
+- **One pending per enrollment**: Unique constraint prevents multiple pending requests
+
+### Change Request Workflow:
+1. **Parent submits request**: `POST /enrollments/:id/change-requests` with proposed changes
+2. **Admin reviews**: `GET /admin/change-requests` lists pending requests
+3. **Admin approves**: `PATCH /admin/change-requests/:id/approve` → applies changes, flags sessions
+4. **Admin rejects**: `PATCH /admin/change-requests/:id/reject` → with reason, notifies parent
+5. **Parent cancels**: `PATCH /change-requests/:id/cancel` → while still PENDING
+
+### Security Rules:
+- **Enrollment immutability before approval**: Enrollment is never modified until approval
+- **One pending request**: Only one PENDING change request per enrollment allowed
+- **Transaction safety**: Approval is a single transaction that updates enrollment and flags sessions
+- **Session handling**: Approved schedule changes flag affected sessions instead of deleting them
+- **Notification rules**: Approval notifies parent, student, and tutor; rejection notifies only parent
+
+---
+
+## 30. Class Reminders (2026-10-21)
+
+**Implementation Notice**: As of 2026-10-21, class reminders are sent via a scheduled job that runs every 15 minutes to ensure timely notifications.
+
+### Reminder Schedule:
+- **24 hours before**: CLASS_NEEDS_SCHEDULING sent to tutor if no session scheduled
+- **2 hours before**: CLASS_NEEDS_SCHEDULING sent to tutor if no session scheduled
+- **1 hour before**: CLASS_UNSCHEDULED sent to admin if still unscheduled
+- **After slot passes**: CLASS_MISSED sent to admin if no session was created
+- **30 minutes before**: CLASS_REMINDER sent to tutor if session exists
+
+### Security Rules:
+- **Deduplication**: Reminders use dedupeKey to prevent duplicate notifications
+- **Tutor-only scheduling**: CLASS_NEEDS_SCHEDULING only sent to assigned tutor
+- **Admin escalation**: CLASS_UNSCHEDULED and CLASS_MISSED only sent to admins
+- **Timezone awareness**: Reminders scheduled based on slot times in UTC
+
+---
+
 ## 27. API Endpoint Summary for Frontend (2026-10-16)
 
 **Frontend Reference**: Complete list of all documented API endpoints organized by module.
@@ -1029,6 +1122,15 @@ Type '{ connect: { id: string; }; }' is not assignable to type 'undefined'.
 - `GET /me/notifications` - Get notifications
 - `PATCH /me/notifications/:id/read` - Mark notification as read
 - `GET /me/unread-count` - Get unread notification count
+
+### Notifications (`/notifications`)
+- `GET /notifications` - Get notifications with filters
+- `GET /notifications/unread-count` - Get unread count by category
+- `PATCH /notifications/:id/read` - Mark notification as read
+- `PATCH /notifications/read-all` - Mark all notifications as read
+- `PATCH /notifications/read-by-entity` - Mark notifications by entity as read
+- `POST /notifications/stream-ticket` - Get SSE stream ticket
+- `GET /notifications/stream` - SSE notification stream
 
 ### Students (`/students`)
 - `POST /students` - Create student (generates credentials)
@@ -1150,6 +1252,28 @@ Type '{ connect: { id: string; }; }' is not assignable to type 'undefined'.
 - `PATCH /assignments/:id` - Update assignment
 - `DELETE /assignments/:id` - Delete assignment
 - `POST /assignments/:id/submit` - Submit assignment
+
+### Grades (`/grades`, `/admin/grades`)
+- `POST /grades` - Create draft grade
+- `PATCH /grades/:id` - Update grade
+- `DELETE /grades/:id` - Delete grade
+- `POST /grades/:id/submit` - Submit grade for approval
+- `POST /grades/:id/withdraw` - Withdraw grade to draft
+- `GET /grades/:id/preview` - Preview grade
+- `GET /admin/grades` - List grades (admin)
+- `GET /admin/grades/:id` - Get grade details (admin)
+- `PATCH /admin/grades/:id/approve` - Approve grade
+- `PATCH /admin/grades/:id/reject` - Reject grade
+- `POST /admin/grades/bulk-approve` - Bulk approve grades
+
+### Enrollment Change Requests (`/enrollments/:id/change-requests`, `/admin/change-requests`)
+- `POST /enrollments/:id/change-requests` - Create change request
+- `GET /enrollments/:id/change-requests` - List change requests for enrollment
+- `PATCH /change-requests/:id/cancel` - Cancel change request
+- `GET /admin/change-requests` - List all change requests (admin)
+- `GET /admin/change-requests/:id` - Get change request details (admin)
+- `PATCH /admin/change-requests/:id/approve` - Approve change request
+- `PATCH /admin/change-requests/:id/reject` - Reject change request
 
 ### Grades (`/grades`)
 - `POST /grades` - Submit grade
