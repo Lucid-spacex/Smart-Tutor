@@ -42,7 +42,7 @@ This table documents all notification events that fire through the centralized `
 | ASSIGNMENT_DUE_SOON | assignment-due.job.ts | execute() | Student, Parent | Assignment due soon (job) |
 | ASSIGNMENT_OVERDUE | assignment-due.job.ts | execute() | Student, Parent | Assignment overdue (job) |
 | PRICING_DRIFT_ALERT | exchange-rate-check.job.ts | execute() | Admins | Tier pricing drift (job) |
-| PRICING_DRIFT_ALERT | exchange-rate-check.job.ts | execute() | Admins | Subject pricing drift (job) |
+| PRICING_DRIFT_ALERT | exchange-rate-check.job.ts | execute() | Admins | Enrollment pricing drift (job) |
 
 ## Legacy notify() calls in notifications.service.ts
 

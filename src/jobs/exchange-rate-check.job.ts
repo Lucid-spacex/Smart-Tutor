@@ -1,13 +1,14 @@
 import prisma from '../config/database';
 import { logger } from '../config/logger';
-import { NotificationsService } from '../modules/notifications/notifications.service';
+import { NotificationCoreService } from '../modules/notifications/notification-core.service';
+import { NotificationCategory, NotificationType } from '@prisma/client';
 
 /**
  * Daily job: Exchange rate monitoring and drift alert
  * Fetches current USD→NGN rate, checks for pricing drift, and alerts admin if threshold exceeded
  */
 export async function runExchangeRateCheck(): Promise<{ rateFetched: boolean; alertsCreated: number }> {
-  const notificationsService = new NotificationsService();
+  const notificationCore = new NotificationCoreService();
   const driftThreshold = parseFloat(process.env.PRICING_DRIFT_THRESHOLD_PERCENT || '7');
   
   try {
@@ -61,21 +62,16 @@ export async function runExchangeRateCheck(): Promise<{ rateFetched: boolean; al
       const driftPercentage = Math.abs((impliedRate - marketRate) / marketRate) * 100;
 
       if (driftPercentage > driftThreshold) {
-        // Find admin users
-        const admins = await prisma.user.findMany({
-          where: { role: 'ADMIN' },
+        await notificationCore.notify({
+          recipientRole: 'ADMIN',
+          type: 'PRICING_DRIFT_ALERT' as NotificationType,
+          category: 'PRICING' as NotificationCategory,
+          title: 'Pricing Drift Alert',
+          body: `Pricing tier ${tier.gradeBandTier} is now ${driftPercentage.toFixed(1)}% off the current market exchange rate (${marketRate.toFixed(2)}). Current implied rate: ${impliedRate.toFixed(2)}. Consider reviewing pricing.`,
+          entityType: 'PricingTier',
+          entityId: tier.id,
+          dedupeKey: `pricing-drift-tier-${tier.id}`,
         });
-
-        for (const admin of admins) {
-          await notificationsService.notify({
-            recipients: [admin.id],
-            type: 'PRICING_DRIFT_ALERT',
-            title: 'Pricing Drift Alert',
-            message: `Pricing tier ${tier.gradeBandTier} is now ${driftPercentage.toFixed(1)}% off the current market exchange rate (${marketRate.toFixed(2)}). Current implied rate: ${impliedRate.toFixed(2)}. Consider reviewing pricing.`,
-            relatedType: 'PRICING_TIER',
-            relatedId: tier.id,
-          });
-        }
 
         alertsCreated++;
         logger.warn({ gradeBandTier: tier.gradeBandTier, driftPercentage }, 'Pricing drift alert created');
@@ -102,20 +98,16 @@ export async function runExchangeRateCheck(): Promise<{ rateFetched: boolean; al
       const driftPercentage = Math.abs((impliedRate - marketRate) / marketRate) * 100;
 
       if (driftPercentage > driftThreshold) {
-        const admins = await prisma.user.findMany({
-          where: { role: 'ADMIN' },
+        await notificationCore.notify({
+          recipientRole: 'ADMIN',
+          type: 'PRICING_DRIFT_ALERT' as NotificationType,
+          category: 'PRICING' as NotificationCategory,
+          title: 'Pricing Drift Alert',
+          body: `Enrollment override for student ${enrollment.student.fullName} (${enrollment.student.user.studentCode}) is now ${driftPercentage.toFixed(1)}% off the current market exchange rate (${marketRate.toFixed(2)}). Current implied rate: ${impliedRate.toFixed(2)}. Consider reviewing pricing.`,
+          entityType: 'Enrollment',
+          entityId: enrollment.id,
+          dedupeKey: `pricing-drift-enrollment-${enrollment.id}`,
         });
-
-        for (const admin of admins) {
-          await notificationsService.notify({
-            recipients: [admin.id],
-            type: 'PRICING_DRIFT_ALERT',
-            title: 'Pricing Drift Alert',
-            message: `Enrollment override for student ${enrollment.student.fullName} (${enrollment.student.user.studentCode}) is now ${driftPercentage.toFixed(1)}% off the current market exchange rate (${marketRate.toFixed(2)}). Current implied rate: ${impliedRate.toFixed(2)}. Consider reviewing pricing.`,
-            relatedType: 'ENROLLMENT',
-            relatedId: enrollment.id,
-          });
-        }
 
         alertsCreated++;
         logger.warn({ enrollmentId: enrollment.id, studentCode: enrollment.student.user.studentCode, driftPercentage }, 'Enrollment pricing drift alert created');
