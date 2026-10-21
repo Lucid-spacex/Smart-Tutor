@@ -91,13 +91,13 @@ export class NotificationCoreService {
     }
   ): Promise<void> {
     try {
-      // Check if user exists and is active
+      // Check if user exists and is active/approved
       const user = await prisma.user.findUnique({
         where: { id: userId },
         select: { id: true, role: true, status: true },
       });
 
-      if (!user || user.status !== 'ACTIVE') {
+      if (!user || (user.status !== 'ACTIVE' && user.status !== 'APPROVED')) {
         return; // Skip inactive or non-existent users
       }
 
