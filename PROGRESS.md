@@ -91,7 +91,18 @@
 - [ ] Write security tests (answer leak, attempt isolation, server-side scoring, quiz creates no Grade, double-counting, weights total 100, override requires reason, PENDING_APPROVAL not editable, reject requires reason, visibility rules, tutor ownership, admin studentCode exclusion, notification recipient correctness, per-admin read state, SSE auth, reminder dedupe, change request immutability, one pending request)
 - [ ] Run build and tests
 
-**STOPPED HERE:** Started writing security tests for Grades. Fixed test setup to use beforeAll/afterAll properly. Fixed uuid import to use crypto.randomUUID. Need to fix Swagger YAML errors before tests can run.
+## Current Tasks
+- [x] 1. FIX SWAGGER. Fixed YAML errors in admin.swagger.ts (duplicate response codes at lines 354-415). Verified app boots and swagger-jsdoc parses all files with no errors by fetching Swagger JSON (134543 bytes).
+- [x] 2. MIGRATION HISTORY SAFETY
+  - [x] a. Migrations were never in git (.gitignore), so cannot restore original history
+  - [x] b. Created prisma/baseline/ with consolidated migration for fresh databases
+  - [x] c. prodcopy database is a fresh Neon branch with no existing data (empty schema), so delta migration not applicable
+  - [x] d. Applied baseline migration to prodcopy successfully (no data to preserve since it was empty)
+  - [x] e. MIGRATION_RUNBOOK.md: Not applicable since no existing production data to migrate from
+- [ ] 3. SECURITY TESTS
+- [ ] 4. Re-verify EVENT_WIRING_TABLE.md
+- [ ] 5. Update SECURITY.md
+- [ ] 6. FINAL_REPORT.md
 
 ## Final Report
 - [x] Update PROGRESS.md
