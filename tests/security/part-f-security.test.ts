@@ -3,6 +3,7 @@ import app from '../../src/app';
 import { prisma } from '../setup';
 import bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
+import { NotificationCategory, NotificationType } from '@prisma/client';
 
 describe('Part F Security Tests', () => {
   let adminToken: string;
@@ -842,15 +843,143 @@ describe('Part F Security Tests', () => {
   });
 
   describe('Price Update Security', () => {
+    beforeEach(async () => {
+      // Clean up any existing notifications from previous tests
+      await prisma.notification.deleteMany({ where: { type: 'PRICE_UPDATED' as NotificationType } });
+    });
+
     test('Price update reaches only affected parents', async () => {
-      // This would require testing the actual price update notification logic
-      // For now, we verify the sensitiveData filtering in notify()
-      // (already verified in notification-core.service.ts)
+      // This test verifies the notification recipient logic
+      // In a real scenario, price updates would notify parents with enrollments in the affected subject/grade band
+      // For this test, we verify that the notification-core.service.ts correctly filters recipients by role
+
+      const { NotificationCoreService } = require('../../src/modules/notifications/notification-core.service');
+      const notificationCore = new NotificationCoreService();
+
+      // Try to send price notification to student (should be blocked by role check)
+      await notificationCore.notify({
+        recipientIds: [studentId],
+        type: 'PRICE_UPDATED' as NotificationType,
+        category: 'PRICING' as NotificationCategory,
+        title: 'Price Updated',
+        body: 'The price for Math is now ₦500,000 / $500',
+        entityType: 'Enrollment',
+        entityId: enrollmentId,
+        dedupeKey: `price-test-${enrollmentId}`,
+        sensitiveData: { prices: true },
+      });
+
+      // Verify student did NOT receive notification (blocked by sensitiveData.prices)
+      const studentNotifications = await prisma.notification.findMany({
+        where: { userId: studentId, type: 'PRICE_UPDATED' as NotificationType },
+      });
+      expect(studentNotifications.length).toBe(0);
+
+      // Try to send price notification to tutor (should be blocked by role check)
+      await notificationCore.notify({
+        recipientIds: [tutorId],
+        type: 'PRICE_UPDATED' as NotificationType,
+        category: 'PRICING' as NotificationCategory,
+        title: 'Price Updated',
+        body: 'The price for Math is now ₦500,000 / $500',
+        entityType: 'Enrollment',
+        entityId: enrollmentId,
+        dedupeKey: `price-test-2-${enrollmentId}`,
+        sensitiveData: { prices: true },
+      });
+
+      // Verify tutor did NOT receive notification (blocked by sensitiveData.prices)
+      const tutorNotifications = await prisma.notification.findMany({
+        where: { userId: tutorId, type: 'PRICE_UPDATED' as NotificationType },
+      });
+      expect(tutorNotifications.length).toBe(0);
+
+      // Send price notification to parent (should succeed)
+      await notificationCore.notify({
+        recipientIds: [parentId],
+        type: 'PRICE_UPDATED' as NotificationType,
+        category: 'PRICING' as NotificationCategory,
+        title: 'Price Updated',
+        body: 'The price for Math is now ₦500,000 / $500',
+        entityType: 'Enrollment',
+        entityId: enrollmentId,
+        dedupeKey: `price-test-3-${enrollmentId}`,
+        sensitiveData: { prices: true },
+      });
+
+      // Verify parent received notification
+      const parentNotifications = await prisma.notification.findMany({
+        where: { userId: parentId, type: 'PRICE_UPDATED' as NotificationType },
+      });
+      expect(parentNotifications.length).toBeGreaterThan(0);
+
+      // Verify notification body contains price (parent should see it)
+      expect(parentNotifications[0].body).toContain('₦500,000');
+      expect(parentNotifications[0].body).toContain('$500');
     });
 
     test('Notification body never leaks prices to students/tutors', async () => {
-      // Verify the notification-core.service.ts filters prices
-      // This is already verified in the code review
+      const { NotificationCoreService } = require('../../src/modules/notifications/notification-core.service');
+      const notificationCore = new NotificationCoreService();
+
+      // Send notification with price to student with sensitiveData.prices
+      await notificationCore.notify({
+        recipientIds: [studentId],
+        type: 'PRICE_UPDATED' as NotificationType,
+        category: 'PRICING' as NotificationCategory,
+        title: 'Price Updated',
+        body: 'The price for Math is now ₦500,000 / $500',
+        entityType: 'Enrollment',
+        entityId: enrollmentId,
+        dedupeKey: `price-leak-test-${enrollmentId}`,
+        sensitiveData: { prices: true },
+      });
+
+      // Verify notification was NOT created for student (blocked by sensitiveData filter)
+      const studentNotifications = await prisma.notification.findMany({
+        where: { userId: studentId, type: 'PRICE_UPDATED' as NotificationType },
+      });
+      expect(studentNotifications.length).toBe(0);
+
+      // Send notification with price to tutor with sensitiveData.prices
+      await notificationCore.notify({
+        recipientIds: [tutorId],
+        type: 'PRICE_UPDATED' as NotificationType,
+        category: 'PRICING' as NotificationCategory,
+        title: 'Price Updated',
+        body: 'The price for Math is now ₦500,000 / $500',
+        entityType: 'Enrollment',
+        entityId: enrollmentId,
+        dedupeKey: `price-leak-test-2-${enrollmentId}`,
+        sensitiveData: { prices: true },
+      });
+
+      // Verify notification was NOT created for tutor (blocked by sensitiveData filter)
+      const tutorNotifications = await prisma.notification.findMany({
+        where: { userId: tutorId, type: 'PRICE_UPDATED' as NotificationType },
+      });
+      expect(tutorNotifications.length).toBe(0);
+
+      // Send notification with price to parent (should succeed)
+      await notificationCore.notify({
+        recipientIds: [parentId],
+        type: 'PRICE_UPDATED' as NotificationType,
+        category: 'PRICING' as NotificationCategory,
+        title: 'Price Updated',
+        body: 'The price for Math is now ₦500,000 / $500',
+        entityType: 'Enrollment',
+        entityId: enrollmentId,
+        dedupeKey: `price-leak-test-3-${enrollmentId}`,
+        sensitiveData: { prices: true },
+      });
+
+      // Verify parent received notification with price in body
+      const parentNotifications = await prisma.notification.findMany({
+        where: { userId: parentId, type: 'PRICE_UPDATED' as NotificationType },
+      });
+      expect(parentNotifications.length).toBeGreaterThan(0);
+      expect(parentNotifications[0].body).toContain('₦500,000');
+      expect(parentNotifications[0].body).toContain('$500');
     });
   });
 
