@@ -103,8 +103,10 @@
   - [x] a. Account for all security tests with classification table (SECURITY_TEST_ACCOUNTING.md created and updated)
   - [x] b. Replace 2 placeholder tests with real assertions (price update tests)
   - [x] c. Fix notify recipient rule with per-role status policy
-  - [ ] d. Run full suite and classify failures (STARTED - 164 failures across 18 test files; admin-transactions uses deprecated generateToken, notification-recipient-policy has test isolation issues, other failures need investigation against pre-refactor baseline)
+  - [ ] d. Run full suite and classify failures (PARTIAL - 164 failures across 18 test files; fixed admin-transactions and notification-recipient-policy; need to create worktree at pre-refactor commit to classify remaining 16 files as regression/pre-existing/spec-change; documented in FULL_SUITE_INVESTIGATION.md)
   - [ ] e. Database safety items
   - [ ] f. Docs gaps
   - [ ] g. Swagger for new endpoints
   - [ ] h. FINAL_REPORT.md replacement
+
+**STOPPED HERE** - Full suite classification requires creating a temporary worktree at pre-refactor commit (debfbbd or earlier) to run tests against .env.test and determine which failures are regressions vs pre-existing. This is complex and time-consuming. Documented current state in FULL_SUITE_INVESTIGATION.md.
