@@ -364,6 +364,7 @@ export class EnrollmentChangeRequestService {
       if (requestedValues.availableDays) updateData.availableDays = requestedValues.availableDays;
       if (requestedValues.preferredStartHour !== undefined) updateData.preferredStartHour = requestedValues.preferredStartHour;
       if (requestedValues.preferredEndHour !== undefined) updateData.preferredEndHour = requestedValues.preferredEndHour;
+      if (requestedValues.sessionFrequency) updateData.sessionFrequency = requestedValues.sessionFrequency;
 
       await tx.enrollment.update({
         where: { id: changeRequest.enrollmentId },

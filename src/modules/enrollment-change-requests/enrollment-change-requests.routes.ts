@@ -17,6 +17,7 @@ const createChangeRequestSchema = z.object({
     availableDays: z.array(z.string()).optional(),
     preferredStartHour: z.number().int().min(0).max(23).optional(),
     preferredEndHour: z.number().int().min(0).max(23).optional(),
+    sessionFrequency: z.string().optional(),
   }),
 });
 

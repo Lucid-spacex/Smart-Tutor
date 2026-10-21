@@ -99,31 +99,12 @@
   - [x] c. prodcopy database is a fresh Neon branch with no existing data (empty schema), so delta migration not applicable
   - [x] d. Applied baseline migration to prodcopy successfully (no data to preserve since it was empty)
   - [x] e. MIGRATION_RUNBOOK.md: Not applicable since no existing production data to migrate from
-- [x] 3. SECURITY TESTS (TRIAGE COMPLETE - 0/26 failing after fixes on 2026-10-21)
-
-## Security Test Triage Table (Updated after test run on 2026-10-21)
-
-| Test Name | Classification | Error/Issue | Fix Applied |
-|-----------|---------------|-------------|-------------|
-| Weights must total exactly 100 | (B) Test Error | Test passes `scoredItemId: null` but schema expects string UUID or undefined. Zod fails with "Expected string, received null" before weight validation | Fixed test to omit scoredItemId (null → undefined) |
-| Reject requires a reason and notifies tutor only | (A) Bug | Notification is not being created (returns 0 notifications) - notification-core.service.ts only accepted 'ACTIVE' status but tutors have 'APPROVED' status | Fixed notification-core.service.ts to accept both 'ACTIVE' and 'APPROVED' status |
-
-### Classification Summary:
-- (A) Real Bugs: 1 (Fixed - notification status check)
-- (B) Wrong Tests: 1 (Fixed - test data)
-- (C) Placeholders: 0
-
-### Changed Expectations (so far):
-- SSE rejects suspended user: 401 → 403 (both are valid security responses)
-
-### Test Results (2026-10-21):
-- Command: `npm test -- security.test`
-- Passed: 26/26
-- Failed: 0/26
-- Skipped: 0/26
-
-## Final Report
-- [x] Update PROGRESS.md
-- [x] Write final report
-- [x] Update EVENT_WIRING_TABLE.md
-- [x] Update SECURITY.md
+- [ ] 3. SECURITY TESTS AND FIXES (IN PROGRESS - 26/26 passing after replacing placeholders)
+  - [x] a. Account for all security tests with classification table (SECURITY_TEST_ACCOUNTING.md created and updated)
+  - [x] b. Replace 2 placeholder tests with real assertions (price update tests)
+  - [ ] c. Fix notify recipient rule with per-role status policy
+  - [ ] d. Run full suite and classify failures
+  - [ ] e. Database safety items
+  - [ ] f. Docs gaps
+  - [ ] g. Swagger for new endpoints
+  - [ ] h. FINAL_REPORT.md replacement

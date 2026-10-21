@@ -7,6 +7,7 @@ import { authenticate, requireRole } from '../../middleware/auth.middleware';
 import { validateUUID } from '../../middleware/uuid-validation.middleware';
 import { updateTutorVettingSchema, assignTutorSchema, getTutorsQuerySchema, getStudentsQuerySchema, updateEnrollmentPricingSchema, updateEnrollmentPricingOverrideSchema, createSessionSchema, rescheduleSessionSchema, getUnmatchedEnrollmentsQuerySchema, createSubjectSchema, updateSubjectSchema, upsertSubjectPriceSchema, suspendUserSchema, addPaymentNoteSchema, getSessionsQuerySchema } from './admin.validation';
 import { resolveComplaintSchema } from '../complaints/complaints.validation';
+import { rejectGradeSchema } from '../grades/grades.validation';
 
 const router = Router();
 const adminController = new AdminController();
@@ -84,7 +85,7 @@ router.get('/grades/pending', authenticate, requireRole('ADMIN'), adminControlle
 // Email diagnostics
 router.get('/diagnostics/email', authenticate, requireRole('ADMIN'), adminController.getEmailDiagnostics);
 router.patch('/grades/:id/approve', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.approveGrade);
-router.patch('/grades/:id/reject', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.rejectGrade);
+router.patch('/grades/:id/reject', authenticate, requireRole('ADMIN'), validateUUID('id'), validate(rejectGradeSchema), adminController.rejectGrade);
 
 // Complaints Resolution
 router.patch('/complaints/:id/resolve', authenticate, requireRole('ADMIN'), validateUUID('id'), validate(resolveComplaintSchema), complaintsController.resolveComplaint);

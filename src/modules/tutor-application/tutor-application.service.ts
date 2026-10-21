@@ -3,6 +3,7 @@ import { logger } from '../../config/logger';
 import { v2 as cloudinary } from 'cloudinary';
 import { config } from '../../config/env.config';
 import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationCoreService } from '../notifications/notification-core.service';
 import { sendNotificationEmail } from '../../utils/email.util';
 
 // Configure Cloudinary
@@ -14,9 +15,11 @@ cloudinary.config({
 
 export class TutorApplicationService {
   private notificationsService: NotificationsService;
+  private notificationCoreService: NotificationCoreService;
 
   constructor() {
     this.notificationsService = new NotificationsService();
+    this.notificationCoreService = new NotificationCoreService();
   }
 
   /**
@@ -326,12 +329,24 @@ export class TutorApplicationService {
       },
     });
 
-    // Notify all admins
+    // Notify all admins (use legacy service for admin notifications)
     await this.notificationsService.notifyAdmins('NEW_TUTOR_APPLICATION', {
       title: 'New Tutor Application',
       message: `A new tutor application has been submitted by ${application.user.fullName}`,
       relatedType: 'TUTOR_APPLICATION',
       relatedId: application.id,
+    });
+
+    // Notify the tutor about their own application submission (use core service with flag)
+    await this.notificationCoreService.notify({
+      recipientIds: [userId],
+      type: 'GENERAL',
+      category: 'USERS',
+      title: 'Application Submitted',
+      body: 'Your tutor application has been submitted successfully. We will review it and get back to you soon.',
+      entityType: 'TutorApplication',
+      entityId: application.id,
+      isTutorApplicationNotification: true,
     });
 
     // Send confirmation email to applicant
@@ -422,17 +437,17 @@ export class TutorApplicationService {
         });
       }
 
-      // Notify tutor
-      await this.notificationsService.createNotification(
-        userId,
-        'TUTOR_APPROVED',
-        {
-          title: 'Application Approved',
-          message: 'Congratulations! Your tutor application has been approved. You can now set your availability and start tutoring.',
-          relatedType: 'USER',
-          relatedId: userId,
-        }
-      );
+      // Notify tutor (use core service with flag)
+      await this.notificationCoreService.notify({
+        recipientIds: [userId],
+        type: 'TUTOR_APPROVED',
+        category: 'USERS',
+        title: 'Application Approved',
+        body: 'Congratulations! Your tutor application has been approved. You can now set your availability and start tutoring.',
+        entityType: 'TutorApplication',
+        entityId: application.id,
+        isTutorApplicationNotification: true,
+      });
 
       await sendNotificationEmail(
         application.user.email!,
@@ -449,17 +464,17 @@ export class TutorApplicationService {
         data: { status: 'REJECTED' },
       });
 
-      // Notify tutor
-      await this.notificationsService.createNotification(
-        userId,
-        'TUTOR_REJECTED',
-        {
-          title: 'Application Rejected',
-          message: `Your tutor application was not approved. Reason: ${reason}`,
-          relatedType: 'USER',
-          relatedId: userId,
-        }
-      );
+      // Notify tutor (use core service with flag)
+      await this.notificationCoreService.notify({
+        recipientIds: [userId],
+        type: 'TUTOR_REJECTED',
+        category: 'USERS',
+        title: 'Application Rejected',
+        body: `Your tutor application was not approved. Reason: ${reason}`,
+        entityType: 'TutorApplication',
+        entityId: application.id,
+        isTutorApplicationNotification: true,
+      });
 
       await sendNotificationEmail(
         application.user.email!,

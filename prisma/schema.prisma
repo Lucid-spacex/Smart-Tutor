@@ -77,6 +77,7 @@ enum ActualGrade {
 // actual weekly session counts. Migration maps all existing rows to TWICE_WEEKLY
 // as the default (see migration SQL in prisma/migrations/).
 enum SessionFrequency {
+  WEEKLY
   TWICE_WEEKLY
   THRICE_WEEKLY
   FIVE_TIMES_WEEKLY
@@ -720,7 +721,7 @@ enum NotificationCategory {
   SESSIONS
   MESSAGES
   COMPLAINTS
-  ENROLLMENTS
+  ENROLLMENT
   PAYMENTS
   GRADES
   PRICING
@@ -757,6 +758,9 @@ enum NotificationType {
   TUTOR_REJECTED
   PRICE_UPDATED
   TUTOR_UNAVAILABLE
+  CHANGE_REQUEST_SUBMITTED
+  CHANGE_REQUEST_APPROVED
+  CHANGE_REQUEST_REJECTED
   NEW_MESSAGE
   ACCOUNT_SUSPENDED
   ACCOUNT_REACTIVATED

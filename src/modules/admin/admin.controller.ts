@@ -353,6 +353,13 @@ export class AdminController {
 
       const { id } = req.params;
       const { reason } = req.body;
+
+      // Validate reason is required
+      if (!reason || typeof reason !== 'string' || reason.trim().length === 0) {
+        res.status(400).json({ error: 'Rejection reason is required' });
+        return;
+      }
+
       const grade = await this.adminService.rejectGrade(id, adminId, reason);
       res.status(200).json(grade);
     } catch (error) {

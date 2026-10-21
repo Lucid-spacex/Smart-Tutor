@@ -20,6 +20,8 @@ export interface NotifyOptions {
     unapprovedGrades?: boolean; // Should not go to parents or students
     parentContact?: boolean; // Should not go to tutors
   };
+  // Whether this is a tutor application notification (allow PENDING_VETTING/REJECTED tutors)
+  isTutorApplicationNotification?: boolean;
 }
 
 export class NotificationCoreService {
@@ -28,7 +30,7 @@ export class NotificationCoreService {
    * Runs after the main transaction commits
    */
   async notify(options: NotifyOptions): Promise<void> {
-    const { recipientIds, recipientRole, type, category, title, body, entityType, entityId, dedupeKey, sensitiveData } = options;
+    const { recipientIds, recipientRole, type, category, title, body, entityType, entityId, dedupeKey, sensitiveData, isTutorApplicationNotification } = options;
 
     // Build recipient list
     let userIds: string[] = [];
@@ -54,7 +56,7 @@ export class NotificationCoreService {
     }
 
     // Create notifications in parallel with error handling
-    const promises = userIds.map(userId => 
+    const promises = userIds.map(userId =>
       this.createNotificationForUser(userId, {
         type,
         category,
@@ -64,6 +66,7 @@ export class NotificationCoreService {
         entityId,
         dedupeKey,
         sensitiveData,
+        isTutorApplicationNotification,
       })
     );
 
@@ -88,6 +91,7 @@ export class NotificationCoreService {
         unapprovedGrades?: boolean;
         parentContact?: boolean;
       };
+      isTutorApplicationNotification?: boolean;
     }
   ): Promise<void> {
     try {
@@ -97,8 +101,33 @@ export class NotificationCoreService {
         select: { id: true, role: true, status: true },
       });
 
-      if (!user || (user.status !== 'ACTIVE' && user.status !== 'APPROVED')) {
-        return; // Skip inactive or non-existent users
+      if (!user) {
+        return; // Skip non-existent users
+      }
+
+      // Per-role status policy:
+      // - ADMIN: Only ACTIVE
+      // - PARENT: Only ACTIVE
+      // - STUDENT: Only ACTIVE
+      // - TUTOR: ACTIVE or APPROVED (for normal notifications), but also PENDING_VETTING and REJECTED for their own application notifications
+      if (user.role === 'ADMIN' || user.role === 'PARENT' || user.role === 'STUDENT') {
+        if (user.status !== 'ACTIVE') {
+          return; // Skip inactive users
+        }
+      } else if (user.role === 'TUTOR') {
+        if (options.isTutorApplicationNotification) {
+          // Allow PENDING_VETTING and REJECTED tutors to receive their own application notifications
+          if (user.status !== 'ACTIVE' && user.status !== 'APPROVED' && user.status !== 'PENDING_VETTING' && user.status !== 'REJECTED') {
+            return; // Skip deactivated tutors (SUSPENDED, UNVERIFIED)
+          }
+        } else {
+          // For normal tutoring notifications, only ACTIVE and APPROVED tutors receive them
+          if (user.status !== 'ACTIVE' && user.status !== 'APPROVED') {
+            return; // Skip inactive or unapproved tutors
+          }
+        }
+      } else {
+        return; // Skip unknown roles
       }
 
       // Filter sensitive data based on user role

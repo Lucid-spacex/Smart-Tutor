@@ -233,8 +233,8 @@ export class PerformanceService {
     const grades = await prisma.grade.findMany({
       where,
       select: {
-        score: true,
-        maxScore: true,
+        computedScore: true,
+        finalScore: true,
       },
     });
 
@@ -246,8 +246,9 @@ export class PerformanceService {
     }
 
     const percentages = grades.map(g => {
-      const maxScore = Number(g.maxScore || 100);
-      return (Number(g.score) / maxScore) * 100;
+      // Use finalScore if set, otherwise use computedScore
+      const score = Number(g.finalScore || g.computedScore || 0);
+      return score;
     });
 
     const averagePercentage = percentages.reduce((sum, p) => sum + p, 0) / percentages.length;
@@ -285,7 +286,7 @@ export class PerformanceService {
 
         const grades = await prisma.grade.findMany({
           where,
-          select: { score: true, maxScore: true },
+          select: { computedScore: true, finalScore: true },
         });
 
         if (grades.length === 0) {
@@ -293,8 +294,8 @@ export class PerformanceService {
         }
 
         const percentages = grades.map(g => {
-          const maxScore = Number(g.maxScore || 100);
-          return (Number(g.score) / maxScore) * 100;
+          const score = Number(g.finalScore || g.computedScore || 0);
+          return score;
         });
 
         const averagePercentage = percentages.reduce((sum, p) => sum + p, 0) / percentages.length;
@@ -333,7 +334,7 @@ export class PerformanceService {
 
     const grades = await prisma.grade.findMany({
       where,
-      select: { score: true, maxScore: true, createdAt: true },
+      select: { computedScore: true, finalScore: true, createdAt: true },
       orderBy: { createdAt: 'asc' },
     });
 
@@ -348,7 +349,7 @@ export class PerformanceService {
     // Create buckets
     const buckets = new Map<string, { count: number; sum: number }>();
     const currentDate = new Date(fromDate);
-    
+
     while (currentDate <= toDate) {
       const bucketKey = currentDate.toISOString().split('T')[0];
       buckets.set(bucketKey, { count: 0, sum: 0 });
@@ -359,7 +360,7 @@ export class PerformanceService {
     grades.forEach(grade => {
       const gradeDate = new Date(grade.createdAt);
       const bucketKey = gradeDate.toISOString().split('T')[0];
-      const percentage = (Number(grade.score) / Number(grade.maxScore || 100)) * 100;
+      const percentage = Number(grade.finalScore || grade.computedScore || 0);
       
       if (buckets.has(bucketKey)) {
         const bucket = buckets.get(bucketKey)!;

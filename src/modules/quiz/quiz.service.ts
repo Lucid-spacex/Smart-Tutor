@@ -304,7 +304,7 @@ export class QuizService {
       data: {
         enrollmentId: attempt.assignment.enrollmentId,
         studentId: attempt.studentId,
-        tutorId: attempt.assignment.enrollment.tutorId || studentId, // If no tutor, self-scored
+        tutorId: attempt.assignment.enrollment.tutorId, // Quiz inherits tutor from enrollment
         type: 'QUIZ',
         sourceType: 'QuizAttempt',
         sourceId: attemptId,
