@@ -958,7 +958,7 @@ model ScoredItem {
   @@index([enrollmentId])
   @@index([gradeId])
   @@index([type])
-  @@index([sourceType, sourceId])
+  @@unique([sourceType, sourceId])
 }
 
 model GradeComponent {
