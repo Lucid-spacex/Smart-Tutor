@@ -300,6 +300,11 @@ export class QuizService {
     });
 
     // Create ScoredItem instead of Grade (quiz is an input, not a grade)
+    // ScoredItem requires tutorId to be non-null
+    if (!attempt.assignment.enrollment.tutorId) {
+      throw new Error('Cannot create ScoredItem for quiz: enrollment has no tutor assigned');
+    }
+
     const scoredItem = await prisma.scoredItem.create({
       data: {
         enrollmentId: attempt.assignment.enrollmentId,
