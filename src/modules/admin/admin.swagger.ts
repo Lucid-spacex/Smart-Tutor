@@ -351,68 +351,6 @@
  *         description: Not authorized - user is not an admin
  *       404:
  *         description: Tutor not found
- *                   format: uuid
- *                 fullName:
- *                   type: string
- *                 email:
- *                   type: string
- *                 phone:
- *                   type: string
- *                 status:
- *                   type: string
- *                 tutorProfile:
- *                   type: object
- *                   properties:
- *                     bio:
- *                       type: string
- *                     hourlyRate:
- *                       type: number
- *                     credentialsUrl:
- *                       type: string
- *                     availability:
- *                       type: object
- *                     availabilityStatus:
- *                       type: string
- *                       enum: [AVAILABLE, LIMITED, UNAVAILABLE]
- *                     maxStudents:
- *                       type: integer
- *                     tutorSubjects:
- *                       type: array
- *                       items:
- *                         type: object
- *                         properties:
- *                           subject:
- *                             type: object
- *                             properties:
- *                               id:
- *                                 type: string
- *                               name:
- *                                 type: string
- *                 metrics:
- *                   type: object
- *                   properties:
- *                     studentsCount:
- *                       type: integer
- *                     sessionsCompleted:
- *                       type: integer
- *                     sessionsMissed:
- *                       type: integer
- *                     sessionsCancelled:
- *                       type: integer
- *                     avgStudentGradePercentage:
- *                       type: number
- *                     avgStudentAttendanceRate:
- *                       type: number
- *                     reportsSubmitted:
- *                       type: integer
- *                     assignmentsCreated:
- *                       type: integer
- *       401:
- *         description: Not authenticated
- *       403:
- *         description: Not authorized - user is not an admin
- *       404:
- *         description: Tutor not found
  *
  * /admin/tutors/{id}/students:
  *   get:
