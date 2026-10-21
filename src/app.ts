@@ -35,6 +35,7 @@ import classRemindersRoutes from './modules/class-reminders/class-reminders.rout
 import { adminClassScheduleRouter } from './modules/class-reminders/class-reminders.routes';
 import enrollmentChangeRequestsRoutes from './modules/enrollment-change-requests/enrollment-change-requests.routes';
 import { adminChangeRequestsRouter } from './modules/enrollment-change-requests/enrollment-change-requests.routes';
+import scoredItemsRoutes from './modules/scored-items/scored-items.routes';
 import { initializeScheduler } from './jobs/scheduler';
 import { logger } from './config/logger';
 import { tier2WriteRateLimit, tier3ReadRateLimit } from './middleware/rate-limit.middleware';
@@ -59,7 +60,7 @@ app.use(express.urlencoded({ extended: true }));
 //
 // Notification SSE stream is exempt from Tier 3 with its own connection cap (max 3 per user).
 app.use((req, res, next) => {
-  // Webhooks must always be reachable by Paystack / Zoom — skip entirely.
+  // Webhooks must always be reachable by Paystack — skip entirely.
   if (req.path.startsWith('/webhooks') || req.path.startsWith('/api/webhooks')) {
     return next();
   }
@@ -162,6 +163,7 @@ const mountRoutes = (prefix: string = '') => {
   app.use(`${prefix}/webhooks`, webhooksRoutes);
   app.use(`${prefix}/quiz`, quizRoutes);
   app.use(`${prefix}/tutor`, classRemindersRoutes);
+  app.use(`${prefix}/tutor`, scoredItemsRoutes);
 };
 
 mountRoutes('/api');

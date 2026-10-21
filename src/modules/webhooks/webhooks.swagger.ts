@@ -1,10 +1,10 @@
 /**
  * @swagger
- * /webhooks/zoom:
+ * /webhooks/paystack:
  *   post:
- *     summary: Handle Zoom webhook events
+ *     summary: Handle Paystack webhook events
  *     tags: [Webhooks]
- *     description: Processes Zoom webhook events, primarily recording.completed events. Signature verified via HMAC.
+ *     description: Processes Paystack payment webhook events for payment status updates.
  *     requestBody:
  *       required: true
  *       content:
@@ -14,19 +14,17 @@
  *             properties:
  *               event:
  *                 type: string
- *                 example: recording.completed
- *               object:
+ *                 example: charge.success
+ *               data:
  *                 type: object
  *                 properties:
- *                   id:
+ *                   reference:
  *                     type: string
- *                     description: Zoom meeting ID
- *                   download_url:
+ *                     description: Payment reference
+ *                   status:
  *                     type: string
- *                     description: Recording download URL
+ *                     description: Payment status
  *     responses:
  *       200:
  *         description: Webhook processed successfully
- *       401:
- *         description: Invalid webhook signature
  */

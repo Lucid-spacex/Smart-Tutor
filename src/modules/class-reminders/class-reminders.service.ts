@@ -18,11 +18,10 @@ export class ClassRemindersService {
   async sendClassReminders() {
     const now = DateTime.now().toUTC();
 
-    // Get all ACTIVE, paid enrollments with assigned tutors
+    // Get all ACTIVE enrollments with assigned tutors
     const enrollments = await prisma.enrollment.findMany({
       where: {
         status: 'ACTIVE',
-        paymentStatus: 'PAID',
         tutorId: { not: null },
         deletedAt: null,
         tutor: {
@@ -33,19 +32,10 @@ export class ClassRemindersService {
         student: {
           include: {
             user: true,
-            parent: {
-              include: {
-                user: true,
-              },
-            },
           },
         },
         subject: true,
-        tutor: {
-          include: {
-            user: true,
-          },
-        },
+        tutor: true,
       },
     });
 
@@ -62,10 +52,8 @@ export class ClassRemindersService {
    * Process reminders for a single enrollment
    */
   private async processEnrollmentReminders(enrollment: any, now: DateTime) {
-    // Determine timezone: student, then parent, then UTC
-    const timezone = enrollment.student.user.timezone ||
-                    enrollment.student.parent?.user.timezone ||
-                    'UTC';
+    // Determine timezone: student, then UTC
+    const timezone = enrollment.student.user.timezone || 'UTC';
 
     // Compute the next expected slot from preferred days and hours
     const nextSlot = this.computeNextExpectedSlot(enrollment, timezone, now);
@@ -234,7 +222,6 @@ export class ClassRemindersService {
       where: {
         tutorId,
         status: 'ACTIVE',
-        paymentStatus: 'PAID',
         deletedAt: null,
       },
       include: {
@@ -242,13 +229,6 @@ export class ClassRemindersService {
           select: {
             id: true,
             fullName: true,
-            user: {
-              select: {
-                id: true,
-                fullName: true,
-                timezone: true,
-              },
-            },
           },
         },
         subject: true,
@@ -269,7 +249,7 @@ export class ClassRemindersService {
           gte: fromDate,
           lte: toDate,
         },
-        status: { in: ['SCHEDULED', 'NEEDS_SESSION'] },
+        status: 'SCHEDULED',
       },
       include: {
         participants: {
@@ -309,7 +289,7 @@ export class ClassRemindersService {
         id: session.id,
         scheduledAt: session.scheduledAt,
         status: session.status,
-        duration: session.duration,
+        durationMinutes: session.durationMinutes,
         googleMeetLink: session.googleMeetLink,
         enrollment: enrollment ? {
           id: enrollment.id,
@@ -373,12 +353,6 @@ export class ClassRemindersService {
                     select: {
                       id: true,
                       fullName: true,
-                      user: {
-                        select: {
-                          id: true,
-                          fullName: true,
-                        },
-                      },
                     },
                   },
                   subject: true,
@@ -386,12 +360,6 @@ export class ClassRemindersService {
                     select: {
                       id: true,
                       fullName: true,
-                      user: {
-                        select: {
-                          id: true,
-                          fullName: true,
-                        },
-                      },
                     },
                   },
                 },
@@ -415,7 +383,7 @@ export class ClassRemindersService {
           gte: new Date(),
           lte: new Date(Date.now() + 24 * 60 * 60 * 1000),
         },
-        status: 'UNSCHEDULED',
+        status: 'SCHEDULED',
       },
     });
 
@@ -428,7 +396,7 @@ export class ClassRemindersService {
           id: session.id,
           scheduledAt: session.scheduledAt,
           status: session.status,
-          duration: session.duration,
+          durationMinutes: session.durationMinutes,
           googleMeetLink: session.googleMeetLink,
           enrollment: enrollment ? {
             id: enrollment.id,

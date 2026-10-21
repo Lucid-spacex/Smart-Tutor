@@ -232,25 +232,25 @@ export class SessionsService {
 
     // Create session and participants in a transaction
     const session = await prisma.$transaction(async (tx) => {
-      // Auto-create Zoom meeting if not provided
-      let zoomLink = data.zoomLink;
-      let zoomMeetingId = data.zoomMeetingId;
+      // Auto-create Google Meet meeting (with fallback for test environment)
+      let googleMeetLink: string | null = null;
+      let googleEventId: string | null = null;
 
-      if (!zoomLink && !zoomMeetingId) {
-        try {
-          const zoomMeeting = await this.zoomService.createMeeting(
-            new Date(data.scheduledAt),
-            data.durationMinutes
-          );
-          zoomLink = zoomMeeting.zoomLink;
-          zoomMeetingId = zoomMeeting.zoomMeetingId;
-        } catch (error) {
-          // In test environment, allow session creation without Zoom
-          if (process.env.NODE_ENV === 'test') {
-            logger.warn({ error }, 'Zoom meeting creation failed in test environment, proceeding without Zoom');
-          } else {
-            throw error;
-          }
+      try {
+        const meeting = await this.meetingProvider.createMeeting(
+          data.scheduledAt,
+          data.durationMinutes,
+          `Session with ${enrollments.map(e => e.student.fullName).join(', ')}`,
+          `Tutoring session for ${enrollments.map(e => e.subject.name).join(', ')}`
+        );
+        googleMeetLink = meeting.meetingUrl;
+        googleEventId = meeting.eventId;
+      } catch (error) {
+        // In test environment, allow session creation without Google Meet
+        if (process.env.NODE_ENV === 'test') {
+          logger.warn({ error }, 'Google Meet creation failed in test environment, proceeding without Google Meet');
+        } else {
+          throw error;
         }
       }
 
@@ -260,8 +260,8 @@ export class SessionsService {
           createdBy: adminId, // Track that this session was created by admin
           scheduledAt: new Date(data.scheduledAt),
           durationMinutes: data.durationMinutes,
-          zoomLink,
-          zoomMeetingId,
+          googleMeetLink,
+          googleEventId,
           status: 'SCHEDULED',
         },
       });
@@ -292,7 +292,7 @@ export class SessionsService {
     return session;
   }
 
-  // Admin-only: Reschedule a session (change time or zoom link)
+  // Admin-only: Reschedule a session (change time or google meet link)
   async rescheduleSession(sessionId: string, data: RescheduleSessionInput) {
     const session = await prisma.session.findUnique({
       where: { id: sessionId },
@@ -311,8 +311,21 @@ export class SessionsService {
     if (data.scheduledAt) {
       updateData.scheduledAt = new Date(data.scheduledAt);
     }
-    if (data.zoomLink !== undefined) {
-      updateData.zoomLink = data.zoomLink;
+    if (data.googleMeetLink !== undefined) {
+      updateData.googleMeetLink = data.googleMeetLink;
+    }
+
+    // If time changed and there's a Google Calendar event, update it
+    if (data.scheduledAt && session.googleEventId) {
+      try {
+        await this.meetingProvider.rescheduleMeeting(
+          session.googleEventId,
+          data.scheduledAt,
+          session.durationMinutes
+        );
+      } catch (error) {
+        logger.warn({ error, sessionId }, 'Failed to update Google Calendar event, proceeding with database update');
+      }
     }
 
     return prisma.session.update({
@@ -452,7 +465,7 @@ export class SessionsService {
       throw new AppError(403, 'Not authorized to update this session');
     }
 
-    // SECURITY: Tutors cannot change scheduledAt or zoomLink
+    // SECURITY: Tutors cannot change scheduledAt or googleMeetLink
     // These are admin-only operations
     const allowedFields: any = {
       status: data.status !== undefined ? data.status : undefined,

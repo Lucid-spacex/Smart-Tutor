@@ -28,10 +28,4 @@ router.post('/sessions', authenticate, requireRole('TUTOR'), requireApprovedTuto
 router.patch('/sessions/:id/reschedule', authenticate, requireRole('TUTOR'), requireApprovedTutor, validateUUID('id'), validate(rescheduleTutorSessionSchema), tutorController.rescheduleTutorSession);
 router.delete('/sessions/:id', authenticate, requireRole('TUTOR'), requireApprovedTutor, validateUUID('id'), tutorController.deleteTutorSession);
 
-// /tutor/scored-items (tutor-only scored item management) - require approved tutor
-router.get('/students/:studentId/scored-items', authenticate, requireRole('TUTOR'), requireApprovedTutor, validateUUID('studentId'), tutorController.getStudentScoredItems);
-router.post('/scored-items', authenticate, requireRole('TUTOR'), requireApprovedTutor, validate(createScoredItemSchema), tutorController.createScoredItem);
-router.patch('/scored-items/:id', authenticate, requireRole('TUTOR'), requireApprovedTutor, validateUUID('id'), validate(updateScoredItemSchema), tutorController.updateScoredItem);
-router.delete('/scored-items/:id', authenticate, requireRole('TUTOR'), requireApprovedTutor, validateUUID('id'), tutorController.deleteScoredItem);
-
 export default router;

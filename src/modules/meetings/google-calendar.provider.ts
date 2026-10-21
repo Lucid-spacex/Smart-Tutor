@@ -8,13 +8,12 @@ export class GoogleCalendarProvider implements MeetingProvider {
 
   constructor() {
     // Initialize Google Calendar API with service account
-    const auth = new google.auth.JWT(
-      process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-      undefined,
-      process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-      ['https://www.googleapis.com/auth/calendar', 'https://www.googleapis.com/auth/drive.readonly'],
-      process.env.GOOGLE_ORGANIZER_EMAIL
-    );
+    const auth = new google.auth.JWT({
+      email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+      key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+      scopes: ['https://www.googleapis.com/auth/calendar', 'https://www.googleapis.com/auth/drive.readonly'],
+      subject: process.env.GOOGLE_ORGANIZER_EMAIL,
+    });
 
     this.calendar = google.calendar({ version: 'v3', auth });
     this.drive = google.drive({ version: 'v3', auth });

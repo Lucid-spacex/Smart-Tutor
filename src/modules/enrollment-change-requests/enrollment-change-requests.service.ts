@@ -28,6 +28,7 @@ export class EnrollmentChangeRequestService {
       where: { id: enrollmentId, deletedAt: null },
       include: {
         student: true,
+        subject: true,
       },
     });
 
@@ -261,12 +262,6 @@ export class EnrollmentChangeRequestService {
               select: {
                 id: true,
                 fullName: true,
-                user: {
-                  select: {
-                    id: true,
-                    fullName: true,
-                  },
-                },
               },
             },
           },
@@ -319,9 +314,9 @@ export class EnrollmentChangeRequestService {
       throw new AppError(400, 'Can only approve PENDING change requests');
     }
 
-    // Re-validate enrollment is still paid and active
-    if (changeRequest.enrollment.status !== 'ACTIVE' || changeRequest.enrollment.paymentStatus !== 'PAID') {
-      throw new AppError(400, 'Enrollment is no longer active or paid');
+    // Re-validate enrollment is still active
+    if (changeRequest.enrollment.status !== 'ACTIVE') {
+      throw new AppError(400, 'Enrollment is no longer active');
     }
 
     const requestedValues = changeRequest.requestedValues as any;

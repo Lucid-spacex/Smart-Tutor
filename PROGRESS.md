@@ -8,7 +8,8 @@
 - [x] Rename migration folder to 14-digit timestamp
 - [x] Add ScoredItem database constraint for one active grade
 - [x] Add Notification unique (userId, dedupeKey) where dedupeKey not null
-- [x] Verify migration SQL is safe for existing data
+- [x] Consolidate all migrations into single 20261020120000 migration
+- [x] Verify migration works on fresh database with migrate deploy
 
 ## SECTION 1: Notification Core
 - [x] Implement centralized notify() helper
@@ -74,6 +75,10 @@
 - [x] Remove /webhooks/zoom
 - [x] Remove ZOOM_* usage from active code
 - [x] Remove Zoom jobs from active code
+- [x] Remove Zoom service and controller
+- [x] Update env config to use Google Calendar credentials
+- [x] Update .env.example with Google Calendar credentials
+- [x] Update Swagger to remove Zoom webhook docs
 - [ ] Run build and tests
 
 ## SECTION 6: Docs and Tests

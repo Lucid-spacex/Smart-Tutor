@@ -35,14 +35,11 @@ const envSchema = z.object({
   EXCHANGERATE_API_KEY: z.string().optional(),
   PRICING_DRIFT_THRESHOLD_PERCENT: z.string().default('7'),
 
-  // Zoom
-  ZOOM_ACCOUNT_ID: z.string().optional(),
-  ZOOM_CLIENT_ID: z.string().optional(),
-  ZOOM_CLIENT_SECRET: z.string().optional(),
-  ZOOM_WEBHOOK_SECRET: z.string().optional(),
-
-  // Google Meet
-  GOOGLE_MEET_CREDENTIALS: z.string().optional(),
+  // Google Calendar (for Google Meet)
+  GOOGLE_SERVICE_ACCOUNT_EMAIL: z.string().optional(),
+  GOOGLE_PRIVATE_KEY: z.string().optional(),
+  GOOGLE_ORGANIZER_EMAIL: z.string().optional(),
+  GOOGLE_CALENDAR_ID: z.string().optional(),
 
   // Cloudinary
   CLOUDINARY_CLOUD_NAME: z.string().optional(),

@@ -39,15 +39,15 @@ export const createSessionSchema = z.object({
   tutorId: z.string().uuid('Invalid tutor ID'),
   scheduledAt: z.string().refine((val) => !isNaN(Date.parse(val)), 'Invalid scheduled date'),
   durationMinutes: z.number().int().positive('Duration must be positive'),
-  zoomLink: z.string().url('Invalid zoom link').optional(),
-  zoomMeetingId: z.string().optional(),
+  googleMeetLink: z.string().url('Invalid Google Meet link').optional(),
+  googleEventId: z.string().optional(),
   participantEnrollmentIds: z.array(z.string().uuid('Invalid enrollment ID')).min(1, 'At least one participant required'),
   sharedSessionConfirmed: z.boolean().optional(),
 });
 
 export const rescheduleSessionSchema = z.object({
   scheduledAt: z.string().refine((val) => !isNaN(Date.parse(val)), 'Invalid scheduled date').optional(),
-  zoomLink: z.string().url('Invalid zoom link').optional(),
+  googleMeetLink: z.string().url('Invalid Google Meet link').optional(),
 });
 
 export const getTutorsQuerySchema = z.object({

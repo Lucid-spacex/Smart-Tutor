@@ -339,7 +339,7 @@ export class StudentsService {
                 scheduledAt: true,
                 durationMinutes: true,
                 status: true,
-                zoomLink: true,
+                googleMeetLink: true,
               },
             },
           },
@@ -409,14 +409,14 @@ export class StudentsService {
     // Get upcoming sessions (scheduled in the future)
     const now = new Date();
     const upcomingSessions = enrollments
-      .flatMap(e => 
+      .flatMap(e =>
         e.sessionParticipants
           .filter((sp: any) => sp.session.status === 'SCHEDULED' && new Date(sp.session.scheduledAt) > now)
           .map((sp: any) => ({
             id: sp.session.id,
             scheduledAt: sp.session.scheduledAt,
             durationMinutes: sp.session.durationMinutes,
-            zoomLink: sp.session.zoomLink,
+            googleMeetLink: sp.session.googleMeetLink,
             subject: e.subject?.name,
             tutor: e.tutor?.fullName,
           }))

@@ -76,7 +76,7 @@ export class StudentService {
       sessionId: sp.sessionId,
       scheduledAt: sp.session.scheduledAt,
       durationMinutes: sp.session.durationMinutes,
-      zoomLink: sp.session.zoomLink,
+      googleMeetLink: sp.session.googleMeetLink,
       status: sp.session.status,
       tutor: sp.session.tutor,
       subject: sp.enrollment.subject.name,
@@ -259,7 +259,7 @@ export class StudentService {
         sessionId: nextSession.sessionId,
         scheduledAt: nextSession.session.scheduledAt, // Raw UTC timestamp
         durationMinutes: nextSession.session.durationMinutes,
-        zoomLink: nextSession.session.zoomLink,
+        googleMeetLink: nextSession.session.googleMeetLink,
         tutor: nextSession.session.tutor,
         subject: nextSession.enrollment.subject.name,
       },
@@ -407,7 +407,7 @@ export class StudentService {
       sessionId: sp.sessionId,
       scheduledAt: sp.session.scheduledAt,
       durationMinutes: sp.session.durationMinutes,
-      zoomLink: sp.session.zoomLink,
+      googleMeetLink: sp.session.googleMeetLink,
       status: sp.session.status,
       tutor: sp.session.tutor,
     }));
