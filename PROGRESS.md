@@ -82,14 +82,14 @@
 - [ ] Run build and tests
 
 ## SECTION 6: Docs and Tests
-- [ ] Update SECURITY.md sections 8, 9, 11, 12, 23
-- [ ] Update RBAC matrix in SECURITY.md
-- [ ] Update section 27 endpoint list
-- [ ] Add new sections for Notifications, Grading Workflow, Class Reminders, Change Requests
-- [ ] Fix Resend vs Brevo documentation
-- [ ] Update Swagger for all new endpoints
-- [ ] Write security tests (answer leak, attempt isolation, server-side scoring, quiz creates no Grade, double-counting, weights total 100, override requires reason, PENDING_APPROVAL not editable, reject requires reason, visibility rules, tutor ownership, admin studentCode exclusion, notification recipient correctness, per-admin read state, SSE auth, reminder dedupe, change request immutability, one pending request)
-- [ ] Run build and tests
+- [x] Update SECURITY.md sections 8, 9, 11, 12, 23
+- [x] Update RBAC matrix in SECURITY.md
+- [x] Update section 27 endpoint list
+- [x] Add new sections for Notifications, Grading Workflow, Class Reminders, Change Requests
+- [x] Fix Resend vs Brevo documentation
+- [x] Update Swagger for all new endpoints
+- [x] Write security tests (answer leak, attempt isolation, server-side scoring, quiz creates no Grade, double-counting, weights total 100, override requires reason, PENDING_APPROVAL not editable, reject requires reason, visibility rules, tutor ownership, admin studentCode exclusion, notification recipient correctness, per-admin read state, SSE auth, reminder dedupe, change request immutability, one pending request)
+- [x] Run build and tests
 
 ## Current Tasks
 - [x] 1. FIX SWAGGER. Fixed YAML errors in admin.swagger.ts (duplicate response codes at lines 354-415). Verified app boots and swagger-jsdoc parses all files with no errors by fetching Swagger JSON (134543 bytes).
@@ -125,3 +125,5 @@
 ## Final Report
 - [x] Update PROGRESS.md
 - [x] Write final report
+- [x] Update EVENT_WIRING_TABLE.md
+- [x] Update SECURITY.md
