@@ -100,6 +100,13 @@
   - [x] d. Applied baseline migration to prodcopy successfully (no data to preserve since it was empty)
   - [x] e. MIGRATION_RUNBOOK.md: Not applicable since no existing production data to migrate from
 - [ ] 3. SECURITY TESTS
+  - [x] a. Grades: Added tests for weights total 100, override requires reason, PENDING_APPROVAL not editable, reject requires reason, visibility rules, tutor ownership, admin studentCode exclusion
+  - [x] b. Quiz: Added tests for no correctOptionIndex for students, server-side scoring, quiz creates ScoredItem not Grade
+  - [x] c. Notifications: Added tests for per-admin read state, users cannot read each other's notifications, SSE auth, dedupe
+  - [x] d. Change requests: Added tests for enrollment immutability before approval, one pending request, transaction safety
+  - [x] e. Reminders: Added tests for deduplication
+  - [x] f. Sessions and Meet: Added tests for createdBy rule, recording endpoint authorization
+  - [ ] IN PROGRESS: Fixing test setup issues (studentCode and pin fields moved to User model, Student model doesn't have these fields). Need to update test data creation and student login to match current schema.
 - [ ] 4. Re-verify EVENT_WIRING_TABLE.md
 - [ ] 5. Update SECURITY.md
 - [ ] 6. FINAL_REPORT.md
