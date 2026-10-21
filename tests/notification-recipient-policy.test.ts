@@ -14,7 +14,7 @@ describe('Notification Recipient Policy', () => {
   let parentId: string;
   let studentId: string;
 
-  beforeAll(async () => {
+  beforeEach(async () => {
     // Clean up
     await prisma.notification.deleteMany();
     await prisma.user.deleteMany();
@@ -25,7 +25,7 @@ describe('Notification Recipient Policy', () => {
     const admin = await prisma.user.create({
       data: {
         fullName: 'Test Admin',
-        email: 'admin@test.com',
+        email: `admin${Date.now()}@test.com`,
         passwordHash: hashedPassword,
         role: 'ADMIN',
         status: 'ACTIVE',
@@ -37,7 +37,7 @@ describe('Notification Recipient Policy', () => {
     const tutor = await prisma.user.create({
       data: {
         fullName: 'Test Tutor',
-        email: 'tutor@test.com',
+        email: `tutor${Date.now()}@test.com`,
         passwordHash: hashedPassword,
         role: 'TUTOR',
         status: 'APPROVED',
@@ -59,7 +59,7 @@ describe('Notification Recipient Policy', () => {
     const parent = await prisma.user.create({
       data: {
         fullName: 'Test Parent',
-        email: 'parent@test.com',
+        email: `parent${Date.now()}@test.com`,
         passwordHash: hashedPassword,
         role: 'PARENT',
         status: 'ACTIVE',
@@ -67,49 +67,60 @@ describe('Notification Recipient Policy', () => {
     });
     parentId = parent.id;
 
-    // Student (ACTIVE)
-    const student = await prisma.user.create({
+    // Student (ACTIVE) - Create Student record first
+    const studentCode = `CODE${Date.now()}`;
+    const student = await prisma.student.create({
       data: {
-        fullName: 'Test Student',
-        email: 'student@test.com',
-        passwordHash: hashedPassword,
-        role: 'STUDENT',
-        status: 'ACTIVE',
         parentId: parentId,
-        studentCode: '123456',
+        fullName: 'Test Student',
+        dateOfBirth: new Date('2010-01-01'),
+        gradeLevel: 'Grade 5',
+        actualGrade: 'GRADE_5',
+        gradeBandTier: 'G5_TO_G8',
+        user: {
+          create: {
+            fullName: 'Test Student',
+            passwordHash: hashedPassword,
+            role: 'STUDENT',
+            status: 'ACTIVE',
+            parentId: parentId,
+            studentCode: studentCode,
+          },
+        },
       },
     });
     studentId = student.id;
 
     // Login
     const adminLogin = await request(app).post('/api/auth/login').send({
-      email: 'admin@test.com',
+      email: admin.email,
       password: 'password123',
     });
     adminToken = adminLogin.body.accessToken;
 
     const tutorLogin = await request(app).post('/api/auth/login').send({
-      email: 'tutor@test.com',
+      email: tutor.email,
       password: 'password123',
     });
     tutorToken = tutorLogin.body.accessToken;
 
     const parentLogin = await request(app).post('/api/auth/login').send({
-      email: 'parent@test.com',
+      email: parent.email,
       password: 'password123',
     });
     parentToken = parentLogin.body.accessToken;
 
     const studentLogin = await request(app).post('/api/auth/student-login').send({
-      parentEmail: 'parent@test.com',
-      studentCode: '123456',
+      parentEmail: parent.email,
+      studentCode: studentCode,
       studentPin: 'password123',
     });
     studentToken = studentLogin.body.accessToken;
   });
 
-  afterAll(async () => {
+  afterEach(async () => {
     await prisma.notification.deleteMany();
+    await prisma.student.deleteMany();
     await prisma.user.deleteMany();
     await prisma.$disconnect();
   });

@@ -102,8 +102,8 @@
 - [ ] 3. SECURITY TESTS AND FIXES (IN PROGRESS - 26/26 passing after replacing placeholders)
   - [x] a. Account for all security tests with classification table (SECURITY_TEST_ACCOUNTING.md created and updated)
   - [x] b. Replace 2 placeholder tests with real assertions (price update tests)
-  - [ ] c. Fix notify recipient rule with per-role status policy
-  - [ ] d. Run full suite and classify failures
+  - [x] c. Fix notify recipient rule with per-role status policy
+  - [ ] d. Run full suite and classify failures (STARTED - 164 failures across 18 test files; admin-transactions uses deprecated generateToken, notification-recipient-policy has test isolation issues, other failures need investigation against pre-refactor baseline)
   - [ ] e. Database safety items
   - [ ] f. Docs gaps
   - [ ] g. Swagger for new endpoints

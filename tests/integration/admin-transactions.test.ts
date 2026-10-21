@@ -1,8 +1,7 @@
 import request from 'supertest';
 import app from '../../src/app';
 import prisma from '../../src/config/database';
-import { generateToken } from '../../src/utils/token.util';
-import { hashPassword } from '../../src/utils/password.util';
+import bcrypt from 'bcrypt';
 
 describe('Admin Transaction Management', () => {
   let adminToken: string;
@@ -16,34 +15,48 @@ describe('Admin Transaction Management', () => {
 
   beforeAll(async () => {
     // Create admin user
+    const hashedPassword = await bcrypt.hash('admin123', 10);
     const admin = await prisma.user.create({
       data: {
         fullName: 'Test Admin',
         email: 'admin4@test.com',
         phone: '+1234567890',
-        passwordHash: await hashPassword('admin123'),
+        passwordHash: hashedPassword,
         role: 'ADMIN',
         status: 'ACTIVE',
         timezone: 'UTC',
       },
     });
     adminId = admin.id;
-    adminToken = generateToken(admin.id, admin.role);
+
+    // Login as admin
+    const adminLogin = await request(app).post('/api/auth/login').send({
+      email: 'admin4@test.com',
+      password: 'admin123',
+    });
+    adminToken = adminLogin.body.accessToken;
 
     // Create parent user
+    const parentHashedPassword = await bcrypt.hash('parent123', 10);
     const parent = await prisma.user.create({
       data: {
         fullName: 'Test Parent',
         email: 'parent4@test.com',
         phone: '+1234567891',
-        passwordHash: await hashPassword('parent123'),
+        passwordHash: parentHashedPassword,
         role: 'PARENT',
         status: 'ACTIVE',
         timezone: 'America/New_York',
       },
     });
     parentId = parent.id;
-    parentToken = generateToken(parent.id, parent.role);
+
+    // Login as parent
+    const parentLogin = await request(app).post('/api/auth/login').send({
+      email: 'parent4@test.com',
+      password: 'parent123',
+    });
+    parentToken = parentLogin.body.accessToken;
 
     // Create tutor
     const tutor = await prisma.user.create({
