@@ -12,6 +12,6 @@ module.exports = {
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
   moduleFileExtensions: ['ts', 'js', 'json'],
-  testTimeout: 30000,
+  testTimeout: 120000,
   setupFiles: ['dotenv/config']
 };

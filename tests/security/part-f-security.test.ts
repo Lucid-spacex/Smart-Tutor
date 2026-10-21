@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { app } from '../../src/app';
+import app from '../../src/app';
 import { prisma } from '../setup';
 import bcrypt from 'bcrypt';
 
@@ -120,6 +120,8 @@ describe('Part F Security Tests', () => {
     otherParentId = otherParent.id;
 
     // Student 1 (belongs to Parent 1)
+    const studentPin1 = '123456';
+    const studentPinHash1 = await bcrypt.hash(studentPin1, 10);
     const student = await prisma.student.create({
       data: {
         parentId: parentId,
@@ -131,8 +133,7 @@ describe('Part F Security Tests', () => {
         user: {
           create: {
             fullName: 'Test Student',
-            email: 'student@test.com',
-            passwordHash: hashedPassword,
+            passwordHash: studentPinHash1, // PIN stored in passwordHash
             role: 'STUDENT',
             status: 'ACTIVE',
             parentId: parentId,
@@ -142,11 +143,13 @@ describe('Part F Security Tests', () => {
       },
     });
     const studentUser = await prisma.user.findUnique({
-      where: { email: 'student@test.com' },
+      where: { studentCode: '123456' },
     });
-    studentId = studentUser!.id;
+    studentId = student.id; // Use Student ID, not User ID
 
     // Student 2 (belongs to Parent 2)
+    const studentPin2 = '654321';
+    const studentPinHash2 = await bcrypt.hash(studentPin2, 10);
     const otherStudent = await prisma.student.create({
       data: {
         parentId: otherParentId,
@@ -158,8 +161,7 @@ describe('Part F Security Tests', () => {
         user: {
           create: {
             fullName: 'Other Student',
-            email: 'otherstudent@test.com',
-            passwordHash: hashedPassword,
+            passwordHash: studentPinHash2, // PIN stored in passwordHash
             role: 'STUDENT',
             status: 'ACTIVE',
             parentId: otherParentId,
@@ -169,9 +171,9 @@ describe('Part F Security Tests', () => {
       },
     });
     const otherStudentUser = await prisma.user.findUnique({
-      where: { email: 'otherstudent@test.com' },
+      where: { studentCode: '654321' },
     });
-    otherStudentId = otherStudentUser!.id;
+    otherStudentId = otherStudent.id; // Use Student ID, not User ID
 
     // Create subject
     const subject = await prisma.subject.create({
@@ -219,40 +221,40 @@ describe('Part F Security Tests', () => {
     otherEnrollmentId = otherEnrollment.id;
 
     // Login and get tokens
-    const adminLogin = await request(app).post('/auth/login').send({
+    const adminLogin = await request(app).post('/api/auth/login').send({
       email: 'admin@test.com',
       password: 'password123',
     });
     adminToken = adminLogin.body.accessToken;
 
-    const tutorLogin = await request(app).post('/auth/login').send({
+    const tutorLogin = await request(app).post('/api/auth/login').send({
       email: 'tutor@test.com',
       password: 'password123',
     });
     tutorToken = tutorLogin.body.accessToken;
 
-    const otherTutorLogin = await request(app).post('/auth/login').send({
+    const otherTutorLogin = await request(app).post('/api/auth/login').send({
       email: 'othertutor@test.com',
       password: 'password123',
     });
     otherTutorToken = otherTutorLogin.body.accessToken;
 
-    const parentLogin = await request(app).post('/auth/login').send({
+    const parentLogin = await request(app).post('/api/auth/login').send({
       email: 'parent@test.com',
       password: 'password123',
     });
     parentToken = parentLogin.body.accessToken;
 
-    const otherParentLogin = await request(app).post('/auth/login').send({
+    const otherParentLogin = await request(app).post('/api/auth/login').send({
       email: 'otherparent@test.com',
       password: 'password123',
     });
     otherParentToken = otherParentLogin.body.accessToken;
 
-    const studentLogin = await request(app).post('/auth/student-login').send({
-      email: 'student@test.com',
+    const studentLogin = await request(app).post('/api/auth/student-login').send({
+      parentEmail: 'parent@test.com',
       studentCode: '123456',
-      pin: '123456',
+      studentPin: '123456',
     });
     studentToken = studentLogin.body.accessToken;
   });
@@ -278,14 +280,14 @@ describe('Part F Security Tests', () => {
 
   describe('Quiz Security', () => {
     test('Quiz questions should not expose correctOptionIndex to students', async () => {
-      // Create an assignment
+      // Create a TEST assignment (which uses quiz questions)
       const assignment = await prisma.assignment.create({
         data: {
           enrollmentId: enrollmentId,
           createdBy: tutorId,
           title: 'Test Quiz',
           description: 'Test description',
-          type: 'QUIZ',
+          type: 'TEST',
           dueDate: new Date(Date.now() + 86400000),
           status: 'PENDING',
         },
@@ -303,17 +305,19 @@ describe('Part F Security Tests', () => {
         },
       });
 
-      // Student starts quiz
-      const startResponse = await request(app)
-        .post(`/quiz/${assignment.id}/start`)
+      // Get questions for the assignment
+      const questionsResponse = await request(app)
+        .get(`/api/quiz/assignments/${assignment.id}/questions`)
         .set('Authorization', `Bearer ${studentToken}`);
 
-      expect(startResponse.status).toBe(200);
+      expect(questionsResponse.status).toBe(200);
 
       // Verify correctOptionIndex is not in response
-      expect(startResponse.body.questions).toBeDefined();
-      expect(startResponse.body.questions.length).toBeGreaterThan(0);
-      expect(startResponse.body.questions[0]).not.toHaveProperty('correctOptionIndex');
+      // The response format may be an array directly or wrapped in an object
+      const questions = Array.isArray(questionsResponse.body) ? questionsResponse.body : questionsResponse.body.questions;
+      expect(questions).toBeDefined();
+      expect(questions.length).toBeGreaterThan(0);
+      expect(questions[0]).not.toHaveProperty('correctOptionIndex');
     });
 
     test('Quiz completion creates ScoredItem, not Grade', async () => {
@@ -323,7 +327,7 @@ describe('Part F Security Tests', () => {
           createdBy: tutorId,
           title: 'Test Quiz 2',
           description: 'Test description',
-          type: 'QUIZ',
+          type: 'TEST',
           dueDate: new Date(Date.now() + 86400000),
           status: 'PENDING',
         },
@@ -342,15 +346,15 @@ describe('Part F Security Tests', () => {
 
       // Start quiz
       const startResponse = await request(app)
-        .post(`/quiz/${assignment.id}/start`)
+        .post(`/api/quiz/assignments/${assignment.id}/quiz/start`)
         .set('Authorization', `Bearer ${studentToken}`);
 
-      expect(startResponse.status).toBe(200);
-      const attemptId = startResponse.body.attempt.id;
+      expect(startResponse.status).toBe(201);
+      const attemptId = startResponse.body.id;
 
       // Submit answer
       const answerResponse = await request(app)
-        .post(`/quiz/${assignment.id}/answer`)
+        .post(`/api/quiz/quiz-attempts/${attemptId}/answer`)
         .set('Authorization', `Bearer ${studentToken}`)
         .send({
           questionId: question.id,
@@ -362,7 +366,7 @@ describe('Part F Security Tests', () => {
 
       // Complete quiz
       const completeResponse = await request(app)
-        .post(`/quiz/${assignment.id}/complete`)
+        .patch(`/api/quiz/quiz-attempts/${attemptId}/complete`)
         .set('Authorization', `Bearer ${studentToken}`);
 
       expect(completeResponse.status).toBe(200);
@@ -371,7 +375,8 @@ describe('Part F Security Tests', () => {
       const scoredItems = await prisma.scoredItem.findMany({
         where: {
           enrollmentId: enrollmentId,
-          assignmentId: assignment.id,
+          sourceType: 'QuizAttempt',
+          sourceId: attemptId,
         },
       });
 
@@ -388,7 +393,7 @@ describe('Part F Security Tests', () => {
       expect(grades.length).toBe(0);
 
       // Clean up
-      await prisma.scoredItem.deleteMany({ where: { enrollmentId: enrollmentId, assignmentId: assignment.id } });
+      await prisma.scoredItem.deleteMany({ where: { enrollmentId: enrollmentId, sourceType: 'QuizAttempt', sourceId: attemptId } });
       await prisma.quizResponse.deleteMany({ where: { attemptId: attemptId } });
       await prisma.quizAttempt.delete({ where: { id: attemptId } });
       await prisma.quizQuestion.delete({ where: { id: question.id } });
@@ -433,6 +438,9 @@ describe('Part F Security Tests', () => {
 
     test('Tutor cannot access another tutor\'s scored items', async () => {
       // Create scored item for other tutor's student
+      const otherStudentProfile = await prisma.student.findUnique({
+        where: { id: otherStudentId },
+      });
       await prisma.scoredItem.create({
         data: {
           tutorId: otherTutorId,
@@ -456,7 +464,7 @@ describe('Part F Security Tests', () => {
   describe('Grade Security', () => {
     test('Weights must total exactly 100', async () => {
       const response = await request(app)
-        .post('/grades')
+        .post('/api/grades')
         .set('Authorization', `Bearer ${tutorToken}`)
         .send({
           enrollmentId: enrollmentId,
@@ -596,7 +604,7 @@ describe('Part F Security Tests', () => {
 
       // Student tries to view grades
       const studentResponse = await request(app)
-        .get('/grades')
+        .get('/api/grades')
         .set('Authorization', `Bearer ${studentToken}`);
 
       expect(studentResponse.status).toBe(200);
@@ -604,7 +612,7 @@ describe('Part F Security Tests', () => {
 
       // Parent tries to view grades
       const parentResponse = await request(app)
-        .get('/grades')
+        .get('/api/grades')
         .set('Authorization', `Bearer ${parentToken}`);
 
       expect(parentResponse.status).toBe(200);
@@ -716,7 +724,7 @@ describe('Part F Security Tests', () => {
       // This would require testing the SSE endpoint directly
       // For now, we verify the stream-ticket endpoint exists
       const response = await request(app)
-        .post('/notifications/stream-ticket')
+        .post('/api/notifications/stream-ticket')
         .set('Authorization', `Bearer ${parentToken}`);
 
       expect(response.status).toBe(200);
@@ -731,7 +739,7 @@ describe('Part F Security Tests', () => {
       });
 
       const response = await request(app)
-        .post('/notifications/stream-ticket')
+        .post('/api/notifications/stream-ticket')
         .set('Authorization', `Bearer ${parentToken}`);
 
       expect(response.status).toBe(401);
@@ -796,7 +804,7 @@ describe('Part F Security Tests', () => {
 
     test('A tutor cannot create sessions for another tutor\'s enrollment', async () => {
       const response = await request(app)
-        .post('/tutor/sessions')
+        .post('/api/tutor/sessions')
         .set('Authorization', `Bearer ${tutorToken}`)
         .send({
           enrollmentId: otherEnrollmentId, // Belongs to other tutor
@@ -868,7 +876,7 @@ describe('Part F Security Tests', () => {
           createdBy: tutorId,
           title: 'Test Quiz',
           description: 'Test description',
-          type: 'QUIZ',
+          type: 'TEST',
           dueDate: new Date(Date.now() + 86400000),
           status: 'PENDING',
         },

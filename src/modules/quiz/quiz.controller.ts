@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { QuizService } from './quiz.service';
 import { CreateQuizQuestionInput, SubmitQuizAnswerInput, StartQuizInput, CompleteQuizInput } from './quiz.validation';
 import { AuthRequest } from '../../types/express';
+import prisma from '../../config/database';
 
 export class QuizController {
   private quizService: QuizService;
@@ -46,8 +47,8 @@ export class QuizController {
 
   startQuiz = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const studentId = req.user?.userId;
-      if (!studentId) {
+      const userId = req.user?.userId;
+      if (!userId) {
         res.status(401).json({ error: 'Not authenticated' });
         return;
       }
@@ -57,8 +58,18 @@ export class QuizController {
         return;
       }
 
+      // Look up the Student record from the User ID
+      const student = await prisma.student.findUnique({
+        where: { userId },
+      });
+
+      if (!student) {
+        res.status(404).json({ error: 'Student profile not found' });
+        return;
+      }
+
       const { id: assignmentId } = req.params;
-      const attempt = await this.quizService.startQuiz(assignmentId, studentId);
+      const attempt = await this.quizService.startQuiz(assignmentId, student.id);
       res.status(201).json(attempt);
     } catch (error) {
       next(error);
@@ -67,8 +78,8 @@ export class QuizController {
 
   submitAnswer = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const studentId = req.user?.userId;
-      if (!studentId) {
+      const userId = req.user?.userId;
+      if (!userId) {
         res.status(401).json({ error: 'Not authenticated' });
         return;
       }
@@ -78,9 +89,19 @@ export class QuizController {
         return;
       }
 
+      // Look up the Student record from the User ID
+      const student = await prisma.student.findUnique({
+        where: { userId },
+      });
+
+      if (!student) {
+        res.status(404).json({ error: 'Student profile not found' });
+        return;
+      }
+
       const { id: attemptId } = req.params;
       const data: SubmitQuizAnswerInput = req.body;
-      const result = await this.quizService.submitAnswer(attemptId, data, studentId);
+      const result = await this.quizService.submitAnswer(attemptId, data, student.id);
       res.status(200).json(result);
     } catch (error) {
       next(error);
@@ -89,8 +110,8 @@ export class QuizController {
 
   completeQuiz = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const studentId = req.user?.userId;
-      if (!studentId) {
+      const userId = req.user?.userId;
+      if (!userId) {
         res.status(401).json({ error: 'Not authenticated' });
         return;
       }
@@ -100,8 +121,18 @@ export class QuizController {
         return;
       }
 
+      // Look up the Student record from the User ID
+      const student = await prisma.student.findUnique({
+        where: { userId },
+      });
+
+      if (!student) {
+        res.status(404).json({ error: 'Student profile not found' });
+        return;
+      }
+
       const { id: attemptId } = req.params;
-      const result = await this.quizService.completeQuiz(attemptId, studentId);
+      const result = await this.quizService.completeQuiz(attemptId, student.id);
       res.status(200).json(result);
     } catch (error) {
       next(error);
