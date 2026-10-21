@@ -36,11 +36,19 @@ async function connectWithRetry(): Promise<PrismaClient> {
   throw new Error('Connection retry logic failed unexpectedly');
 }
 
-const prisma = await connectWithRetry();
+let prisma: PrismaClient;
+
+beforeAll(async () => {
+  prisma = await connectWithRetry();
+});
 
 afterAll(async () => {
-  await prisma.$disconnect();
+  if (prisma) {
+    await prisma.$disconnect();
+  }
 });
+
+export { prisma };
 
 // Clear database before each test (optional)
 beforeEach(async () => {

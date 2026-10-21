@@ -91,6 +91,8 @@
 - [ ] Write security tests (answer leak, attempt isolation, server-side scoring, quiz creates no Grade, double-counting, weights total 100, override requires reason, PENDING_APPROVAL not editable, reject requires reason, visibility rules, tutor ownership, admin studentCode exclusion, notification recipient correctness, per-admin read state, SSE auth, reminder dedupe, change request immutability, one pending request)
 - [ ] Run build and tests
 
+**STOPPED HERE:** Started writing security tests for Grades. Fixed test setup to use beforeAll/afterAll properly. Fixed uuid import to use crypto.randomUUID. Need to fix Swagger YAML errors before tests can run.
+
 ## Final Report
 - [x] Update PROGRESS.md
 - [x] Write final report

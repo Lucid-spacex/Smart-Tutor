@@ -1,8 +1,7 @@
 import request from 'supertest';
 import { app } from '../../src/app';
-import prisma from '../../src/config/database';
+import { prisma } from '../setup';
 import bcrypt from 'bcrypt';
-import { v4 as uuidv4 } from 'uuid';
 
 describe('Part F Security Tests', () => {
   let adminToken: string;
@@ -123,7 +122,7 @@ describe('Part F Security Tests', () => {
     // Student 1 (belongs to Parent 1)
     const student = await prisma.student.create({
       data: {
-        userId: uuidv4(),
+        userId: crypto.randomUUID(),
         parentId: parentId,
         fullName: 'Test Student',
         dateOfBirth: new Date('2010-01-01'),
@@ -147,7 +146,7 @@ describe('Part F Security Tests', () => {
     // Student 2 (belongs to Parent 2)
     const otherStudent = await prisma.student.create({
       data: {
-        userId: uuidv4(),
+        userId: crypto.randomUUID(),
         parentId: otherParentId,
         fullName: 'Other Student',
         dateOfBirth: new Date('2010-01-01'),
@@ -379,7 +378,7 @@ describe('Part F Security Tests', () => {
           enrollmentId: enrollmentId,
           type: 'QUIZ',
           sourceType: 'QuizAttempt',
-          sourceId: uuidv4(),
+          sourceId: crypto.randomUUID(),
           score: 10,
           maxScore: 10,
         },
