@@ -284,6 +284,7 @@ describe('Part F Security Tests', () => {
       const assignment = await prisma.assignment.create({
         data: {
           enrollmentId: enrollmentId,
+          tutorId: tutorId,
           createdBy: tutorId,
           title: 'Test Quiz',
           description: 'Test description',
@@ -324,6 +325,7 @@ describe('Part F Security Tests', () => {
       const assignment = await prisma.assignment.create({
         data: {
           enrollmentId: enrollmentId,
+          tutorId: tutorId,
           createdBy: tutorId,
           title: 'Test Quiz 2',
           description: 'Test description',
@@ -375,6 +377,7 @@ describe('Part F Security Tests', () => {
       const scoredItems = await prisma.scoredItem.findMany({
         where: {
           enrollmentId: enrollmentId,
+          tutorId: tutorId,
           sourceType: 'QuizAttempt',
           sourceId: attemptId,
         },
@@ -386,6 +389,7 @@ describe('Part F Security Tests', () => {
       const grades = await prisma.grade.findMany({
         where: {
           enrollmentId: enrollmentId,
+          tutorId: tutorId,
           assignmentId: assignment.id,
         },
       });
@@ -393,7 +397,8 @@ describe('Part F Security Tests', () => {
       expect(grades.length).toBe(0);
 
       // Clean up
-      await prisma.scoredItem.deleteMany({ where: { enrollmentId: enrollmentId, sourceType: 'QuizAttempt', sourceId: attemptId } });
+      await prisma.scoredItem.deleteMany({ where: { enrollmentId: enrollmentId,
+          tutorId: tutorId, sourceType: 'QuizAttempt', sourceId: attemptId } });
       await prisma.quizResponse.deleteMany({ where: { attemptId: attemptId } });
       await prisma.quizAttempt.delete({ where: { id: attemptId } });
       await prisma.quizQuestion.delete({ where: { id: question.id } });
@@ -408,6 +413,7 @@ describe('Part F Security Tests', () => {
           tutorId: tutorId,
           studentId: studentId,
           enrollmentId: enrollmentId,
+          tutorId: tutorId,
           type: 'QUIZ',
           sourceType: 'QuizAttempt',
           sourceId: crypto.randomUUID(),
@@ -423,6 +429,7 @@ describe('Part F Security Tests', () => {
             tutorId: tutorId,
             studentId: studentId,
             enrollmentId: enrollmentId,
+          tutorId: tutorId,
             type: 'QUIZ',
             sourceType: 'QuizAttempt',
             sourceId: scoredItem.sourceId,
@@ -468,6 +475,7 @@ describe('Part F Security Tests', () => {
         .set('Authorization', `Bearer ${tutorToken}`)
         .send({
           enrollmentId: enrollmentId,
+          tutorId: tutorId,
           periodStart: new Date().toISOString(),
           periodEnd: new Date(Date.now() + 30 * 86400000).toISOString(),
           components: [
@@ -484,6 +492,7 @@ describe('Part F Security Tests', () => {
       const grade = await prisma.grade.create({
         data: {
           enrollmentId: enrollmentId,
+          tutorId: tutorId,
           gradedBy: tutorId,
           status: 'DRAFT',
           periodStart: new Date(),
@@ -509,6 +518,7 @@ describe('Part F Security Tests', () => {
       const grade = await prisma.grade.create({
         data: {
           enrollmentId: enrollmentId,
+          tutorId: tutorId,
           gradedBy: tutorId,
           status: 'PENDING_APPROVAL',
           periodStart: new Date(),
@@ -531,6 +541,7 @@ describe('Part F Security Tests', () => {
       const grade = await prisma.grade.create({
         data: {
           enrollmentId: enrollmentId,
+          tutorId: tutorId,
           gradedBy: tutorId,
           status: 'PENDING_APPROVAL',
           periodStart: new Date(),
@@ -575,6 +586,7 @@ describe('Part F Security Tests', () => {
       await prisma.grade.create({
         data: {
           enrollmentId: enrollmentId,
+          tutorId: tutorId,
           gradedBy: tutorId,
           status: 'DRAFT',
           periodStart: new Date(),
@@ -585,6 +597,7 @@ describe('Part F Security Tests', () => {
       await prisma.grade.create({
         data: {
           enrollmentId: enrollmentId,
+          tutorId: tutorId,
           gradedBy: tutorId,
           status: 'PENDING_APPROVAL',
           periodStart: new Date(),
@@ -595,6 +608,7 @@ describe('Part F Security Tests', () => {
       await prisma.grade.create({
         data: {
           enrollmentId: enrollmentId,
+          tutorId: tutorId,
           gradedBy: tutorId,
           status: 'REJECTED',
           periodStart: new Date(),
@@ -623,6 +637,7 @@ describe('Part F Security Tests', () => {
       const grade = await prisma.grade.create({
         data: {
           enrollmentId: enrollmentId,
+          tutorId: tutorId,
           gradedBy: tutorId,
           status: 'APPROVED',
           periodStart: new Date(),
@@ -647,6 +662,7 @@ describe('Part F Security Tests', () => {
       await prisma.grade.create({
         data: {
           enrollmentId: enrollmentId,
+          tutorId: tutorId,
           gradedBy: tutorId,
           status: 'APPROVED',
           periodStart: new Date(),
@@ -661,6 +677,7 @@ describe('Part F Security Tests', () => {
       await prisma.grade.create({
         data: {
           enrollmentId: enrollmentId,
+          tutorId: tutorId,
           gradedBy: tutorId,
           status: 'DRAFT',
           periodStart: new Date(),
@@ -873,6 +890,7 @@ describe('Part F Security Tests', () => {
       const assignment = await prisma.assignment.create({
         data: {
           enrollmentId: enrollmentId,
+          tutorId: tutorId,
           createdBy: tutorId,
           title: 'Test Quiz',
           description: 'Test description',
@@ -956,6 +974,7 @@ describe('Part F Security Tests', () => {
       const changeRequest = await prisma.enrollmentChangeRequest.create({
         data: {
           enrollmentId: enrollmentId,
+          tutorId: tutorId,
           requestedBy: tutorId,
           requestedChanges: {
             sessionFrequency: 'WEEKLY',
@@ -1009,11 +1028,16 @@ describe('Part F Security Tests', () => {
       // Create a session
       const session = await prisma.session.create({
         data: {
-          enrollmentId: enrollmentId,
+          tutorId: tutorId,
           scheduledAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes from now
           durationMinutes: 60,
           status: 'SCHEDULED',
           createdBy: tutorId,
+          participants: {
+            create: {
+              enrollmentId: enrollmentId,
+            },
+          },
         },
       });
 
@@ -1059,11 +1083,16 @@ describe('Part F Security Tests', () => {
       // Create a session as tutor
       const session = await prisma.session.create({
         data: {
-          enrollmentId: enrollmentId,
+          tutorId: tutorId,
           scheduledAt: new Date(Date.now() + 60 * 60 * 1000), // 1 hour from now
           durationMinutes: 60,
           status: 'SCHEDULED',
           createdBy: tutorId,
+          participants: {
+            create: {
+              enrollmentId: enrollmentId,
+            },
+          },
         },
       });
 
@@ -1093,11 +1122,16 @@ describe('Part F Security Tests', () => {
       // Create a session
       const session = await prisma.session.create({
         data: {
-          enrollmentId: enrollmentId,
+          tutorId: tutorId,
           scheduledAt: new Date(Date.now() - 60 * 60 * 1000), // 1 hour ago
           durationMinutes: 60,
           status: 'COMPLETED',
           createdBy: tutorId,
+          participants: {
+            create: {
+              enrollmentId: enrollmentId,
+            },
+          },
         },
       });
 
