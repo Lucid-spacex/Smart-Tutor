@@ -106,6 +106,7 @@
   - [x] d. Change requests: Added tests for enrollment immutability before approval, one pending request, transaction safety
   - [x] e. Reminders: Added tests for deduplication
   - [x] f. Sessions and Meet: Added tests for createdBy rule, recording endpoint authorization
+  - [x] g. Fixed test structure (nested all describe blocks under main test suite to fix TypeScript lint errors)
   - [ ] STOPPED HERE: Need to fix test setup to match current schema. The Student model no longer has studentCode and pin fields - they moved to the User model. Also need to ensure student login works with the current schema. Once tests run, fix any failing tests in the code (never weaken or delete a test to make it pass).
 - [ ] 4. Re-verify EVENT_WIRING_TABLE.md
 - [ ] 5. Update SECURITY.md
