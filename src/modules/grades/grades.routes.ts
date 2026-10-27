@@ -16,6 +16,7 @@ router.delete('/:id', authenticate, requireRole('TUTOR'), requireApprovedTutor, 
 router.post('/:id/submit', authenticate, requireRole('TUTOR'), requireApprovedTutor, validateUUID('id'), gradesController.submitGrade);
 router.post('/:id/withdraw', authenticate, requireRole('TUTOR'), requireApprovedTutor, validateUUID('id'), gradesController.withdrawGrade);
 router.get('/:id/preview', authenticate, requireRole('TUTOR'), requireApprovedTutor, validateUUID('id'), gradesController.previewGrade);
+router.get('/:id', authenticate, validateUUID('id'), gradesController.getGradeById);
 
 // Admin grade review endpoints (mounted under /admin/grades)
 const adminRouter = Router();

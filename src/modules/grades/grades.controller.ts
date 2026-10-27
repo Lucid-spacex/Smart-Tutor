@@ -192,6 +192,23 @@ export class GradesController {
     }
   };
 
+  getGradeById = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const userId = req.user?.userId;
+      const userRole = req.user?.role;
+      if (!userId || !userRole) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id } = req.params;
+      const grade = await this.gradesService.getGradeById(id, userId, userRole);
+      res.status(200).json(grade);
+    } catch (error) {
+      next(error);
+    }
+  };
+
   // Legacy endpoints (keep for backward compatibility if needed)
   getGrades = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {

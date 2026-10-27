@@ -928,6 +928,65 @@ export class NewGradesService {
     };
   }
 
+  async getGradeById(gradeId: string, userId: string, userRole: string) {
+    const grade = await prisma.grade.findUnique({
+      where: { id: gradeId },
+      include: {
+        enrollment: {
+          include: {
+            student: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    fullName: true,
+                  },
+                },
+              },
+            },
+            subject: true,
+          },
+        },
+        gradedByUser: {
+          select: {
+            id: true,
+            fullName: true,
+          },
+        },
+      },
+    });
+
+    if (!grade) {
+      throw new AppError(404, 'Grade not found');
+    }
+
+    // Role-based visibility
+    if (userRole === 'TUTOR') {
+      // Tutors see all their own grades including overrideReason and rejectionReason
+      if (grade.gradedBy !== userId) {
+        throw new AppError(403, 'Access denied');
+      }
+    } else if (userRole === 'PARENT') {
+      // Parents see only APPROVED grades for their children, never overrideReason or rejectionReason
+      if (grade.status !== 'APPROVED' || grade.enrollment.student.parentId !== userId) {
+        throw new AppError(403, 'Access denied');
+      }
+      // Remove sensitive fields
+      delete (grade as any).overrideReason;
+      delete (grade as any).rejectionReason;
+    } else if (userRole === 'STUDENT') {
+      // Students see only APPROVED grades for their own enrollments, never overrideReason or rejectionReason
+      if (grade.status !== 'APPROVED' || grade.enrollment.student.userId !== userId) {
+        throw new AppError(403, 'Access denied');
+      }
+      // Remove sensitive fields
+      delete (grade as any).overrideReason;
+      delete (grade as any).rejectionReason;
+    }
+
+    return grade;
+  }
+
   /**
    * Legacy: Get grades for students/parents/tutors
    * Role-based visibility rules:
