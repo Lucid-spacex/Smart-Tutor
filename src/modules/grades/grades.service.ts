@@ -947,7 +947,7 @@ export class NewGradesService {
             subject: true,
           },
         },
-        gradedByUser: {
+        grader: {
           select: {
             id: true,
             fullName: true,
@@ -1037,20 +1037,7 @@ export class NewGradesService {
 
     const grades = await prisma.grade.findMany({
       where,
-      select: {
-        id: true,
-        enrollmentId: true,
-        periodStart: true,
-        periodEnd: true,
-        computedScore: true,
-        finalScore: true,
-        status: true,
-        tutorComment: true,
-        createdAt: true,
-        // SECURITY: Only tutors and admins see overrideReason
-        overrideReason: userRole === 'TUTOR' || userRole === 'ADMIN',
-        // SECURITY: Only tutors see rejectionReason
-        rejectionReason: userRole === 'TUTOR',
+      include: {
         enrollment: {
           include: {
             student: {
@@ -1076,10 +1063,16 @@ export class NewGradesService {
         },
         components: true,
       },
-      orderBy: {
-        createdAt: 'desc',
-      },
+      orderBy: { createdAt: 'desc' },
     });
+
+    // Filter out sensitive fields for parents/students
+    if (userRole === 'PARENT' || userRole === 'STUDENT') {
+      return grades.map(grade => {
+        const { overrideReason, rejectionReason, ...rest } = grade as any;
+        return rest;
+      });
+    }
 
     return grades;
   }

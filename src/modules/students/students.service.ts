@@ -1,5 +1,5 @@
 import prisma from '../../config/database';
-import { CreateStudentInput } from './students.validation';
+import { CreateStudentInput, UpdateStudentInput } from './students.validation';
 import { hashPassword } from '../../utils/password.util';
 import { sendStudentCredentialsEmail, sendPasswordResetEmail } from '../../utils/email.util';
 import crypto from 'crypto';
