@@ -138,6 +138,18 @@ export class ClassRemindersService {
           entityId: enrollment.id,
           dedupeKey: `${dedupeBase}-missed`,
         });
+
+        // Also notify tutor that they failed to schedule
+        await this.notificationCore.notify({
+          recipientIds: [enrollment.tutor.userId],
+          type: 'TUTOR_FAILED_TO_SCHEDULE' as NotificationType,
+          category: 'SCHEDULING' as NotificationCategory,
+          title: 'Class Not Scheduled',
+          body: `You failed to schedule the class for ${enrollment.student.user.fullName}`,
+          entityType: 'Enrollment',
+          entityId: enrollment.id,
+          dedupeKey: `${dedupeBase}-tutor-failed`,
+        });
       }
     } else {
       // Scenario 2: Session exists - notify tutor 30 minutes before
@@ -280,8 +292,8 @@ export class ClassRemindersService {
       },
     });
 
-    // Map to expected response format
-    return sessions.map(session => {
+    // Map sessions to expected response format
+    const scheduledClasses = sessions.map(session => {
       const participant = session.participants[0];
       const enrollment = participant?.enrollment;
 
@@ -298,11 +310,54 @@ export class ClassRemindersService {
         } : null,
       };
     });
+
+    // For each enrollment, check if it needs a session in the time range (NEEDS_SESSION)
+    const needsSessionClasses = [];
+    for (const enrollment of enrollments) {
+      const existingSession = await prisma.session.findFirst({
+        where: {
+          participants: {
+            some: {
+              enrollmentId: enrollment.id,
+            },
+          },
+          scheduledAt: {
+            gte: fromDate,
+            lte: toDate,
+          },
+        },
+      });
+
+      if (!existingSession) {
+        needsSessionClasses.push({
+          id: `needs-session-${enrollment.id}`,
+          scheduledAt: null,
+          status: 'NEEDS_SESSION',
+          durationMinutes: null,
+          googleMeetLink: null,
+          enrollment: {
+            id: enrollment.id,
+            student: enrollment.student,
+            subject: enrollment.subject,
+          },
+        });
+      }
+    }
+
+    // Combine and sort by scheduledAt (nulls last)
+    const allClasses = [...scheduledClasses, ...needsSessionClasses].sort((a, b) => {
+      if (!a.scheduledAt) return 1;
+      if (!b.scheduledAt) return -1;
+      return new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime();
+    });
+
+    return allClasses;
   }
 
   /**
    * Get class schedule for admin
    * All students, SCHEDULED, UNSCHEDULED or MISSED
+   * UNSCHEDULED is computed from enrollments without sessions
    */
   async getAdminClassSchedule(filters: {
     tutorId?: string;
@@ -318,6 +373,75 @@ export class ClassRemindersService {
     const fromDate = from ? new Date(from) : new Date();
     const toDate = to ? new Date(to) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
+    // If requesting UNSCHEDULED status, return computed unscheduled classes
+    if (status === 'UNSCHEDULED') {
+      const enrollments = await prisma.enrollment.findMany({
+        where: {
+          status: 'ACTIVE',
+          tutorId: tutorId || undefined,
+          deletedAt: null,
+        },
+        include: {
+          student: {
+            select: {
+              id: true,
+              fullName: true,
+            },
+          },
+          subject: true,
+          tutor: {
+            select: {
+              id: true,
+              fullName: true,
+            },
+          },
+        },
+      });
+
+      // For each enrollment, check if it has a session in the time range
+      const unscheduledClasses = [];
+      for (const enrollment of enrollments) {
+        const existingSession = await prisma.session.findFirst({
+          where: {
+            participants: {
+              some: {
+                enrollmentId: enrollment.id,
+              },
+            },
+            scheduledAt: {
+              gte: fromDate,
+              lte: toDate,
+            },
+          },
+        });
+
+        if (!existingSession) {
+          unscheduledClasses.push({
+            id: `unscheduled-${enrollment.id}`,
+            scheduledAt: null,
+            status: 'UNSCHEDULED',
+            durationMinutes: null,
+            googleMeetLink: null,
+            enrollment: {
+              id: enrollment.id,
+              student: enrollment.student,
+              subject: enrollment.subject,
+              tutor: enrollment.tutor,
+            },
+          });
+        }
+      }
+
+      return {
+        data: unscheduledClasses.slice(skip, skip + limit),
+        page,
+        limit,
+        total: unscheduledClasses.length,
+        unscheduledWithin24hCount: unscheduledClasses.length,
+      };
+    }
+
+    // For SCHEDULED, MISSED, or no status filter, query sessions
     const where: any = {
       scheduledAt: {
         gte: fromDate,
@@ -328,7 +452,7 @@ export class ClassRemindersService {
     if (status) {
       where.status = status;
     } else {
-      where.status = { in: ['SCHEDULED', 'UNSCHEDULED', 'MISSED'] };
+      where.status = { in: ['SCHEDULED', 'MISSED'] };
     }
 
     if (tutorId) {
@@ -376,16 +500,44 @@ export class ClassRemindersService {
       prisma.session.count({ where }),
     ]);
 
-    // Count unscheduled within 24h
-    const unscheduledWithin24hCount = await prisma.session.count({
+    // Count unscheduled within 24h (enrollments without sessions in next 24h)
+    const activeEnrollments = await prisma.enrollment.findMany({
       where: {
+        status: 'ACTIVE',
+        tutorId: tutorId || undefined,
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+
+    const enrollmentIds = activeEnrollments.map(e => e.id);
+    const sessionsIn24h = await prisma.session.findMany({
+      where: {
+        participants: {
+          some: {
+            enrollmentId: { in: enrollmentIds },
+          },
+        },
         scheduledAt: {
           gte: new Date(),
           lte: new Date(Date.now() + 24 * 60 * 60 * 1000),
         },
-        status: 'SCHEDULED',
       },
+      select: { id: true },
     });
+
+    const enrolledIn24h = new Set();
+    for (const session of sessionsIn24h) {
+      const participants = await prisma.sessionParticipant.findMany({
+        where: { sessionId: session.id },
+        select: { enrollmentId: true },
+      });
+      for (const p of participants) {
+        enrolledIn24h.add(p.enrollmentId);
+      }
+    }
+
+    const unscheduledWithin24hCount = enrollmentIds.filter(id => !enrolledIn24h.has(id)).length;
 
     return {
       data: sessions.map(session => {

@@ -1,0 +1,2032 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Smart Tutor API",
+    "description": "API for Smart Tutor tutoring platform - comprehensive backend API with authentication, enrollment management, sessions, grades, payments, and more.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Smart Tutor Team",
+      "email": "support@smarttutor.com"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000/api",
+      "description": "Development server"
+    },
+    {
+      "url": "https://api.smarttutor.com/api",
+      "description": "Production server"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "JWT access token for authentication"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Error message"
+          },
+          "errorCode": {
+            "type": "string",
+            "description": "Optional error code for frontend handling"
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "role": {
+            "type": "string",
+            "enum": ["PARENT", "TUTOR", "STUDENT", "ADMIN"]
+          },
+          "status": {
+            "type": "string",
+            "enum": ["ACTIVE", "SUSPENDED", "REJECTED", "PENDING_VETTING", "APPROVED"]
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "middleName": {
+            "type": "string"
+          },
+          "fullName": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "profilePictureUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "timezone": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Student": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "parentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "fullName": {
+            "type": "string"
+          },
+          "dateOfBirth": {
+            "type": "string",
+            "format": "date"
+          },
+          "actualGrade": {
+            "type": "string",
+            "enum": ["PRESCHOOL", "KINDERGARTEN", "GRADE_1", "GRADE_2", "GRADE_3", "GRADE_4", "GRADE_5", "GRADE_6", "GRADE_7", "GRADE_8", "GRADE_9", "GRADE_10", "GRADE_11", "GRADE_12"]
+          },
+          "gradeLevel": {
+            "type": "string"
+          },
+          "gender": {
+            "type": "string",
+            "enum": ["MALE", "FEMALE", "OTHER", "PREFER_NOT_TO_SAY"]
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "studentCode": {
+            "type": "string"
+          },
+          "studentPin": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["ACTIVE", "INACTIVE"]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Enrollment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "studentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "subjectId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tutorId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "enrollmentGroupId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["ACTIVE", "PAUSED", "COMPLETED", "CANCELLED", "PENDING_PAYMENT"]
+          },
+          "sessionFrequency": {
+            "type": "string",
+            "enum": ["TWICE_WEEKLY", "THRICE_WEEKLY", "FIVE_TIMES_WEEKLY"]
+          },
+          "availableDays": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
+            }
+          },
+          "preferredStartHour": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 23
+          },
+          "preferredEndHour": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 23
+          },
+          "billingFrequency": {
+            "type": "string",
+            "enum": ["WEEKLY", "MONTHLY", "YEARLY"]
+          },
+          "yearlyPriceNGN": {
+            "type": "number"
+          },
+          "yearlyPriceUSD": {
+            "type": "number"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Session": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "enrollmentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tutorId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "scheduledAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "durationMinutes": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["SCHEDULED", "IN_PROGRESS", "COMPLETED", "CANCELLED", "MISSED"]
+          },
+          "googleMeetLink": {
+            "type": "string",
+            "format": "uri"
+          },
+          "googleEventId": {
+            "type": "string"
+          },
+          "tutorNotes": {
+            "type": "string"
+          },
+          "homeworkAssigned": {
+            "type": "string"
+          },
+          "recordingUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Grade": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "enrollmentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "periodStart": {
+            "type": "string",
+            "format": "date"
+          },
+          "periodEnd": {
+            "type": "string",
+            "format": "date"
+          },
+          "components": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string"
+                },
+                "weight": {
+                  "type": "number"
+                },
+                "scoredItemId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "attendanceRate": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "tutorComment": {
+            "type": "string"
+          },
+          "finalScore": {
+            "type": "number"
+          },
+          "overrideReason": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["DRAFT", "PENDING_APPROVAL", "APPROVED", "REJECTED"]
+          },
+          "submittedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "approvedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "rejectedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "rejectionReason": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ScoredItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "enrollmentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["QUIZ", "TEST", "HOMEWORK", "CLASSWORK", "PROJECT", "EXAM"]
+          },
+          "score": {
+            "type": "number"
+          },
+          "maxScore": {
+            "type": "number"
+          },
+          "comment": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Assignment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "enrollmentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["ASSIGNMENT", "CLASSWORK", "TEST", "HOMEWORK", "PROJECT", "QUIZ"]
+          },
+          "dueDate": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "attachmentUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "attachmentName": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["PENDING", "COMPLETED", "SUBMITTED", "GRADED", "CANCELLED"]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Notification": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "entityType": {
+            "type": "string"
+          },
+          "entityId": {
+            "type": "string"
+          },
+          "read": {
+            "type": "boolean"
+          },
+          "readAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Message": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "senderId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "recipientId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "body": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "read": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Payment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "enrollmentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "amount": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["PENDING", "SUCCESS", "FAILED", "REFUNDED"]
+          },
+          "provider": {
+            "type": "string",
+            "enum": ["PAYSTACK"]
+          },
+          "reference": {
+            "type": "string"
+          },
+          "paidAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Subject": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "enum": ["CORE", "ENRICHMENT", "TEST_PREP"]
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Complaint": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "parentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "aboutType": {
+            "type": "string",
+            "enum": ["STUDENT", "TUTOR", "PARENT", "GENERAL"]
+          },
+          "aboutId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["PENDING", "RESOLVED", "REJECTED"]
+          },
+          "reply": {
+            "type": "string"
+          },
+          "resolvedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ProgressReport": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "enrollmentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "period": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "strengths": {
+            "type": "string"
+          },
+          "areasToImprove": {
+            "type": "string"
+          },
+          "tutorId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PaginatedResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {}
+          },
+          "page": {
+            "type": "integer"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer"
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/auth/register": {
+      "post": {
+        "summary": "Register a new user",
+        "tags": ["Authentication"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "phone", "password", "role"],
+                "properties": {
+                  "firstName": {"type": "string"},
+                  "lastName": {"type": "string"},
+                  "middleName": {"type": "string"},
+                  "fullName": {"type": "string"},
+                  "email": {"type": "string", "format": "email"},
+                  "phone": {"type": "string", "minLength": 10},
+                  "address": {"type": "string"},
+                  "password": {"type": "string", "minLength": 8},
+                  "role": {"type": "string", "enum": ["PARENT", "TUTOR"]}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Registration successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {"type": "string"},
+                    "userId": {"type": "string", "format": "uuid"},
+                    "emailSent": {"type": "boolean"}
+                  }
+                }
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "429": {"$ref": "#/components/responses/TooManyRequests"}
+        }
+      }
+    },
+    "/auth/verify": {
+      "post": {
+        "summary": "Verify email with OTP",
+        "tags": ["Authentication"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "otp"],
+                "properties": {
+                  "email": {"type": "string", "format": "email"},
+                  "otp": {"type": "string", "length": 6}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Verification successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accessToken": {"type": "string"},
+                    "refreshToken": {"type": "string"},
+                    "user": {"$ref": "#/components/schemas/User"}
+                  }
+                }
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "429": {"$ref": "#/components/responses/TooManyRequests"}
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "summary": "Login with email and password",
+        "tags": ["Authentication"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": {"type": "string", "format": "email"},
+                  "password": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accessToken": {"type": "string"},
+                    "refreshToken": {"type": "string"},
+                    "user": {"$ref": "#/components/schemas/User"}
+                  }
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "429": {"$ref": "#/components/responses/TooManyRequests"}
+        }
+      }
+    },
+    "/auth/student-login": {
+      "post": {
+        "summary": "Student login with parent email, student code, and PIN",
+        "tags": ["Authentication"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["parentEmail", "studentCode", "studentPin"],
+                "properties": {
+                  "parentEmail": {"type": "string", "format": "email"},
+                  "studentCode": {"type": "string", "minLength": 6},
+                  "studentPin": {"type": "string", "length": 6}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accessToken": {"type": "string"},
+                    "refreshToken": {"type": "string"},
+                    "user": {"$ref": "#/components/schemas/User"}
+                  }
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "429": {"$ref": "#/components/responses/TooManyRequests"}
+        }
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "summary": "Refresh access token",
+        "tags": ["Authentication"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["refreshToken"],
+                "properties": {
+                  "refreshToken": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Token refreshed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accessToken": {"type": "string"},
+                    "refreshToken": {"type": "string"}
+                  }
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "summary": "Logout current session",
+        "tags": ["Authentication"],
+        "security": [{"bearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "Logout successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {"type": "string"}
+                  }
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "summary": "Get current user profile",
+        "tags": ["Authentication"],
+        "security": [{"bearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "User profile",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/User"}
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/auth/change-password": {
+      "patch": {
+        "summary": "Change user password",
+        "tags": ["Authentication"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["currentPassword", "newPassword"],
+                "properties": {
+                  "currentPassword": {"type": "string"},
+                  "newPassword": {"type": "string", "minLength": 8}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Password changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {"type": "string"}
+                  }
+                }
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/auth/change-pin": {
+      "patch": {
+        "summary": "Change student PIN",
+        "tags": ["Authentication"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["currentPin", "newPin"],
+                "properties": {
+                  "currentPin": {"type": "string", "length": 6},
+                  "newPin": {"type": "string", "length": 6}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "PIN changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {"type": "string"}
+                  }
+                }
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/auth/me/timezone": {
+      "patch": {
+        "summary": "Update user timezone",
+        "tags": ["Authentication"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["timezone"],
+                "properties": {
+                  "timezone": {"type": "string", "pattern": "^[A-Za-z]+/[A-Za-z_]+$"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Timezone updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {"type": "string"},
+                    "timezone": {"type": "string"}
+                  }
+                }
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/auth/me/profile-picture": {
+      "patch": {
+        "summary": "Update profile picture",
+        "tags": ["Authentication"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["file"],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Profile picture updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {"type": "string"},
+                    "profilePictureUrl": {"type": "string", "format": "uri"}
+                  }
+                }
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/auth/me/profile-picture": {
+      "delete": {
+        "summary": "Delete profile picture",
+        "tags": ["Authentication"],
+        "security": [{"bearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "Profile picture deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {"type": "string"}
+                  }
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/auth/resend-otp": {
+      "post": {
+        "summary": "Resend verification OTP",
+        "tags": ["Authentication"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email"],
+                "properties": {
+                  "email": {"type": "string", "format": "email"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OTP sent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {"type": "string"},
+                    "emailSent": {"type": "boolean"}
+                  }
+                }
+              }
+            }
+          },
+          "404": {"$ref": "#/components/responses/NotFound"},
+          "429": {"$ref": "#/components/responses/TooManyRequests"}
+        }
+      }
+    },
+    "/me": {
+      "get": {
+        "summary": "Get parent profile",
+        "tags": ["Parent"],
+        "security": [{"bearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "Parent profile",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/User"}
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    },
+    "/students": {
+      "post": {
+        "summary": "Create a new student",
+        "tags": ["Students"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["fullName", "dateOfBirth", "actualGrade", "gradeLevel"],
+                "properties": {
+                  "fullName": {"type": "string", "minLength": 2, "maxLength": 100},
+                  "dateOfBirth": {"type": "string", "format": "date"},
+                  "actualGrade": {"type": "string", "enum": ["PRESCHOOL", "KINDERGARTEN", "GRADE_1", "GRADE_2", "GRADE_3", "GRADE_4", "GRADE_5", "GRADE_6", "GRADE_7", "GRADE_8", "GRADE_9", "GRADE_10", "GRADE_11", "GRADE_12"]},
+                  "gradeLevel": {"type": "string", "minLength": 1, "maxLength": 50},
+                  "gender": {"type": "string", "enum": ["MALE", "FEMALE", "OTHER", "PREFER_NOT_TO_SAY"]},
+                  "email": {"type": "string", "format": "email"},
+                  "preferredStartDate": {"type": "string", "format": "date"},
+                  "school": {"type": "string", "maxLength": 100},
+                  "notes": {"type": "string", "maxLength": 1000}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Student created",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Student"}
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      },
+      "get": {
+        "summary": "Get parent's students",
+        "tags": ["Students"],
+        "security": [{"bearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "List of students",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {"$ref": "#/components/schemas/Student"}
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    },
+    "/students/{id}": {
+      "get": {
+        "summary": "Get student details",
+        "tags": ["Students"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "Student details",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Student"}
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/students/{id}/activity": {
+      "get": {
+        "summary": "Get student activity",
+        "tags": ["Students"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "Student activity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "studentId": {"type": "string", "format": "uuid"},
+                    "recentSessions": {"type": "integer"},
+                    "recentAssignments": {"type": "integer"},
+                    "recentGrades": {"type": "integer"},
+                    "lastActivity": {"type": "string", "format": "date-time"}
+                  }
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/students/{id}/regenerate-pin": {
+      "post": {
+        "summary": "Regenerate student PIN",
+        "tags": ["Students"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "PIN regenerated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {"type": "string"},
+                    "newPin": {"type": "string"}
+                  }
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/enrollments": {
+      "post": {
+        "summary": "Create a new enrollment",
+        "tags": ["Enrollments"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["studentId", "subjectIds", "sessionFrequency", "availableDays", "preferredStartHour", "preferredEndHour", "startDate"],
+                "properties": {
+                  "studentId": {"type": "string", "format": "uuid"},
+                  "subjectIds": {"type": "array", "items": {"type": "string", "format": "uuid"}, "minItems": 1, "maxItems": 4},
+                  "sessionFrequency": {"type": "string", "enum": ["TWICE_WEEKLY", "THRICE_WEEKLY", "FIVE_TIMES_WEEKLY"]},
+                  "availableDays": {"type": "array", "items": {"type": "string", "enum": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]}},
+                  "preferredStartHour": {"type": "integer", "minimum": 0, "maximum": 23},
+                  "preferredEndHour": {"type": "integer", "minimum": 0, "maximum": 23},
+                  "billingFrequency": {"type": "string", "enum": ["WEEKLY", "MONTHLY", "YEARLY"], "default": "YEARLY"},
+                  "startDate": {"type": "string", "format": "date"},
+                  "endDate": {"type": "string", "format": "date"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Enrollment created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enrollments": {
+                      "type": "array",
+                      "items": {"$ref": "#/components/schemas/Enrollment"}
+                    },
+                    "enrollmentGroupId": {"type": "string", "format": "uuid"},
+                    "totalPriceNGN": {"type": "number"},
+                    "totalPriceUSD": {"type": "number"}
+                  }
+                }
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      },
+      "get": {
+        "summary": "Get enrollments",
+        "tags": ["Enrollments"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {"name": "status", "in": "query", "schema": {"type": "string", "enum": ["ACTIVE", "PAUSED", "COMPLETED", "CANCELLED"]}}
+        ],
+        "responses": {
+          "200": {
+            "description": "List of enrollments",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/PaginatedResponse"}
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    },
+    "/enrollments/{id}": {
+      "get": {
+        "summary": "Get enrollment details",
+        "tags": ["Enrollments"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "Enrollment details",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Enrollment"}
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/notifications/unread-count": {
+      "get": {
+        "summary": "Get unread notification count",
+        "tags": ["Notifications"],
+        "security": [{"bearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "Unread count",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "count": {"type": "integer"}
+                  }
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/notifications": {
+      "get": {
+        "summary": "Get notifications",
+        "tags": ["Notifications"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {"name": "unreadOnly", "in": "query", "schema": {"type": "boolean"}},
+          {"name": "type", "in": "query", "schema": {"type": "string"}},
+          {"name": "page", "in": "query", "schema": {"type": "integer", "default": 1}},
+          {"name": "limit", "in": "query", "schema": {"type": "integer", "default": 20}}
+        ],
+        "responses": {
+          "200": {
+            "description": "List of notifications",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/PaginatedResponse"}
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/notifications/{id}/read": {
+      "patch": {
+        "summary": "Mark notification as read",
+        "tags": ["Notifications"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "Notification marked as read",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Notification"}
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/notifications/read-all": {
+      "patch": {
+        "summary": "Mark all notifications as read",
+        "tags": ["Notifications"],
+        "security": [{"bearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "All notifications marked as read",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {"type": "string"},
+                    "count": {"type": "integer"}
+                  }
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/notifications/stream-ticket": {
+      "post": {
+        "summary": "Create stream ticket for SSE",
+        "tags": ["Notifications"],
+        "security": [{"bearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "Stream ticket created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ticket": {"type": "string"},
+                    "expiresAt": {"type": "string", "format": "date-time"}
+                  }
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "500": {"$ref": "#/components/responses/InternalServerError"}
+        }
+      }
+    },
+    "/notifications/stream": {
+      "get": {
+        "summary": "SSE endpoint for real-time notifications",
+        "tags": ["Notifications"],
+        "parameters": [
+          {"name": "ticket", "in": "query", "schema": {"type": "string"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "SSE stream established",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "429": {"$ref": "#/components/responses/TooManyRequests"}
+        }
+      }
+    },
+    "/sessions": {
+      "get": {
+        "summary": "Get sessions",
+        "tags": ["Sessions"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {"name": "enrollmentId", "in": "query", "schema": {"type": "string", "format": "uuid"}},
+          {"name": "status", "in": "query", "schema": {"type": "string", "enum": ["SCHEDULED", "COMPLETED", "MISSED", "CANCELLED"]}}
+        ],
+        "responses": {
+          "200": {
+            "description": "List of sessions",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/PaginatedResponse"}
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/sessions/{id}": {
+      "patch": {
+        "summary": "Update session",
+        "tags": ["Sessions"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "status": {"type": "string", "enum": ["COMPLETED", "MISSED", "CANCELLED"]},
+                  "tutorNotes": {"type": "string"},
+                  "homeworkAssigned": {"type": "string"},
+                  "durationMinutes": {"type": "integer", "minimum": 1},
+                  "participants": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "enrollmentId": {"type": "string", "format": "uuid"},
+                        "attended": {"type": "boolean"}
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Session updated",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Session"}
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/sessions/{id}/recording": {
+      "get": {
+        "summary": "Get session recording URL",
+        "tags": ["Sessions"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "Recording URL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "recordingUrl": {"type": "string", "format": "uri"}
+                  }
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/grades": {
+      "post": {
+        "summary": "Create a draft grade",
+        "tags": ["Grades"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["enrollmentId", "periodStart", "periodEnd", "components"],
+                "properties": {
+                  "enrollmentId": {"type": "string", "format": "uuid"},
+                  "periodStart": {"type": "string", "format": "date"},
+                  "periodEnd": {"type": "string", "format": "date"},
+                  "components": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "type": {"type": "string"},
+                        "weight": {"type": "number", "minimum": 0, "maximum": 100},
+                        "scoredItemId": {"type": "string", "format": "uuid"},
+                        "attendanceRate": {"type": "number", "minimum": 0, "maximum": 100}
+                      }
+                    }
+                  },
+                  "tutorComment": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Draft grade created",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Grade"}
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      },
+      "get": {
+        "summary": "Get grades (legacy endpoint)",
+        "tags": ["Grades"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {"name": "status", "in": "query", "schema": {"type": "string"}},
+          {"name": "tutorId", "in": "query", "schema": {"type": "string", "format": "uuid"}},
+          {"name": "studentId", "in": "query", "schema": {"type": "string", "format": "uuid"}},
+          {"name": "subjectId", "in": "query", "schema": {"type": "string", "format": "uuid"}},
+          {"name": "page", "in": "query", "schema": {"type": "integer"}},
+          {"name": "limit", "in": "query", "schema": {"type": "integer"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "List of grades",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/PaginatedResponse"}
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/grades/{id}": {
+      "patch": {
+        "summary": "Update a grade",
+        "tags": ["Grades"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "periodStart": {"type": "string", "format": "date"},
+                  "periodEnd": {"type": "string", "format": "date"},
+                  "components": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "type": {"type": "string"},
+                        "weight": {"type": "number"},
+                        "scoredItemId": {"type": "string", "format": "uuid"},
+                        "attendanceRate": {"type": "number"}
+                      }
+                    }
+                  },
+                  "tutorComment": {"type": "string"},
+                  "finalScore": {"type": "number", "minimum": 0, "maximum": 100},
+                  "overrideReason": {"type": "string", "minLength": 10}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Grade updated",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Grade"}
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      },
+      "delete": {
+        "summary": "Delete a grade",
+        "tags": ["Grades"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "Grade deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {"type": "string"}
+                  }
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/grades/{id}/submit": {
+      "post": {
+        "summary": "Submit a grade for approval",
+        "tags": ["Grades"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {"name": "id", "in": "path", "required": true, "schema": {"type": "string", "format": "uuid"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "Grade submitted",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Grade"}
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/payments/initiate": {
+      "post": {
+        "summary": "Initiate a payment",
+        "tags": ["Payments"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "enrollmentId": {"type": "string", "format": "uuid"},
+                  "enrollmentGroupId": {"type": "string", "format": "uuid"},
+                  "currency": {"type": "string", "default": "USD"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Payment initiated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "paymentId": {"type": "string", "format": "uuid"},
+                    "authorizationUrl": {"type": "string", "format": "uri"},
+                    "reference": {"type": "string"},
+                    "amount": {"type": "number"},
+                    "currency": {"type": "string"}
+                  }
+                }
+              }
+            }
+          },
+          "400": {"$ref": "#/components/responses/BadRequest"},
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "429": {"$ref": "#/components/responses/TooManyRequests"}
+        }
+      }
+    },
+    "/payments": {
+      "get": {
+        "summary": "Get parent's payments",
+        "tags": ["Payments"],
+        "security": [{"bearerAuth": []}],
+        "responses": {
+          "200": {
+            "description": "List of payments",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/PaginatedResponse"}
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"},
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    },
+    "/payments/verify/{reference}": {
+      "get": {
+        "summary": "Verify payment status by reference",
+        "tags": ["Payments"],
+        "parameters": [
+          {"name": "reference", "in": "path", "required": true, "schema": {"type": "string"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "Payment status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {"type": "string"},
+                    "paidAt": {"type": "string", "format": "date-time"}
+                  }
+                }
+              }
+            }
+          },
+          "404": {"$ref": "#/components/responses/NotFound"}
+        }
+      }
+    },
+    "/subjects/public": {
+      "get": {
+        "summary": "Get public subjects list",
+        "tags": ["Subjects"],
+        "parameters": [
+          {"name": "category", "in": "query", "schema": {"type": "string", "enum": ["CORE", "ENRICHMENT", "TEST_PREP"]}},
+          {"name": "gradeBandTier", "in": "query", "schema": {"type": "string", "enum": ["PRESCHOOL_TO_G1", "G2_TO_G4", "G5_TO_G8", "G9_TO_G12"]}}
+        ],
+        "responses": {
+          "200": {
+            "description": "List of subjects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {"$ref": "#/components/schemas/Subject"}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/subjects": {
+      "get": {
+        "summary": "Get subjects (authenticated)",
+        "tags": ["Subjects"],
+        "security": [{"bearerAuth": []}],
+        "parameters": [
+          {"name": "category", "in": "query", "schema": {"type": "string", "enum": ["CORE", "ENRICHMENT", "TEST_PREP"]}},
+          {"name": "gradeBandTier", "in": "query", "schema": {"type": "string", "enum": ["PRESCHOOL_TO_G1", "G2_TO_G4", "G5_TO_G8", "G9_TO_G12"]}}
+        ],
+        "responses": {
+          "200": {
+            "description": "List of subjects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {"$ref": "#/components/schemas/Subject"}
+                }
+              }
+            }
+          },
+          "401": {"$ref": "#/components/responses/Unauthorized"}
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health check",
+        "tags": ["System"],
+        "responses": {
+          "200": {
+            "description": "System healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {"type": "string"},
+                    "timestamp": {"type": "string", "format": "date-time"},
+                    "database": {"type": "string"}
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database disconnected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {"type": "string"},
+                    "timestamp": {"type": "string", "format": "date-time"},
+                    "database": {"type": "string"},
+                    "error": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {"name": "Authentication", "description": "User authentication and registration"},
+    {"name": "Parent", "description": "Parent-specific endpoints"},
+    {"name": "Students", "description": "Student management"},
+    {"name": "Enrollments", "description": "Enrollment management"},
+    {"name": "Sessions", "description": "Session management"},
+    {"name": "Grades", "description": "Grade management"},
+    {"name": "Payments", "description": "Payment processing"},
+    {"name": "Subjects", "description": "Subject catalog"},
+    {"name": "Notifications", "description": "Real-time notifications"},
+    {"name": "System", "description": "System health and utilities"}
+  ],
+  "responses": {
+    "BadRequest": {
+      "description": "Bad request - validation error",
+      "content": {
+        "application/json": {
+          "schema": {"$ref": "#/components/schemas/Error"}
+        }
+      }
+    },
+    "Unauthorized": {
+      "description": "Unauthorized - invalid or missing token",
+      "content": {
+        "application/json": {
+          "schema": {"$ref": "#/components/schemas/Error"}
+        }
+      }
+    },
+    "Forbidden": {
+      "description": "Forbidden - insufficient permissions",
+      "content": {
+        "application/json": {
+          "schema": {"$ref": "#/components/schemas/Error"}
+        }
+      }
+    },
+    "NotFound": {
+      "description": "Resource not found",
+      "content": {
+        "application/json": {
+          "schema": {"$ref": "#/components/schemas/Error"}
+        }
+      }
+    },
+    "TooManyRequests": {
+      "description": "Rate limit exceeded",
+      "content": {
+        "application/json": {
+          "schema": {"$ref": "#/components/schemas/Error"}
+        }
+      }
+    },
+    "InternalServerError": {
+      "description": "Internal server error",
+      "content": {
+        "application/json": {
+          "schema": {"$ref": "#/components/schemas/Error"}
+        }
+      }
+    }
+  }
+}

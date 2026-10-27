@@ -176,14 +176,13 @@ export class StudentsService {
     return {
       id: student.id,
       fullName: student.fullName,
-      studentCode, // Safe to return \u2014 it's a login identifier, not a secret
       actualGrade: student.actualGrade,
       gradeBandTier: student.gradeBandTier,
       gender: student.gender,
       email: student.email,
       preferredStartDate: student.preferredStartDate,
       emailSent,
-      // Never return the password
+      // Never return studentCode or PIN in response - PIN goes to parent by email
     };
   }
 

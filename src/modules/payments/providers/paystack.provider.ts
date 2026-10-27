@@ -55,8 +55,8 @@ export class PaystackProvider implements PaymentProvider {
    * Verify Paystack webhook signature
    * Prevents fake webhook calls
    */
-  private verifyWebhookSignature(signature: string | string[] | undefined, rawBody: string): boolean {
-    if (!signature || !this.secretKey) {
+  private verifyWebhookSignature(signature: string | string[] | undefined, rawBody?: string): boolean {
+    if (!signature || !this.secretKey || !rawBody) {
       return false;
     }
 
@@ -69,8 +69,18 @@ export class PaystackProvider implements PaymentProvider {
       .update(rawBody, 'utf8')
       .digest('hex');
 
+    // Timing-safe comparison requires buffers of equal length
+    // If lengths differ, signature is invalid
+    if (signatureStr.length !== expectedSignature.length) {
+      return false;
+    }
+
     // Compare signatures using timing-safe comparison
-    return crypto.timingSafeEqual(Buffer.from(signatureStr), Buffer.from(expectedSignature));
+    try {
+      return crypto.timingSafeEqual(Buffer.from(signatureStr), Buffer.from(expectedSignature));
+    } catch (error) {
+      return false;
+    }
   }
 
   async initiatePayment(data: PaymentInitiationData): Promise<PaymentInitiationResponse> {
@@ -254,7 +264,7 @@ export class PaystackProvider implements PaymentProvider {
     }
   }
 
-  async processWebhook(data: any, signature: string | string[] | undefined, rawBody: string): Promise<WebhookProcessingResult> {
+  async processWebhook(data: any, signature: string | string[] | undefined, rawBody?: string): Promise<WebhookProcessingResult> {
     // Verify webhook signature first
     if (!this.verifyWebhookSignature(signature, rawBody)) {
       logger.error({ event: data.event }, 'Invalid webhook signature');

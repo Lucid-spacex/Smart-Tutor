@@ -31,6 +31,7 @@ router.patch('/', authenticate, requireRole('TUTOR'), tier2RateLimit, validate(u
 router.post('/documents', authenticate, requireRole('TUTOR'), tier2RateLimit, upload.single('file'), tutorApplicationController.uploadDocument);
 
 // GET /tutor-application/documents/:id - Get signed URL for document download
+// Only the owning tutor and admins can access documents
 router.get('/documents/:id', authenticate, tier2RateLimit, tutorApplicationController.getDocumentUrl);
 
 // DELETE /tutor-application/documents/:id - Delete document (requires TUTOR role, not approved)

@@ -7,6 +7,7 @@ This table documents all notification events that fire through the centralized `
 | CLASS_NEEDS_SCHEDULING | class-reminders.service.ts | sendClassReminders() | Tutor (enrollment.tutor.userId) | 24h and 2h before slot if no session |
 | CLASS_UNSCHEDULED | class-reminders.service.ts | sendClassReminders() | ADMIN (recipientRole) | 1h before slot if still unscheduled |
 | CLASS_MISSED | class-reminders.service.ts | sendClassReminders() | ADMIN (recipientRole) | When slot has passed with no session |
+| TUTOR_FAILED_TO_SCHEDULE | class-reminders.service.ts | sendClassReminders() | Tutor (enrollment.tutor.userId) | When slot has passed with no session (tutor notification) |
 | CLASS_REMINDER | class-reminders.service.ts | sendClassReminders() | Tutor (enrollment.tutor.userId) | 30 min before session |
 | CHANGE_REQUEST_SUBMITTED | enrollment-change-requests.service.ts | createChangeRequest() | ADMIN (recipientRole) | When parent submits change request |
 | CHANGE_REQUEST_APPROVED | enrollment-change-requests.service.ts | approveChangeRequest() | Parent, Student, Tutor | After approval with re-validation |

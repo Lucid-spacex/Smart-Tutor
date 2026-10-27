@@ -1,7 +1,7 @@
 import request from 'supertest';
 import app from '../../src/app';
 import prisma from '../../src/config/database';
-import { generateToken } from '../../src/utils/token.util';
+import { generateAccessToken } from '../../src/utils/token.util';
 import { hashPassword } from '../../src/utils/password.util';
 
 describe('Admin Parent Directory', () => {
@@ -27,7 +27,7 @@ describe('Admin Parent Directory', () => {
       },
     });
     adminId = admin.id;
-    adminToken = generateToken(admin.id, admin.role);
+    adminToken = generateAccessToken({ userId: admin.id, role: admin.role });
 
     // Create parent user
     const parent = await prisma.user.create({
@@ -42,7 +42,7 @@ describe('Admin Parent Directory', () => {
       },
     });
     parentId = parent.id;
-    parentToken = generateToken(parent.id, parent.role);
+    parentToken = generateAccessToken({ userId: parent.id, role: parent.role });
 
     // Create tutor
     const tutor = await prisma.user.create({

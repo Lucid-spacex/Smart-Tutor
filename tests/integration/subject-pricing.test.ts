@@ -1,7 +1,7 @@
 import request from 'supertest';
 import app from '../../src/app';
 import prisma from '../../src/config/database';
-import { generateToken } from '../../src/utils/token.util';
+import { generateAccessToken } from '../../src/utils/token.util';
 import { hashPassword } from '../../src/utils/password.util';
 
 describe('Per-Grade Subject Pricing', () => {
@@ -28,7 +28,7 @@ describe('Per-Grade Subject Pricing', () => {
       },
     });
     adminId = admin.id;
-    adminToken = generateToken(admin.id, admin.role);
+    adminToken = generateAccessToken({ userId: admin.id, role: admin.role });
 
     // Create parent user
     const parent = await prisma.user.create({
@@ -43,7 +43,7 @@ describe('Per-Grade Subject Pricing', () => {
       },
     });
     parentId = parent.id;
-    parentToken = generateToken(parent.id, parent.role);
+    parentToken = generateAccessToken({ userId: parent.id, role: parent.role });
 
     // Create tutor user
     const tutor = await prisma.user.create({
@@ -58,7 +58,7 @@ describe('Per-Grade Subject Pricing', () => {
       },
     });
     tutorId = tutor.id;
-    tutorToken = generateToken(tutor.id, tutor.role);
+    tutorToken = generateAccessToken({ userId: tutor.id, role: tutor.role });
 
     // Create tutor profile
     await prisma.tutorProfile.create({
@@ -306,7 +306,7 @@ describe('Per-Grade Subject Pricing', () => {
       const studentUser = await prisma.user.findUnique({
         where: { id: studentId },
       });
-      const studentToken = generateToken(studentUser!.id, 'STUDENT');
+      const studentToken = generateAccessToken({ userId: studentUser!.id, role: 'STUDENT' });
 
       const response = await request(app)
         .get('/subjects')

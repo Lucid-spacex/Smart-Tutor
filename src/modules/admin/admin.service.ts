@@ -1412,7 +1412,23 @@ export class AdminService {
     const [enrollments, total] = await Promise.all([
       prisma.enrollment.findMany({
         where: { studentId, deletedAt: null },
-        include: {
+        select: {
+          // Include all fields EXCEPT pricing (Admins can see pricing via dedicated pricing endpoints)
+          id: true,
+          studentId: true,
+          subjectId: true,
+          tutorId: true,
+          enrollmentGroupId: true,
+          status: true,
+          sessionFrequency: true,
+          availableDays: true,
+          preferredStartHour: true,
+          preferredEndHour: true,
+          billingFrequency: true,
+          startDate: true,
+          endDate: true,
+          createdAt: true,
+          updatedAt: true,
           subject: true,
           tutor: {
             select: {
@@ -1714,6 +1730,7 @@ export class AdminService {
 
     return {
       message: 'PIN regenerated successfully. New credentials sent to parent email.',
+      // Never return studentCode or PIN in response - PIN goes to parent by email
     };
   }
 

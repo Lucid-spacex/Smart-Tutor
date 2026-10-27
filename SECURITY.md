@@ -1175,6 +1175,11 @@ Type '{ connect: { id: string; }; }' is not assignable to type 'undefined'.
 - `DELETE /tutor/sessions/:id` - Delete session
 - `GET /tutor/me/notifications` - Get tutor notifications
 - `GET /tutor/me/unread-count` - Get unread notification count
+- `GET /tutor/students/:studentId/scored-items` - Get scored items for a student
+- `POST /tutor/scored-items` - Create scored item
+- `PATCH /tutor/scored-items/:id` - Update scored item
+- `DELETE /tutor/scored-items/:id` - Delete scored item
+- `GET /tutor/upcoming-classes` - Get upcoming classes (for reminder job)
 
 ### Tutor Application (`/tutor-application`)
 - `GET /tutor-application` - Get draft application
@@ -1218,6 +1223,11 @@ Type '{ connect: { id: string; }; }' is not assignable to type 'undefined'.
 - `PATCH /admin/sessions/:id` - Update session
 - `GET /admin/complaints` - List complaints
 - `PATCH /admin/complaints/:id` - Resolve complaint
+- `GET /admin/class-schedule` - Get class schedule view
+- `GET /admin/change-requests` - List enrollment change requests
+- `GET /admin/change-requests/:id` - Get change request details
+- `PATCH /admin/change-requests/:id/approve` - Approve change request
+- `PATCH /admin/change-requests/:id/reject` - Reject change request
 
 ### Subjects (`/subjects`)
 - `GET /subjects` - List subjects (public or with pricing)
@@ -1233,6 +1243,9 @@ Type '{ connect: { id: string; }; }' is not assignable to type 'undefined'.
 - `GET /enrollments/:id` - Get enrollment details
 - `PATCH /enrollments/:id` - Update enrollment
 - `DELETE /enrollments/:id` - Delete enrollment
+- `POST /enrollments/:id/change-requests` - Create change request
+- `GET /enrollments/:id/change-requests` - List change requests for enrollment
+- `PATCH /change-requests/:id/cancel` - Cancel change request
 
 ### Sessions (`/sessions`)
 - `GET /sessions` - List sessions
@@ -1255,34 +1268,18 @@ Type '{ connect: { id: string; }; }' is not assignable to type 'undefined'.
 
 ### Grades (`/grades`, `/admin/grades`)
 - `POST /grades` - Create draft grade
-- `PATCH /grades/:id` - Update grade
-- `DELETE /grades/:id` - Delete grade
+- `GET /grades` - List grades (with visibility rules)
+- `PATCH /grades/:id` - Update grade (DRAFT or REJECTED only)
+- `DELETE /grades/:id` - Delete grade (DRAFT or REJECTED only)
 - `POST /grades/:id/submit` - Submit grade for approval
 - `POST /grades/:id/withdraw` - Withdraw grade to draft
-- `GET /grades/:id/preview` - Preview grade
-- `GET /admin/grades` - List grades (admin)
+- `GET /grades/:id/preview` - Preview grade with computed score
+- `GET /admin/grades` - List all grades (admin with filters)
 - `GET /admin/grades/:id` - Get grade details (admin)
+- `GET /admin/grades/pending` - List pending grades (admin)
 - `PATCH /admin/grades/:id/approve` - Approve grade
 - `PATCH /admin/grades/:id/reject` - Reject grade
 - `POST /admin/grades/bulk-approve` - Bulk approve grades
-
-### Enrollment Change Requests (`/enrollments/:id/change-requests`, `/admin/change-requests`)
-- `POST /enrollments/:id/change-requests` - Create change request
-- `GET /enrollments/:id/change-requests` - List change requests for enrollment
-- `PATCH /change-requests/:id/cancel` - Cancel change request
-- `GET /admin/change-requests` - List all change requests (admin)
-- `GET /admin/change-requests/:id` - Get change request details (admin)
-- `PATCH /admin/change-requests/:id/approve` - Approve change request
-- `PATCH /admin/change-requests/:id/reject` - Reject change request
-
-### Grades (`/grades`)
-- `POST /grades` - Submit grade
-- `GET /grades` - List grades
-- `GET /grades/:id` - Get grade details
-- `PATCH /grades/:id` - Update grade
-- `DELETE /grades/:id` - Delete grade
-- `PATCH /grades/:id/approve` - Approve grade
-- `PATCH /grades/:id/reject` - Reject grade
 
 ### Progress Reports (`/progress-reports`)
 - `POST /progress-reports` - Create progress report

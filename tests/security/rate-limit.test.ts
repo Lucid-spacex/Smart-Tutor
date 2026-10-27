@@ -27,25 +27,25 @@ beforeEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// Tier 1 Tests (Strict: 7 req / 15 min, keyed by IP+email)
+// Tier 1 Tests (Strict: 20 req / 15 min, keyed by IP+email)
 // ---------------------------------------------------------------------------
-describe('Tier 1 — Strict rate limit (7 req / 15 min) on auth endpoints', () => {
+describe('Tier 1 — Strict rate limit (20 req / 15 min) on auth endpoints', () => {
   const uniqueEmail = `rl_tier1_${Date.now()}@test.com`;
 
-  it('should allow exactly 7 requests to POST /auth/login before returning 429', async () => {
+  it('should allow exactly 20 requests to POST /auth/login before returning 429', async () => {
     const payload = { email: uniqueEmail, password: 'WrongPassword1!' };
 
-    // Requests 1–7: may succeed with 401 (wrong creds) — that's fine.
+    // Requests 1–20: may succeed with 401 (wrong creds) — that's fine.
     // The limiter counts ALL requests (skipSuccessfulRequests: false).
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 20; i++) {
       const res = await request(app)
         .post('/api/auth/login')
         .send(payload);
-      // Should be anything except 429 for the first 7
+      // Should be anything except 429 for the first 20
       expect(res.status).not.toBe(429);
     }
 
-    // Request 8: must hit the limit
+    // Request 21: must hit the limit
     const blockedRes = await request(app)
       .post('/api/auth/login')
       .send(payload);
@@ -73,7 +73,7 @@ describe('Tier 1 — Strict rate limit (7 req / 15 min) on auth endpoints', () =
     const emailB = `rl_acct_b_${Date.now()}@test.com`;
 
     // Exhaust emailA's counter
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 20; i++) {
       await request(app)
         .post('/api/auth/login')
         .send({ email: emailA, password: 'Wrong!' });
@@ -92,23 +92,23 @@ describe('Tier 1 — Strict rate limit (7 req / 15 min) on auth endpoints', () =
 
   it('should apply Tier 1 to POST /auth/register', async () => {
     const regEmail = `rl_reg_${Date.now()}@test.com`;
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 20; i++) {
       await request(app)
         .post('/api/auth/register')
-        .send({ email: regEmail, password: 'Password12345!', fullName: 'Test' });
+        .send({ email: regEmail, password: 'Password12345!', fullName: 'Test', role: 'PARENT' });
     }
-    // 8th attempt with the same IP+email combo (using the same regEmail as body field)
+    // 21st attempt with the same IP+email combo (using the same regEmail as body field)
     const blocked = await request(app)
       .post('/api/auth/register')
-      .send({ email: regEmail, password: 'Password12345!', fullName: 'Test' });
+      .send({ email: regEmail, password: 'Password12345!', fullName: 'Test', role: 'PARENT' });
     expect(blocked.status).toBe(429);
   });
 });
 
 // ---------------------------------------------------------------------------
-// Tier 2 Tests (Moderate: 60 req / 1 min, keyed by userId)
+// Tier 2 Tests (Moderate: 120 req / 1 min, keyed by userId)
 // ---------------------------------------------------------------------------
-describe('Tier 2 — Moderate rate limit (60 req / 1 min) on write endpoints', () => {
+describe('Tier 2 — Moderate rate limit (120 req / 1 min) on write endpoints', () => {
   let parentToken = '';
   let subjectId = '';
 
@@ -138,24 +138,24 @@ describe('Tier 2 — Moderate rate limit (60 req / 1 min) on write endpoints', (
     subjectId = subject.id;
   });
 
-  it.skip('should return 429 after 60 write requests within 1 minute', async () => {
+  it.skip('should return 429 after 120 write requests within 1 minute', async () => {
     // We use POST /api/students with invalid data — it will return 400 from
     // validation, but the rate limiter counts it regardless.
-    // We need 61 attempts. At request 61, the limiter should fire.
+    // We need 121 attempts. At request 121, the limiter should fire.
     const makeWriteRequest = () =>
       request(app)
         .post('/api/students')
         .set('Authorization', `Bearer ${parentToken}`)
         .send({}); // Intentionally invalid — triggers 400, still counted by limiter
 
-    for (let i = 0; i < 60; i++) {
+    for (let i = 0; i < 120; i++) {
       const res = await makeWriteRequest();
       expect(res.status).not.toBe(429);
     }
 
     const blocked = await makeWriteRequest();
     expect(blocked.status).toBe(429);
-  }, 30000); // Allow 30s for 61 requests
+  }, 30000); // Allow 30s for 121 requests
 
   it('should include RateLimit-* headers on Tier 2 responses', async () => {
     // Use a fresh user so the Tier2 counter isn't exhausted
@@ -187,9 +187,9 @@ describe('Tier 2 — Moderate rate limit (60 req / 1 min) on write endpoints', (
 });
 
 // ---------------------------------------------------------------------------
-// Tier 3 Tests (Loose: 300 req / 15 min, keyed by userId)
+// Tier 3 Tests (Loose: 1000 req / 15 min, keyed by userId)
 // ---------------------------------------------------------------------------
-describe('Tier 3 — Loose rate limit (300 req / 15 min) on read endpoints', () => {
+describe('Tier 3 — Loose rate limit (1000 req / 15 min) on read endpoints', () => {
   let parentToken = '';
 
   beforeAll(async () => {
@@ -218,15 +218,15 @@ describe('Tier 3 — Loose rate limit (300 req / 15 min) on read endpoints', () 
     expect(res.headers).toHaveProperty('ratelimit-remaining');
     expect(res.headers).toHaveProperty('ratelimit-reset');
     expect(res.headers).not.toHaveProperty('x-ratelimit-limit');
-    // Tier 3 limit should be 300
-    expect(Number(res.headers['ratelimit-limit'])).toBe(300);
+    // Tier 3 limit should be 1000
+    expect(Number(res.headers['ratelimit-limit'])).toBe(1000);
   });
 
-  it.skip('should return 429 after 300 GET requests within 15 minutes', async () => {
-    // Note: this test sends 301 requests. It may be slow in CI.
+  it.skip('should return 429 after 1000 GET requests within 15 minutes', async () => {
+    // Note: this test sends 1001 requests. It may be slow in CI.
     // If this becomes a bottleneck, consider reducing Tier 3 limit in test env
     // via an env var (RATE_LIMIT_TIER3_MAX=10) and adjusting the assertion.
-    for (let i = 0; i < 300; i++) {
+    for (let i = 0; i < 1000; i++) {
       const res = await request(app)
         .get('/api/subjects')
         .set('Authorization', `Bearer ${parentToken}`);
@@ -236,7 +236,7 @@ describe('Tier 3 — Loose rate limit (300 req / 15 min) on read endpoints', () 
       .get('/api/subjects')
       .set('Authorization', `Bearer ${parentToken}`);
     expect(blocked.status).toBe(429);
-  }, 60000); // Allow 60s for 301 requests
+  }, 60000); // Allow 60s for 1001 requests
 });
 
 // ---------------------------------------------------------------------------

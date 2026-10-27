@@ -8,6 +8,7 @@ describe('Auth & Identity Integration Tests', () => {
   let tutorEmail = `tutor_${Date.now()}@example.com`;
   let testPassword = 'SecurePassword123!';
   let parentToken = '';
+  let studentToken = '';
   let studentCode = '';
   let studentPin = '123456';
   let studentId = '';
@@ -59,6 +60,16 @@ describe('Auth & Identity Integration Tests', () => {
       .post('/api/auth/login')
       .send({ email: parentEmail, password: testPassword });
     parentToken = res.body.accessToken;
+
+    // Login student to get token
+    const studentRes = await request(app)
+      .post('/api/auth/student-login')
+      .send({
+        parentEmail,
+        studentCode,
+        studentPin,
+      });
+    studentToken = studentRes.body.accessToken;
   });
 
   describe('Three-Factor Student Login', () => {
@@ -148,23 +159,29 @@ describe('Auth & Identity Integration Tests', () => {
 
     it('should block tutor from login while status is PENDING_VETTING', async () => {
       const pendingTutorEmail = `pending_tutor_${Date.now()}@test.com`;
-      await request(app)
+      const regRes = await request(app)
         .post('/api/auth/register')
         .send({
           fullName: 'Pending Tutor',
           email: pendingTutorEmail,
           phone: '+1987654322',
+          address: '123 Test Street, Test City',
           password: 'Password12345!',
           role: 'TUTOR',
         });
 
+      expect(regRes.status).toBe(201);
+
       // Verify email -> status becomes PENDING_VETTING
-      await request(app)
+      const verifyRes = await request(app)
         .post('/api/auth/verify')
         .send({
           email: pendingTutorEmail,
           otp: '123456',
         });
+
+      expect(verifyRes.status).toBe(200);
+      expect(verifyRes.body.user.status).toBe('PENDING_VETTING');
 
       // Attempt login -> should be blocked
       const loginRes = await request(app)
@@ -175,6 +192,7 @@ describe('Auth & Identity Integration Tests', () => {
         });
 
       expect(loginRes.status).toBe(403);
+      expect(loginRes.body.error).toBe('Your account is pending admin approval');
     });
   });
 
@@ -298,12 +316,22 @@ describe('Auth & Identity Integration Tests', () => {
     });
 
     it('should reject PIN change with wrong current PIN', async () => {
+      // Login again to get fresh token after previous PIN change
+      const loginRes = await request(app)
+        .post('/api/auth/student-login')
+        .send({
+          parentEmail,
+          studentCode,
+          studentPin: '654321',
+        });
+      const freshToken = loginRes.body.accessToken;
+
       const res = await request(app)
         .patch('/api/auth/change-pin')
-        .set('Authorization', `Bearer ${studentToken}`)
+        .set('Authorization', `Bearer ${freshToken}`)
         .send({
           currentPin: '000000',
-          newPin: '654321',
+          newPin: '789012',
         });
 
       expect(res.status).toBe(401);
@@ -311,11 +339,21 @@ describe('Auth & Identity Integration Tests', () => {
     });
 
     it('should reject PIN change with invalid new PIN format', async () => {
+      // Login again to get fresh token
+      const loginRes = await request(app)
+        .post('/api/auth/student-login')
+        .send({
+          parentEmail,
+          studentCode,
+          studentPin: '654321',
+        });
+      const freshToken = loginRes.body.accessToken;
+
       const res = await request(app)
         .patch('/api/auth/change-pin')
-        .set('Authorization', `Bearer ${studentToken}`)
+        .set('Authorization', `Bearer ${freshToken}`)
         .send({
-          currentPin: studentPin,
+          currentPin: '654321',
           newPin: '12345', // Only 5 digits
         });
 
@@ -323,11 +361,21 @@ describe('Auth & Identity Integration Tests', () => {
     });
 
     it('should reject student from using change-password endpoint', async () => {
+      // Login again to get fresh token
+      const loginRes = await request(app)
+        .post('/api/auth/student-login')
+        .send({
+          parentEmail,
+          studentCode,
+          studentPin: '654321',
+        });
+      const freshToken = loginRes.body.accessToken;
+
       const res = await request(app)
         .patch('/api/auth/change-password')
-        .set('Authorization', `Bearer ${studentToken}`)
+        .set('Authorization', `Bearer ${freshToken}`)
         .send({
-          currentPassword: studentPin,
+          currentPassword: '654321',
           newPassword: 'NewPassword123!',
         });
 

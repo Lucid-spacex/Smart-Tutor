@@ -8,6 +8,7 @@ import { PaymentsService } from '../../src/modules/payments/payments.service';
 describe('Payments Security & Integrity Integration Tests', () => {
   jest.setTimeout(30000);
   let parentToken = '', parentId = '';
+  let adminToken = '', adminId = '';
   let singleEnrollmentId = '';
   let groupEnrollmentGroupId = '';
   let studentRecord: any;
@@ -33,6 +34,17 @@ describe('Payments Security & Integrity Integration Tests', () => {
 
   beforeAll(async () => {
     const passHash = await hashPassword(testPassword);
+
+    const admin = await prisma.user.create({
+      data: {
+        fullName: 'Admin Payments',
+        email: `pay_admin_${Date.now()}@test.com`,
+        passwordHash: passHash,
+        role: 'ADMIN',
+        status: 'ACTIVE',
+      },
+    });
+    adminId = admin.id;
 
     const parent = await prisma.user.create({
       data: {
@@ -141,10 +153,12 @@ describe('Payments Security & Integrity Integration Tests', () => {
     });
     groupEnrollmentGroupId = groupId;
 
-    const loginRes = await request(app)
-      .post('/auth/login')
-      .send({ email: parent.email, password: testPassword });
-    parentToken = loginRes.body.accessToken;
+    const [pRes, aRes] = await Promise.all([
+      request(app).post('/api/auth/login').send({ email: parent.email, password: testPassword }),
+      request(app).post('/api/auth/login').send({ email: admin.email, password: testPassword }),
+    ]);
+    parentToken = pRes.body.accessToken;
+    adminToken = aRes.body.accessToken;
   });
 
   it('POST /payments/initiate computes amount server-side from enrollment (ignoring client amount)', async () => {
@@ -433,5 +447,141 @@ describe('Payments Security & Integrity Integration Tests', () => {
       where: { id: pendingEnrollment.id },
     });
     expect(enrollmentAfterSuccess?.status).toBe('ACTIVE');
+  });
+
+  describe('Payment Verify Authorization', () => {
+    let verifyParentId = '';
+    let verifyParentToken = '';
+    let anotherParentId = '';
+    let anotherParentToken = '';
+    let verifyReference = '';
+
+    beforeAll(async () => {
+      const passHash = await hashPassword(testPassword);
+
+      const verifyParent = await prisma.user.create({
+        data: {
+          fullName: 'Verify Parent',
+          email: `verify_parent_${Date.now()}@test.com`,
+          passwordHash: passHash,
+          role: 'PARENT',
+          status: 'ACTIVE',
+        },
+      });
+      verifyParentId = verifyParent.id;
+
+      const anotherParent = await prisma.user.create({
+        data: {
+          fullName: 'Another Parent',
+          email: `verify_parent2_${Date.now()}@test.com`,
+          passwordHash: passHash,
+          role: 'PARENT',
+          status: 'ACTIVE',
+        },
+      });
+      anotherParentId = anotherParent.id;
+
+      const studentUser = await prisma.user.create({
+        data: {
+          fullName: 'Verify Student',
+          studentCode: `VRF${Math.floor(1000 + Math.random() * 9000)}`,
+          passwordHash: passHash,
+          role: 'STUDENT',
+          status: 'ACTIVE',
+          parentId: verifyParentId,
+        },
+      });
+
+      const studentRecord = await prisma.student.create({
+        data: {
+          parentId: verifyParentId,
+          userId: studentUser.id,
+          fullName: 'Verify Student',
+          dateOfBirth: new Date('2014-01-01'),
+          gradeLevel: '4th',
+          actualGrade: 'GRADE_4',
+          gradeBandTier: 'G2_TO_G4',
+        },
+      });
+
+      const subject = await prisma.subject.create({
+        data: {
+          name: `VerifySubject_${Date.now()}`,
+          gradeBand: 'K-12',
+          category: 'CORE',
+        },
+      });
+
+      const enrollment = await prisma.enrollment.create({
+        data: {
+          studentId: studentRecord.id,
+          subjectId: subject.id,
+          sessionFrequency: 'TWICE_WEEKLY',
+          availableDays: ['MON', 'THU'],
+          preferredStartHour: 15,
+          preferredEndHour: 17,
+          billingFrequency: 'MONTHLY',
+          yearlyPriceNGN: 1200.00,
+          yearlyPriceUSD: 1200.00,
+          status: 'ACTIVE',
+          startDate: new Date(),
+        },
+      });
+
+      verifyReference = `verify_ref_${Date.now()}`;
+      await prisma.payment.create({
+        data: {
+          parentId: verifyParentId,
+          enrollmentId: enrollment.id,
+          amount: 100,
+          currency: 'NGN',
+          provider: 'PAYSTACK',
+          providerReference: verifyReference,
+          status: 'SUCCESS',
+          paidAt: new Date(),
+        },
+      });
+
+      const [vpRes, apRes] = await Promise.all([
+        request(app).post('/api/auth/login').send({ email: verifyParent.email, password: testPassword }),
+        request(app).post('/api/auth/login').send({ email: anotherParent.email, password: testPassword }),
+      ]);
+
+      verifyParentToken = vpRes.body.accessToken;
+      anotherParentToken = apRes.body.accessToken;
+    });
+
+    it('Unauthenticated request gets 401', async () => {
+      const res = await request(app)
+        .get(`/api/payments/verify/${verifyReference}`);
+
+      expect(res.status).toBe(401);
+    });
+
+    it('Another parent gets 403/404', async () => {
+      const res = await request(app)
+        .get(`/api/payments/verify/${verifyReference}`)
+        .set('Authorization', `Bearer ${anotherParentToken}`);
+
+      expect([403, 404]).toContain(res.status);
+    });
+
+    it('The owning parent succeeds', async () => {
+      const res = await request(app)
+        .get(`/api/payments/verify/${verifyReference}`)
+        .set('Authorization', `Bearer ${verifyParentToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.providerReference).toBe(verifyReference);
+    });
+
+    it('An admin succeeds', async () => {
+      const res = await request(app)
+        .get(`/api/payments/verify/${verifyReference}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.providerReference).toBe(verifyReference);
+    });
   });
 });

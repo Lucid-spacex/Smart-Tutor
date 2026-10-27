@@ -64,7 +64,7 @@ describe('Admin Transaction Management', () => {
         fullName: 'Test Tutor',
         email: 'tutor4@test.com',
         phone: '+1234567892',
-        passwordHash: await hashPassword('tutor123'),
+        passwordHash: await bcrypt.hash('tutor123', 10),
         role: 'TUTOR',
         status: 'APPROVED',
         timezone: 'Africa/Lagos',

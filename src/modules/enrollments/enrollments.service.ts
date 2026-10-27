@@ -107,9 +107,29 @@ export class EnrollmentsService {
   }
 
   async getEnrollmentsByGroupId(groupId: string, userId: string, userRole: string) {
+    // For tutors and students, exclude pricing fields
+    const includePayments = userRole === 'ADMIN' || userRole === 'PARENT';
+    const selectPricing = userRole === 'ADMIN' || userRole === 'PARENT';
+
     const enrollments = await prisma.enrollment.findMany({
       where: { enrollmentGroupId: groupId },
-      include: {
+      select: {
+        id: true,
+        studentId: true,
+        subjectId: true,
+        tutorId: true,
+        enrollmentGroupId: true,
+        status: true,
+        sessionFrequency: true,
+        availableDays: true,
+        preferredStartHour: true,
+        preferredEndHour: true,
+        billingFrequency: selectPricing,
+        yearlyPrice: selectPricing,
+        startDate: true,
+        endDate: true,
+        createdAt: true,
+        updatedAt: true,
         student: {
           include: {
             user: {
@@ -136,9 +156,9 @@ export class EnrollmentsService {
             session: true,
           },
         },
-        payments: {
+        payments: includePayments ? {
           orderBy: { createdAt: 'desc' },
-        },
+        } : false,
         progressReports: {
           orderBy: { createdAt: 'desc' },
         },
@@ -183,7 +203,23 @@ export class EnrollmentsService {
 
     return prisma.enrollment.findMany({
       where,
-      include: {
+      select: {
+        // Include all fields EXCEPT yearlyPriceNGN and yearlyPriceUSD
+        id: true,
+        studentId: true,
+        subjectId: true,
+        tutorId: true,
+        enrollmentGroupId: true,
+        status: true,
+        sessionFrequency: true,
+        availableDays: true,
+        preferredStartHour: true,
+        preferredEndHour: true,
+        billingFrequency: true,
+        startDate: true,
+        endDate: true,
+        createdAt: true,
+        updatedAt: true,
         student: true,
         subject: true,
         tutor: {
@@ -198,10 +234,7 @@ export class EnrollmentsService {
             session: true,
           },
         },
-        payments: {
-          orderBy: { createdAt: 'desc' },
-          take: 5,
-        },
+        // Exclude payments to hide pricing
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -218,7 +251,23 @@ export class EnrollmentsService {
 
     return prisma.enrollment.findMany({
       where,
-      include: {
+      select: {
+        // Include all fields EXCEPT pricing
+        id: true,
+        studentId: true,
+        subjectId: true,
+        tutorId: true,
+        enrollmentGroupId: true,
+        status: true,
+        sessionFrequency: true,
+        availableDays: true,
+        preferredStartHour: true,
+        preferredEndHour: true,
+        billingFrequency: true,
+        startDate: true,
+        endDate: true,
+        createdAt: true,
+        updatedAt: true,
         student: true,
         subject: true,
         tutor: {
@@ -233,19 +282,36 @@ export class EnrollmentsService {
             session: true,
           },
         },
-        payments: {
-          orderBy: { createdAt: 'desc' },
-          take: 5,
-        },
+        // Exclude payments to hide pricing
       },
       orderBy: { createdAt: 'desc' },
     });
   }
 
   async getEnrollmentById(id: string, userId: string, userRole: string) {
+    // For tutors, exclude pricing fields
+    const includePayments = userRole === 'ADMIN' || userRole === 'PARENT';
+    const selectPricing = userRole === 'ADMIN' || userRole === 'PARENT';
+
     const enrollment = await prisma.enrollment.findUnique({
       where: { id },
-      include: {
+      select: {
+        id: true,
+        studentId: true,
+        subjectId: true,
+        tutorId: true,
+        enrollmentGroupId: true,
+        status: true,
+        sessionFrequency: true,
+        availableDays: true,
+        preferredStartHour: true,
+        preferredEndHour: true,
+        billingFrequency: selectPricing,
+        yearlyPrice: selectPricing,
+        startDate: true,
+        endDate: true,
+        createdAt: true,
+        updatedAt: true,
         student: true,
         subject: true,
         tutor: {
@@ -261,9 +327,9 @@ export class EnrollmentsService {
             session: true,
           },
         },
-        payments: {
+        payments: includePayments ? {
           orderBy: { createdAt: 'desc' },
-        },
+        } : false,
         progressReports: {
           orderBy: { createdAt: 'desc' },
         },

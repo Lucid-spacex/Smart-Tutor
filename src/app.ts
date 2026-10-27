@@ -61,7 +61,7 @@ app.use(express.urlencoded({ extended: true }));
 // Notification SSE stream is exempt from Tier 3 with its own connection cap (max 3 per user).
 app.use((req, res, next) => {
   // Webhooks must always be reachable by Paystack — skip entirely.
-  if (req.path.startsWith('/webhooks') || req.path.startsWith('/api/webhooks')) {
+  if (req.path.startsWith('/webhooks') || req.path.startsWith('/api/webhooks') || req.path.includes('/payments/webhook')) {
     return next();
   }
   // Swagger docs and health checks skip rate limiting

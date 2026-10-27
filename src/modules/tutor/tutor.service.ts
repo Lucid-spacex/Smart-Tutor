@@ -105,7 +105,22 @@ export class TutorService {
         tutorId,
         status: 'ACTIVE',
       },
-      include: {
+      select: {
+        // SECURITY: Exclude all pricing fields
+        id: true,
+        studentId: true,
+        subjectId: true,
+        tutorId: true,
+        enrollmentGroupId: true,
+        status: true,
+        sessionFrequency: true,
+        availableDays: true,
+        preferredStartHour: true,
+        preferredEndHour: true,
+        startDate: true,
+        endDate: true,
+        createdAt: true,
+        updatedAt: true,
         student: {
           select: {
             id: true,
@@ -128,7 +143,6 @@ export class TutorService {
         id: enrollment.id,
         subject: enrollment.subject,
         sessionFrequency: enrollment.sessionFrequency,
-        billingFrequency: enrollment.billingFrequency,
         startDate: enrollment.startDate,
         endDate: enrollment.endDate,
         status: enrollment.status,

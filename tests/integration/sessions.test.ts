@@ -130,7 +130,6 @@ describe('Sessions & Attendance Lock Integration Tests', () => {
           tutorId,
           scheduledAt,
           durationMinutes: 60,
-          zoomLink: 'https://zoom.us/j/123456789',
           participantEnrollmentIds: [enrollmentId],
         });
 
@@ -151,19 +150,22 @@ describe('Sessions & Attendance Lock Integration Tests', () => {
       expect(res.status).toBe(400);
     });
 
-    it('Tutor cannot modify scheduledAt or zoomLink', async () => {
+    it('Tutor cannot modify scheduledAt or googleMeetLink', async () => {
+      const sessionBefore = await prisma.session.findUnique({ where: { id: sessionId } });
+      const originalMeetLink = sessionBefore?.googleMeetLink;
+
       const newTime = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
       await request(app)
         .patch(`/api/sessions/${sessionId}`)
         .set('Authorization', `Bearer ${tutorToken}`)
         .send({
           scheduledAt: newTime,
-          zoomLink: 'https://evil.link',
+          googleMeetLink: 'https://evil.link',
           tutorNotes: 'Notes only',
         });
 
       const sessionInDb = await prisma.session.findUnique({ where: { id: sessionId } });
-      expect(sessionInDb?.zoomLink).toBe('https://zoom.us/j/123456789');
+      expect(sessionInDb?.googleMeetLink).toBe(originalMeetLink);
       expect(sessionInDb?.tutorNotes).toBe('Notes only');
     });
 
@@ -214,7 +216,7 @@ describe('Sessions & Attendance Lock Integration Tests', () => {
           durationMinutes: 60,
         });
 
-      // In test environment, Zoom might fail, but session should still be created
+      // In test environment, Google Meet might fail, but session should still be created
       expect([201, 502]).toContain(res.status);
       if (res.status === 201) {
         expect(res.body.tutorId).toBe(tutorId);
@@ -349,7 +351,7 @@ describe('Sessions & Attendance Lock Integration Tests', () => {
           participantEnrollmentIds: [enrollmentId],
         });
 
-      // In test environment, Zoom might fail, but session should still be created
+      // In test environment, Google Meet might fail, but session should still be created
       expect([201, 502]).toContain(res.status);
       if (res.status === 201) {
         expect(res.body.tutorId).toBe(tutorId);
@@ -360,7 +362,7 @@ describe('Sessions & Attendance Lock Integration Tests', () => {
 
     it('Tutor cannot delete admin-created session even though assigned', async () => {
       if (!adminSessionId) {
-        // Skip if session creation failed due to Zoom
+        // Skip if session creation failed due to Google Meet
         return;
       }
       const res = await request(app)
@@ -373,7 +375,7 @@ describe('Sessions & Attendance Lock Integration Tests', () => {
 
     it('Tutor cannot reschedule admin-created session even though assigned', async () => {
       if (!adminSessionId) {
-        // Skip if session creation failed due to Zoom
+        // Skip if session creation failed due to Google Meet
         return;
       }
       const newTime = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
@@ -399,7 +401,7 @@ describe('Sessions & Attendance Lock Integration Tests', () => {
           durationMinutes: 60,
         });
 
-      // In test environment, Zoom might fail, but session should still be created
+      // In test environment, Google Meet might fail, but session should still be created
       expect([201, 502]).toContain(createRes.status);
       if (createRes.status === 201) {
         const tutorCreatedSessionId = createRes.body.id;

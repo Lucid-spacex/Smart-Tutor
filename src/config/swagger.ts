@@ -88,6 +88,18 @@ const options = {
         description: 'Grade recording and approval workflow',
       },
       {
+        name: 'ScoredItems',
+        description: 'Tutor-managed scored items (quiz attempts, assignments, attendance, participation)',
+      },
+      {
+        name: 'Enrollment Change Requests',
+        description: 'Parent-initiated enrollment change requests with admin approval workflow',
+      },
+      {
+        name: 'Class Reminders',
+        description: 'Class schedule views for tutors and admins (used by reminder job)',
+      },
+      {
         name: 'Notifications',
         description: 'User notifications and alerts',
       },

@@ -1,7 +1,7 @@
 import request from 'supertest';
 import app from '../../src/app';
 import prisma from '../../src/config/database';
-import { generateToken } from '../../src/utils/token.util';
+import { generateAccessToken } from '../../src/utils/token.util';
 import { hashPassword } from '../../src/utils/password.util';
 
 describe('Tutor Availability & Suggested Tutors', () => {
@@ -27,7 +27,7 @@ describe('Tutor Availability & Suggested Tutors', () => {
       },
     });
     adminId = admin.id;
-    adminToken = generateToken(admin.id, admin.role);
+    adminToken = generateAccessToken({ userId: admin.id, role: admin.role });
 
     // Create tutor user
     const tutor = await prisma.user.create({
@@ -42,7 +42,7 @@ describe('Tutor Availability & Suggested Tutors', () => {
       },
     });
     tutorId = tutor.id;
-    tutorToken = generateToken(tutor.id, tutor.role);
+    tutorToken = generateAccessToken({ userId: tutor.id, role: tutor.role });
 
     // Create tutor profile
     await prisma.tutorProfile.create({

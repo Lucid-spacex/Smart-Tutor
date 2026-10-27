@@ -28,8 +28,20 @@ export class PaymentsController {
   processWebhook = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const signature = req.headers['x-paystack-signature'];
-      const rawBody = (req as any).rawBody; // Will be set by body parser middleware
-      const result = await this.paymentsService.processWebhook(req.body, signature, rawBody);
+      let rawBody: string;
+      let parsedBody: any;
+
+      // When using rawBodyParser, req.body is a Buffer
+      if (Buffer.isBuffer(req.body)) {
+        rawBody = req.body.toString('utf8');
+        parsedBody = JSON.parse(rawBody);
+      } else {
+        // Fallback: try to get rawBody from middleware or stringify req.body
+        rawBody = (req as any).rawBody || JSON.stringify(req.body);
+        parsedBody = req.body;
+      }
+
+      const result = await this.paymentsService.processWebhook(parsedBody, signature, rawBody);
       res.status(200).json(result);
     } catch (error) {
       next(error);
@@ -53,13 +65,20 @@ export class PaymentsController {
 
   verifyPayment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      const userId = req.user?.userId;
+      const userRole = req.user?.role;
+      if (!userId || !userRole) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
       const { reference } = req.params;
       if (!reference) {
         res.status(400).json({ error: 'Reference is required' });
         return;
       }
 
-      const payment = await this.paymentsService.verifyPaymentByReference(reference);
+      const payment = await this.paymentsService.verifyPaymentByReference(reference, userId, userRole);
       res.status(200).json(payment);
     } catch (error) {
       next(error);

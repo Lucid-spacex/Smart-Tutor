@@ -1,8 +1,10 @@
 import prisma from '../config/database';
 import { GoogleCalendarProvider } from '../modules/meetings/google-calendar.provider';
 import { logger } from '../config/logger';
+import { NotificationCoreService } from '../modules/notifications/notification-core.service';
 
 const meetingProvider = new GoogleCalendarProvider();
+const notificationCore = new NotificationCoreService();
 
 export async function runGoogleRecordingSync() {
   logger.info('Running Google Meet recording sync job');
@@ -33,10 +35,48 @@ export async function runGoogleRecordingSync() {
               where: { id: session.id },
               data: {
                 googleDriveFileId: recordingUrl, // For now, store the URL
+                recordingUrl: recordingUrl,
+                recordingStatus: 'AVAILABLE',
               },
             });
 
             logger.info(`Recording found for session ${session.id}`);
+
+            // Notify session participants (parent, student, tutor)
+            const participants = await prisma.sessionParticipant.findMany({
+              where: { sessionId: session.id },
+              include: {
+                enrollment: {
+                  include: {
+                    student: {
+                      include: {
+                        parent: true,
+                      },
+                    },
+                    tutor: true,
+                  },
+                },
+              },
+            });
+
+            const recipientIds: string[] = [];
+            for (const participant of participants) {
+              if (participant.enrollment.student.parentId) {
+                recipientIds.push(participant.enrollment.student.parentId);
+              }
+              recipientIds.push(participant.enrollment.student.id);
+              recipientIds.push(participant.enrollment.tutorId);
+            }
+
+            await notificationCore.notify({
+              recipientIds,
+              type: 'RECORDING_AVAILABLE',
+              category: 'SESSIONS',
+              title: 'Session Recording Available',
+              body: `The recording for your session is now available.`,
+              entityType: 'Session',
+              entityId: session.id,
+            });
           }
         }
       } catch (error) {

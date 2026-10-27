@@ -930,12 +930,13 @@ export class NewGradesService {
 
   /**
    * Legacy: Get grades for students/parents/tutors
-   * Only APPROVED grades for students/parents
+   * Role-based visibility rules:
+   * - Tutors: see ONLY their own grades in ALL statuses (DRAFT, PENDING_APPROVAL, APPROVED, REJECTED) with rejectionReason
+   * - Parents/Students: see only APPROVED grades for their own children, never overrideReason or rejectionReason
+   * - Admins: see everything except DRAFT in review lists
    */
   async getGrades(userId: string, userRole: string, filters?: { studentId?: string; enrollmentId?: string }) {
-    const where: any = {
-      visibleToStudent: true, // Only show approved grades to students/parents
-    };
+    const where: any = {};
 
     if (filters?.studentId) {
       where.enrollment = {
@@ -949,36 +950,56 @@ export class NewGradesService {
 
     // Filter based on user role
     if (userRole === 'TUTOR') {
-      // Tutors see all grades for their enrollments (any status)
-      delete where.visibleToStudent;
-      where.enrollment = {
-        tutorId: userId,
-      };
+      // Tutors see ONLY their own grades in ALL statuses
+      where.gradedBy = userId;
+      // No status filter - tutors see DRAFT, PENDING_APPROVAL, APPROVED, REJECTED
     } else if (userRole === 'PARENT') {
-      // Parents see approved grades for their children
+      // Parents see only APPROVED grades for their children
+      where.status = 'APPROVED';
+      where.visibleToStudent = true;
       where.enrollment = {
         student: {
           parentId: userId,
         },
       };
     } else if (userRole === 'STUDENT') {
-      // Students see approved grades for their own enrollments
+      // Students see only APPROVED grades for their own enrollments
+      where.status = 'APPROVED';
+      where.visibleToStudent = true;
       where.enrollment = {
         student: {
           userId,
         },
       };
     } else if (userRole === 'ADMIN') {
-      // Admins see all grades (any status)
-      delete where.visibleToStudent;
+      // Admins see everything except DRAFT in review lists
+      where.status = { in: ['PENDING_APPROVAL', 'APPROVED', 'REJECTED'] };
     }
 
     const grades = await prisma.grade.findMany({
       where,
-      include: {
+      select: {
+        id: true,
+        enrollmentId: true,
+        periodStart: true,
+        periodEnd: true,
+        computedScore: true,
+        finalScore: true,
+        status: true,
+        tutorComment: true,
+        createdAt: true,
+        // SECURITY: Only tutors and admins see overrideReason
+        overrideReason: userRole === 'TUTOR' || userRole === 'ADMIN',
+        // SECURITY: Only tutors see rejectionReason
+        rejectionReason: userRole === 'TUTOR',
         enrollment: {
           include: {
-            student: true,
+            student: {
+              select: {
+                id: true,
+                fullName: true,
+              },
+            },
             subject: true,
           },
         },
@@ -994,6 +1015,7 @@ export class NewGradesService {
             fullName: true,
           },
         },
+        components: true,
       },
       orderBy: {
         createdAt: 'desc',

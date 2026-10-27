@@ -277,8 +277,10 @@ export class PaymentsService {
     };
   }
 
-  async processWebhook(data: any, signature?: string | string[], rawBody?: string) {
-    const webhookResult = await this.paymentProvider.processWebhook(data, signature, rawBody);
+  async processWebhook(data: any, signature?: string | string[], rawBody?: string | Buffer) {
+    // Convert Buffer to string if needed
+    const rawBodyStr = Buffer.isBuffer(rawBody) ? rawBody.toString('utf8') : rawBody;
+    const webhookResult = await this.paymentProvider.processWebhook(data, signature, rawBodyStr);
 
     if (!webhookResult.valid) {
       throw new AppError(400, 'Invalid webhook signature');
@@ -296,6 +298,26 @@ export class PaymentsService {
     }
 
     const isSuccess = webhookResult.status === 'success';
+
+    // IDEMPOTENCY: If payment is already in the target state, return without changes
+    if (payment.status === 'SUCCESS' && isSuccess) {
+      logger.info({ paymentId: payment.id, reference: payment.providerReference }, 'Webhook replay detected - payment already SUCCESS, returning existing state');
+      return payment;
+    }
+    if (payment.status === 'FAILED' && !isSuccess) {
+      logger.info({ paymentId: payment.id, reference: payment.providerReference }, 'Webhook replay detected - payment already FAILED, returning existing state');
+      return payment;
+    }
+
+    // IDEMPOTENCY: If payment status conflicts with webhook status, log warning but don't change
+    if (payment.status === 'SUCCESS' && !isSuccess) {
+      logger.warn({ paymentId: payment.id, reference: payment.providerReference, currentStatus: payment.status, webhookStatus: webhookResult.status }, 'Webhook status conflicts with current payment status - ignoring to prevent status reversal');
+      return payment;
+    }
+    if (payment.status === 'FAILED' && isSuccess) {
+      logger.warn({ paymentId: payment.id, reference: payment.providerReference, currentStatus: payment.status, webhookStatus: webhookResult.status }, 'Webhook status conflicts with current payment status - ignoring to prevent status reversal');
+      return payment;
+    }
 
     // Atomic transaction: update payment status AND activate enrollment(s)
     const updatedPayment = await prisma.$transaction(async (tx) => {
@@ -411,7 +433,7 @@ export class PaymentsService {
     });
   }
 
-  async verifyPaymentByReference(reference: string) {
+  async verifyPaymentByReference(reference: string, userId: string, userRole: string) {
     const payment = await prisma.payment.findFirst({
       where: { providerReference: reference },
       include: {
@@ -426,6 +448,11 @@ export class PaymentsService {
 
     if (!payment) {
       throw new AppError(404, 'Payment not found');
+    }
+
+    // SECURITY: Only the payment owner (parent) or admins can verify
+    if (userRole !== 'ADMIN' && payment.parentId !== userId) {
+      throw new AppError(403, 'Not authorized to verify this payment');
     }
 
     // If payment is still pending, verify with Paystack directly
