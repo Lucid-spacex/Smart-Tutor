@@ -240,6 +240,94 @@ export class StudentsService {
     return student;
   }
 
+  async updateStudent(id: string, parentId: string, data: UpdateStudentInput) {
+    const student = await prisma.student.findUnique({
+      where: { id },
+    });
+
+    if (!student) {
+      throw new Error('Student not found');
+    }
+
+    if (student.parentId !== parentId) {
+      throw new Error('Access denied');
+    }
+
+    // Resolve gradeBandTier if actualGrade or gradeLevel is being updated
+    let gradeBandTier = student.gradeBandTier;
+    if (data.actualGrade || data.gradeLevel) {
+      gradeBandTier = data.actualGrade
+        ? this.mapActualGradeToBand(data.actualGrade)
+        : (data.gradeLevel ? this.mapGradeToBand(data.gradeLevel) : student.gradeBandTier);
+    }
+
+    const updatedStudent = await prisma.student.update({
+      where: { id },
+      data: {
+        fullName: data.fullName ?? student.fullName,
+        dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : student.dateOfBirth,
+        actualGrade: data.actualGrade ?? student.actualGrade,
+        gradeLevel: data.gradeLevel ?? student.gradeLevel,
+        gradeBandTier,
+        gender: data.gender ?? student.gender,
+        email: data.email ?? student.email,
+        preferredStartDate: data.preferredStartDate ? new Date(data.preferredStartDate) : student.preferredStartDate,
+        school: data.school ?? student.school,
+        notes: data.notes ?? student.notes,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            studentCode: true,
+            status: true,
+          },
+        },
+      },
+    });
+
+    return updatedStudent;
+  }
+
+  async deleteStudent(id: string, parentId: string) {
+    const student = await prisma.student.findUnique({
+      where: { id },
+    });
+
+    if (!student) {
+      throw new Error('Student not found');
+    }
+
+    if (student.parentId !== parentId) {
+      throw new Error('Access denied');
+    }
+
+    // Check if student has active enrollments
+    const activeEnrollments = await prisma.enrollment.findMany({
+      where: {
+        studentId: id,
+        status: 'ACTIVE',
+      },
+    });
+
+    if (activeEnrollments.length > 0) {
+      throw new Error('Cannot delete student with active enrollments');
+    }
+
+    // Delete the student (soft delete by updating status or hard delete)
+    // For now, hard delete since User will be deleted via cascade
+    await prisma.student.delete({
+      where: { id },
+    });
+
+    // Delete the associated user account
+    await prisma.user.delete({
+      where: { id: student.userId },
+    });
+
+    return { message: 'Student deleted successfully' };
+  }
+
   async regenerateStudentPin(studentId: string, requestorId: string, isAdmin: boolean = false) {
     // Get student and their linked user account
     const student = await prisma.student.findUnique({

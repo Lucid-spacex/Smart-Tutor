@@ -4,7 +4,7 @@ import { AttendanceController } from '../attendance/attendance.controller';
 import { validate } from '../../middleware/validation.middleware';
 import { authenticate, requireRole } from '../../middleware/auth.middleware';
 import { validateUUID } from '../../middleware/uuid-validation.middleware';
-import { createStudentSchema } from './students.validation';
+import { createStudentSchema, updateStudentSchema } from './students.validation';
 
 const router = Router();
 const studentsController = new StudentsController();
@@ -14,6 +14,8 @@ const attendanceController = new AttendanceController();
 router.post('/', authenticate, requireRole('PARENT'), validate(createStudentSchema), studentsController.createStudent);
 router.get('/', authenticate, requireRole('PARENT'), studentsController.getStudents);
 router.get('/:id', authenticate, requireRole('PARENT'), validateUUID('id'), studentsController.getStudentById);
+router.patch('/:id', authenticate, requireRole('PARENT'), validateUUID('id'), validate(updateStudentSchema), studentsController.updateStudent);
+router.delete('/:id', authenticate, requireRole('PARENT'), validateUUID('id'), studentsController.deleteStudent);
 router.get('/:id/activity', authenticate, requireRole('PARENT'), validateUUID('id'), studentsController.getStudentActivity);
 router.post('/:id/regenerate-pin', authenticate, requireRole('PARENT'), validateUUID('id'), studentsController.regeneratePin);
 

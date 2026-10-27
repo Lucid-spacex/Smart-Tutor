@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { StudentsService } from './students.service';
-import { CreateStudentInput } from './students.validation';
+import { CreateStudentInput, UpdateStudentInput } from './students.validation';
 import { AuthRequest } from '../../types/express';
 
 export class StudentsController {
@@ -52,6 +52,39 @@ export class StudentsController {
       const { id } = req.params;
       const student = await this.studentsService.getStudentById(id, parentId);
       res.status(200).json(student);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  updateStudent = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const parentId = req.user?.userId;
+      if (!parentId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id } = req.params;
+      const data: UpdateStudentInput = req.body;
+      const student = await this.studentsService.updateStudent(id, parentId, data);
+      res.status(200).json(student);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  deleteStudent = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const parentId = req.user?.userId;
+      if (!parentId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id } = req.params;
+      await this.studentsService.deleteStudent(id, parentId);
+      res.status(200).json({ message: 'Student deleted successfully' });
     } catch (error) {
       next(error);
     }

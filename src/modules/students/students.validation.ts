@@ -69,4 +69,45 @@ export const createStudentSchema = z.object({
     .optional(),
 });
 
+export const updateStudentSchema = z.object({
+  fullName: z
+    .string()
+    .min(2, 'Full name must be at least 2 characters')
+    .max(100, 'Full name must be less than 100 characters')
+    .optional(),
+
+  dateOfBirth: z
+    .string()
+    .refine((val) => !isNaN(Date.parse(val)), 'Invalid date of birth')
+    .optional(),
+
+  actualGrade: z.enum(actualGradeValues).optional(),
+
+  gradeLevel: z
+    .string()
+    .min(1, 'Grade level is required')
+    .max(50, 'Grade level must be less than 50 characters')
+    .optional(),
+
+  gender: z.enum(genderValues).optional(),
+
+  email: z.string().email('Invalid student contact email').optional(),
+
+  preferredStartDate: z
+    .string()
+    .refine((val) => !isNaN(Date.parse(val)), 'Invalid preferred start date')
+    .optional(),
+
+  school: z
+    .string()
+    .max(100, 'School name must be less than 100 characters')
+    .optional(),
+
+  notes: z
+    .string()
+    .max(1000, 'Notes must be less than 1000 characters')
+    .optional(),
+});
+
 export type CreateStudentInput = z.infer<typeof createStudentSchema>;
+export type UpdateStudentInput = z.infer<typeof updateStudentSchema>;
