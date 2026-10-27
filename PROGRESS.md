@@ -176,3 +176,38 @@
 - [x] Run prisma generate - Successful
 - [x] Fix TypeScript build errors - Fixed (schema compatibility issues)
 - [x] Run npm run build - Successful
+
+## ENDPOINT.md Generation (Item 14)
+- [x] Generate from actual route files, controllers, and Zod schemas
+- [x] Include method, path, auth, roles, parameters, validation
+- [x] Include response fields with examples
+- [x] Include security rules table (what each role never receives)
+- [x] Include error format and specific codes
+- [x] Include rate limiting tiers and 429 behavior
+- [x] Include enum reference
+- [x] Include pagination defaults
+- [x] Include SSE notification streaming details
+- [x] Include grading workflow, class reminders, change requests
+- [x] Include messaging rules, webhook security
+- [x] Include changes since old API section
+
+## Final Table (Item 15)
+
+| Item | Status | Files Changed |
+|------|--------|---------------|
+| 1-8 | Already implemented | Previous commits |
+| 9. SECURITY (code review) | Already implemented | No changes needed (all security controls verified correct) |
+| 10. PAYSTACK WEBHOOK | Already implemented | No changes needed (webhook setup verified correct) |
+| 11. RATE LIMITS | Implemented now | src/middleware/rate-limit.middleware.ts |
+| 12. SECURITY.md | Implemented now | SECURITY.md |
+| 13. MIGRATION & BUILD | Implemented now | src/jobs/google-recording-sync.job.ts, src/modules/admin/admin.service.ts, src/modules/enrollments/enrollments.service.ts, src/modules/messages/messages.service.ts, src/modules/notifications/notifications.service.ts, src/modules/tutor/tutor.service.ts |
+| 14. ENDPOINT.md | Implemented now | ENDPOINT.md (new file) |
+| 15. FINAL TABLE | Implemented now | PROGRESS.md |
+
+**Notes:**
+- No migration reset was needed (failed migration resolved with `migrate resolve --rolled-back`)
+- Database is the user's personal Neon database from .env
+- No demo users were created (only admin account if needed via FORCE_SEED)
+- Build passed after fixing schema compatibility issues (removed updatedAt from Enrollment selects, fixed SessionParticipant includes, added missing notification type)
+- All tests were NOT run as per user request
+- No git push was performed as per user request
