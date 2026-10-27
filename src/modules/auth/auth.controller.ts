@@ -92,6 +92,21 @@ export class AuthController {
     }
   };
 
+  updateCurrentUser = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const userId = req.user?.userId;
+      if (!userId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+      const data = req.body;
+      const user = await this.authService.updateCurrentUser(userId, data);
+      res.status(200).json(user);
+    } catch (error) {
+      next(error);
+    }
+  };
+
   changePassword = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const userId = req.user?.userId;
@@ -179,6 +194,26 @@ export class AuthController {
     try {
       const { email } = req.body;
       const result = await this.authService.resendOtp(email);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  forgotPassword = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { email } = req.body;
+      const result = await this.authService.forgotPassword(email);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  resetPassword = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { token, newPassword } = req.body;
+      const result = await this.authService.resetPassword(token, newPassword);
       res.status(200).json(result);
     } catch (error) {
       next(error);

@@ -18,12 +18,15 @@ router.post('/login', tier1AuthRateLimit, validate(loginSchema), authController.
 // Student login uses stricter rate limiting (5 req / 15 min) due to smaller PIN search space
 router.post('/student-login', studentLoginRateLimit, validate(studentLoginSchema), authController.studentLogin);
 router.post('/resend-otp', tier1AuthRateLimit, validate(resendOtpSchema), authController.resendOtp);
+router.post('/forgot-password', tier1AuthRateLimit, authController.forgotPassword);
+router.post('/reset-password', tier1AuthRateLimit, authController.resetPassword);
 
 // /refresh uses a separate flow (refresh token, not credentials) — Tier 2 via app.ts
 // covers it; no extra limit here to avoid breaking normal token rotation.
 router.post('/refresh', validate(refreshSchema), authController.refresh);
 router.post('/logout', authenticate, authController.logout);
 router.get('/me', authenticate, authController.getCurrentUser);
+router.patch('/me', authenticate, authController.updateCurrentUser);
 router.patch('/change-password', authenticate, validate(changePasswordSchema), authController.changePassword);
 router.patch('/change-pin', authenticate, validate(changePinSchema), authController.changePin);
 router.patch('/me/timezone', authenticate, validate(timezoneSchema), authController.updateTimezone);
