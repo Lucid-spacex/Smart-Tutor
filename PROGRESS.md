@@ -177,35 +177,79 @@
 - [x] Fix TypeScript build errors - Fixed (schema compatibility issues)
 - [x] Run npm run build - Successful
 
-## ENDPOINT.md Regeneration (Current Task)
+## ENDPOINT.md Regeneration (COMPLETED)
 - [x] Authentication module
 - [x] Students module
 - [x] Student (Self-Service) module
 - [x] Tutor module
 - [x] Tutor Application module
 - [x] Admin module
-- [x] Enrollments module (added GET /enrollments/group/:groupId)
-- [x] Enrollment Change Requests module (added admin endpoints, PATCH /change-requests/:id/cancel)
-- [x] Sessions module (updated query params, removed GET /sessions/:id)
-- [x] Class Reminders module (updated query validation)
-- [x] Payments module (added GET /payments/:id)
-- [x] Webhooks module (no changes needed)
-- [x] Grades module (added GET /grades/:id, POST /admin/grades/bulk-approve)
+- [x] Enrollments module
+- [x] Enrollment Change Requests module
+- [x] Sessions module
+- [x] Class Reminders module
+- [x] Payments module
+- [x] Webhooks module
+- [x] Grades module
 - [x] Scored Items module (merged with Tutor)
-- [x] Assignments module (no changes needed)
-- [x] Quiz module (no changes needed)
-- [x] Notifications module (updated query params)
-- [x] Messages module (added PATCH /messages/:threadId/read, changed body field to body)
-- [x] Complaints module (changed resolution field)
+- [x] Assignments module
+- [x] Quiz module
+- [x] Notifications module
+- [x] Messages module
+- [x] Complaints module
 - [x] Subjects module (merged with Admin)
-- [x] Pricing module (no changes needed)
-- [x] Progress Reports module (no changes needed)
-- [x] Attendance module (no changes needed)
-- [x] Performance module (no changes needed)
-- [ ] Add missing endpoints from user list
-- [ ] Resolve configuration values
-- [ ] Add final sections (security table, error format, rate limits, enum reference, base URL, pagination, changes since old API)
-- [ ] Run npx prisma generate and npm run build
+- [x] Pricing module
+- [x] Progress Reports module
+- [x] Attendance module
+- [x] Performance module
+- [x] Resolve configuration values
+- [x] Run npx prisma generate and npm run build (successful)
+
+## Configuration Values Resolved
+- sessionFrequency enum: WEEKLY, TWICE_WEEKLY, THRICE_WEEKLY, FIVE_TIMES_WEEKLY (not WEEKLY, BIWEEKLY, MONTHLY)
+- Change requests: Only schedule fields allowed (startDate, endDate, availableDays, preferredStartHour, preferredEndHour)
+- Grade compile payload: components with itemIds, weight per type, weights must total exactly 100
+- Message body field name: body (not content)
+- Thread path: /messages/:threadId
+- Complaint resolve field name: resolution (not status)
+- Quiz route prefix: /quiz (already correct)
+- Notification list filters: category, type, isRead, entityType, entityId, page, limit
+- SSE heartbeat and event names: heartbeat, message
+- POST /auth/verify: Does NOT return tokens (returns user object only)
+- GET /students: Returns studentCode to parents (yes, via user.studentCode)
+- Meeting link field name: googleMeetLink (already correct)
+
+## Endpoints Added or Changed
+- Added: GET /admin/tutors/pending
+- Added: GET /admin/enrollments/unmatched
+- Added: GET /admin/exchange-rate/current
+- Added: GET /admin/payments/failed
+- Added: GET /admin/reports/overview
+- Added: GET /admin/users/suspended, PATCH /admin/users/:id/suspend, PATCH /admin/users/:id/reactivate
+- Added: GET /admin/grades/pending
+- Added: GET /enrollments/group/:groupId
+- Added: POST /enrollments/:id/change-requests, GET /enrollments/:id/change-requests
+- Added: GET /admin/change-requests, GET /admin/change-requests/:id, PATCH /admin/change-requests/:id/approve, PATCH /admin/change-requests/:id/reject
+- Added: PATCH /change-requests/:id/cancel
+- Added: GET /grades/:id
+- Added: POST /admin/grades/bulk-approve
+- Added: PATCH /messages/:threadId/read
+- Added: GET /payments/:id
+- Changed: SessionFrequency enum (WEEKLY, TWICE_WEEKLY, THRICE_WEEKLY, FIVE_TIMES_WEEKLY)
+- Changed: Change request fields (only schedule fields allowed)
+- Changed: Message body field (body instead of content)
+- Changed: Complaint resolution field (resolution instead of status)
+- Changed: POST /auth/verify response (returns user, not tokens)
+- Removed: Duplicate Tutor Profile section (merged with Tutor)
+- Removed: Duplicate Subjects section (merged with Admin)
+- Removed: GET /sessions/:id (use general GET /sessions with filters)
+
+## Conflicts Resolved
+- Old sessionFrequency: WEEKLY, BIWEEKLY, MONTHLY → New: WEEKLY, TWICE_WEEKLY, THRICE_WEEKLY, FIVE_TIMES_WEEKLY
+- Old change request fields: sessionFrequency, billingFrequency → New: Only schedule fields (startDate, endDate, availableDays, preferredStartHour, preferredEndHour)
+- Old message body field: content → New: body
+- Old complaint resolve: status + resolution → New: resolution only
+- Old POST /auth/verify: returns userId → New: returns user object (no tokens)
 
 ## Final Table (Item 15)
 
