@@ -179,7 +179,7 @@
 
 ## ENDPOINT.md Regeneration (Current Task)
 - [x] Authentication module (POST /auth/register, /auth/verify, /auth/login, /auth/student-login, /auth/refresh, /auth/logout, /auth/resend-otp, /auth/forgot-password, /auth/reset-password, GET /auth/me, PATCH /auth/me, /auth/change-password, /auth/change-pin, /auth/me/timezone, /auth/me/profile-picture, DELETE /auth/me/profile-picture)
-- [ ] Students module
+- [x] Students module (POST /students, GET /students, GET /students/:id, PATCH /students/:id, DELETE /students/:id, GET /students/:id/activity, POST /students/:id/regenerate-pin, GET /students/:id/attendance)
 - [ ] Student (Self-Service) module
 - [ ] Tutor module
 - [ ] Tutor Profile module

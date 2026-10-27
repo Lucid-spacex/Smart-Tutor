@@ -373,29 +373,263 @@
 
 ### POST /students
 **Auth:** Required (PARENT)  
-**Body:** Student creation data  
+**Body:**
+```typescript
+{
+  fullName: string (min 2, max 100),
+  dateOfBirth: string (ISO date),
+  actualGrade: 'PRESCHOOL' | 'KINDERGARTEN' | 'GRADE_1' | 'GRADE_2' | 'GRADE_3' | 'GRADE_4' | 'GRADE_5' | 'GRADE_6' | 'GRADE_7' | 'GRADE_8' | 'GRADE_9' | 'GRADE_10' | 'GRADE_11' | 'GRADE_12',
+  gradeLevel: string (min 1, max 50),
+  gender?: 'MALE' | 'FEMALE' | 'OTHER' | 'PREFER_NOT_TO_SAY',
+  email?: string (email, contact/notification only, NOT a login credential),
+  preferredStartDate?: string (ISO date),
+  school?: string (max 100),
+  notes?: string (max 1000)
+}
+```
 **Response (201):**
 ```json
 {
   "id": "uuid",
   "fullName": "string",
-  "actualGrade": "enum",
-  "gradeBandTier": "enum",
+  "actualGrade": "GRADE_5",
+  "gradeBandTier": "G5_TO_G8",
+  "gender": "MALE",
+  "email": "string",
+  "preferredStartDate": "ISO date",
   "emailSent": true
 }
 ```
-**Security:** PIN sent to parent by email, never returned in response
+**Security:** studentCode (8 chars) and PIN (6 digits) generated and sent to parent by email, never returned in response  
+**Error Codes:** 401 (Not authenticated)
 
 ### GET /students
 **Auth:** Required (PARENT)  
-**Response (200):** Array of parent's students
+**Response (200):**
+```json
+[
+  {
+    "id": "uuid",
+    "userId": "uuid",
+    "parentId": "uuid",
+    "fullName": "string",
+    "dateOfBirth": "ISO date",
+    "actualGrade": "GRADE_5",
+    "gradeLevel": "Grade 5",
+    "gradeBandTier": "G5_TO_G8",
+    "gender": "MALE",
+    "email": "string",
+    "preferredStartDate": "ISO date",
+    "school": "string",
+    "notes": "string",
+    "createdAt": "ISO date",
+    "updatedAt": "ISO date",
+    "user": {
+      "id": "uuid",
+      "studentCode": "ABCDEFGH",
+      "status": "ACTIVE"
+    }
+  }
+]
+```
+**Error Codes:** 401 (Not authenticated)
 
 ### GET /students/:id
 **Auth:** Required (PARENT)  
-**Response (200):** Student details
+**Response (200):**
+```json
+{
+  "id": "uuid",
+  "userId": "uuid",
+  "parentId": "uuid",
+  "fullName": "string",
+  "dateOfBirth": "ISO date",
+  "actualGrade": "GRADE_5",
+  "gradeLevel": "Grade 5",
+  "gradeBandTier": "G5_TO_G8",
+  "gender": "MALE",
+  "email": "string",
+  "preferredStartDate": "ISO date",
+  "school": "string",
+  "notes": "string",
+  "createdAt": "ISO date",
+  "updatedAt": "ISO date",
+  "user": {
+    "id": "uuid",
+    "studentCode": "ABCDEFGH",
+    "status": "ACTIVE"
+  },
+  "enrollments": [
+    {
+      "id": "uuid",
+      "studentId": "uuid",
+      "subjectId": "uuid",
+      "tutorId": "uuid",
+      "status": "ACTIVE",
+      "sessionFrequency": "WEEKLY",
+      "billingFrequency": "MONTHLY",
+      "startDate": "ISO date",
+      "endDate": "ISO date",
+      "yearlyPriceNGN": 150000,
+      "yearlyPriceUSD": 100,
+      "subject": {
+        "id": "uuid",
+        "name": "Mathematics",
+        "category": "STEM"
+      },
+      "tutor": {
+        "id": "uuid",
+        "fullName": "string",
+        "email": "string"
+      }
+    }
+  ]
+}
+```
+**Error Codes:** 401 (Not authenticated), 404 (Student not found)
+
+### PATCH /students/:id
+**Auth:** Required (PARENT)  
+**Body:**
+```typescript
+{
+  fullName?: string (min 2, max 100),
+  dateOfBirth?: string (ISO date),
+  actualGrade?: 'PRESCHOOL' | 'KINDERGARTEN' | 'GRADE_1' | 'GRADE_2' | 'GRADE_3' | 'GRADE_4' | 'GRADE_5' | 'GRADE_6' | 'GRADE_7' | 'GRADE_8' | 'GRADE_9' | 'GRADE_10' | 'GRADE_11' | 'GRADE_12',
+  gradeLevel?: string (min 1, max 50),
+  gender?: 'MALE' | 'FEMALE' | 'OTHER' | 'PREFER_NOT_TO_SAY',
+  email?: string (email),
+  preferredStartDate?: string (ISO date),
+  school?: string (max 100),
+  notes?: string (max 1000)
+}
+```
+**Response (200):**
+```json
+{
+  "id": "uuid",
+  "userId": "uuid",
+  "parentId": "uuid",
+  "fullName": "string",
+  "dateOfBirth": "ISO date",
+  "actualGrade": "GRADE_5",
+  "gradeLevel": "Grade 5",
+  "gradeBandTier": "G5_TO_G8",
+  "gender": "MALE",
+  "email": "string",
+  "preferredStartDate": "ISO date",
+  "school": "string",
+  "notes": "string",
+  "createdAt": "ISO date",
+  "updatedAt": "ISO date",
+  "user": {
+    "id": "uuid",
+    "studentCode": "ABCDEFGH",
+    "status": "ACTIVE"
+  }
+}
+```
+**Error Codes:** 401 (Not authenticated), 404 (Student not found)
+
+### DELETE /students/:id
+**Auth:** Required (PARENT)  
+**Response (200):**
+```json
+{
+  "message": "Student deleted successfully"
+}
+```
+**Error Codes:** 401 (Not authenticated), 404 (Student not found), 400 (Cannot delete student with active enrollments)
+
+### GET /students/:id/activity
+**Auth:** Required (PARENT, ADMIN)  
+**Response (200):**
+```json
+{
+  "student": {
+    "id": "uuid",
+    "fullName": "string",
+    "gradeLevel": "Grade 5",
+    "actualGrade": "GRADE_5",
+    "gradeBandTier": "G5_TO_G8"
+  },
+  "statistics": {
+    "totalEnrollments": 2,
+    "totalSessions": 10,
+    "attendedSessions": 8,
+    "missedSessions": 2,
+    "attendanceRate": 80,
+    "pendingAssignments": 3,
+    "completedAssignments": 15,
+    "totalGrades": 5,
+    "averageScore": 85.5
+  },
+  "enrollments": [
+    {
+      "id": "uuid",
+      "subject": {
+        "id": "uuid",
+        "name": "Mathematics"
+      },
+      "status": "ACTIVE",
+      "tutor": {
+        "id": "uuid",
+        "fullName": "string",
+        "email": "string",
+        "bio": "string",
+        "subjects": ["Mathematics", "Physics"]
+      }
+    }
+  ],
+  "upcomingSessions": [
+    {
+      "id": "uuid",
+      "scheduledAt": "ISO date",
+      "durationMinutes": 60,
+      "googleMeetLink": "https://meet.google.com/xxx",
+      "subject": "Mathematics",
+      "tutor": "string"
+    }
+  ],
+  "pendingAssignments": [
+    {
+      "id": "uuid",
+      "title": "string",
+      "description": "string",
+      "type": "HOMEWORK",
+      "dueDate": "ISO date",
+      "subject": "Mathematics",
+      "createdBy": "string"
+    }
+  ],
+  "recentGrades": [
+    {
+      "id": "uuid",
+      "score": 85,
+      "comments": "string",
+      "gradedAt": "ISO date",
+      "subject": "Mathematics",
+      "gradedBy": "string"
+    }
+  ],
+  "progressReports": [
+    {
+      "id": "uuid",
+      "period": "Q1 2024",
+      "summary": "string",
+      "strengths": ["string"],
+      "areasToImprove": ["string"],
+      "createdAt": "ISO date",
+      "createdBy": "string",
+      "subject": "Mathematics"
+    }
+  ]
+}
+```
+**Error Codes:** 401 (Not authenticated), 404 (Student not found)
 
 ### POST /students/:id/regenerate-pin
-**Auth:** Required (PARENT)  
+**Auth:** Required (PARENT, ADMIN)  
 **Response (200):**
 ```json
 {
@@ -403,7 +637,12 @@
   "emailSent": true
 }
 ```
-**Security:** PIN sent to parent by email, never returned in response
+**Security:** New PIN sent to parent by email, never returned in response. All refresh tokens for the student are revoked.  
+**Error Codes:** 401 (Not authenticated), 404 (Student not found)
+
+### GET /students/:id/attendance
+**Auth:** Required (PARENT, STUDENT, TUTOR, ADMIN)  
+**Response (200):** Student attendance records
 
 ---
 
