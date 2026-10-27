@@ -178,31 +178,31 @@
 - [x] Run npm run build - Successful
 
 ## ENDPOINT.md Regeneration (Current Task)
-- [x] Authentication module (POST /auth/register, /auth/verify, /auth/login, /auth/student-login, /auth/refresh, /auth/logout, /auth/resend-otp, /auth/forgot-password, /auth/reset-password, GET /auth/me, PATCH /auth/me, /auth/change-password, /auth/change-pin, /auth/me/timezone, /auth/me/profile-picture, DELETE /auth/me/profile-picture)
-- [x] Students module (POST /students, GET /students, GET /students/:id, PATCH /students/:id, DELETE /students/:id, GET /students/:id/activity, POST /students/:id/regenerate-pin, GET /students/:id/attendance)
-- [x] Student (Self-Service) module (GET /student/me, /student/me/schedule, /student/me/next-class, /student/me/assignments, /student/me/grades, /student/me/progress-reports, /student/me/performance, /student/me/notifications, /student/me/attendance, /student/me/tutors, /student/me/enrollments, /student/me/enrollments/:enrollmentId/sessions)
-- [x] Tutor module (POST /tutor-profile, PATCH /tutor-profile, PATCH /tutor-profile/availability-status, GET /tutor-profile, GET /students, GET /students/:studentId, GET /students/:studentId/performance, GET /sessions, POST /sessions, PATCH /sessions/:id/reschedule, DELETE /sessions/:id, GET /students/:studentId/scored-items, POST /scored-items, PATCH /scored-items/:id, DELETE /scored-items/:id)
-- [x] Tutor Application module (GET /tutor-application, PATCH /tutor-application, POST /tutor-application/documents, GET /tutor-application/documents/:id, DELETE /tutor-application/documents/:id, POST /tutor-application/submit)
-- [x] Admin module (GET /admin/tutors/pending, /admin/tutors, /admin/tutors/:id, /admin/tutors/:id/students, /admin/tutors/:id/sessions, /admin/tutors/:id/grades, /admin/tutors/:id/progress-reports, PATCH /admin/tutors/:id/vetting, GET /admin/enrollments/unmatched, /admin/enrollments/:id/pricing, PATCH /admin/enrollments/:id/pricing, PATCH /admin/enrollments/:id/assign-tutor, GET /admin/enrollments/:id/suggested-tutors, GET /admin/subjects, POST /admin/subjects, PATCH /admin/subjects/:id, PUT /admin/subjects/:id/prices/:gradeBandTier, DELETE /admin/subjects/:id, GET /admin/exchange-rate/current, GET /admin/payments, /admin/payments/summary, /admin/payments/failed, /admin/payments/:id, PATCH /admin/payments/:id/note, POST /admin/payments/:id/reverify, GET /admin/reports/overview, GET /admin/students, /admin/students/:id, /admin/students/:id/enrollments, /admin/students/:id/grades, /admin/students/:id/attendance, /admin/students/:id/sessions, /admin/students/:id/assignments, /admin/students/:id/progress-reports, /admin/students/:id/performance, PATCH /admin/students/:id/regenerate-pin, GET /admin/parents, /admin/parents/:id, GET /admin/users/suspended, PATCH /admin/users/:id/suspend, PATCH /admin/users/:id/reactivate, GET /admin/diagnostics/email, GET /admin/sessions, POST /admin/sessions, PATCH /admin/sessions/:id/reschedule, GET /admin/grades/pending, PATCH /admin/grades/:id/approve, PATCH /admin/grades/:id/reject, PATCH /admin/complaints/:id/resolve)
-- [ ] Enrollments module
-- [ ] Enrollment Change Requests module
-- [ ] Sessions module
-- [ ] Class Reminders module
-- [ ] Payments module
-- [ ] Webhooks module
-- [ ] Grades module
-- [ ] Scored Items module (merge with Tutor)
-- [ ] Assignments module
-- [ ] Quiz module
-- [ ] Notifications module
-- [ ] Messages module
-- [ ] Complaints module
-- [ ] Subjects module (merge with Admin)
-- [ ] Pricing module
-- [ ] Progress Reports module
-- [ ] Attendance module
-- [ ] Performance module
-- [ ] Add missing endpoints
+- [x] Authentication module
+- [x] Students module
+- [x] Student (Self-Service) module
+- [x] Tutor module
+- [x] Tutor Application module
+- [x] Admin module
+- [x] Enrollments module (added GET /enrollments/group/:groupId)
+- [x] Enrollment Change Requests module (added admin endpoints, PATCH /change-requests/:id/cancel)
+- [x] Sessions module (updated query params, removed GET /sessions/:id)
+- [x] Class Reminders module (updated query validation)
+- [x] Payments module (added GET /payments/:id)
+- [x] Webhooks module (no changes needed)
+- [x] Grades module (added GET /grades/:id, POST /admin/grades/bulk-approve)
+- [x] Scored Items module (merged with Tutor)
+- [x] Assignments module (no changes needed)
+- [x] Quiz module (no changes needed)
+- [x] Notifications module (updated query params)
+- [x] Messages module (added PATCH /messages/:threadId/read, changed body field to body)
+- [x] Complaints module (changed resolution field)
+- [x] Subjects module (merged with Admin)
+- [x] Pricing module (no changes needed)
+- [x] Progress Reports module (no changes needed)
+- [x] Attendance module (no changes needed)
+- [x] Performance module (no changes needed)
+- [ ] Add missing endpoints from user list
 - [ ] Resolve configuration values
 - [ ] Add final sections (security table, error format, rate limits, enum reference, base URL, pagination, changes since old API)
 - [ ] Run npx prisma generate and npm run build

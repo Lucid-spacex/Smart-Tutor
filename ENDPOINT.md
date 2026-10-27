@@ -1724,8 +1724,8 @@
 **Body:**
 ```typescript
 {
-  studentId: string,
-  subjectIds: string[],
+  studentId: string (uuid),
+  subjectIds: string[] (uuid array),
   sessionFrequency: 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY',
   availableDays: string[],
   preferredStartHour: number,
@@ -1744,13 +1744,21 @@
 ```
 
 ### GET /enrollments
+**Auth:** Required (PARENT, TUTOR)  
+**Query:** `status`, `studentId`, `tutorId`  
+**Response (200):** Enrollments based on role (tutors don't see pricing)
+
+### GET /enrollments/group/:groupId
 **Auth:** Required (PARENT, TUTOR, ADMIN)  
-**Query:** `status`  
-**Response (200):** Enrollments based on role (tutors/students don't see pricing)
+**Response (200):** Enrollments by group ID
 
 ### GET /enrollments/:id
-**Auth:** Required (PARENT, TUTOR, ADMIN)  
-**Response (200):** Enrollment details (tutors/students don't see pricing)
+**Auth:** Required (PARENT, TUTOR)  
+**Response (200):** Enrollment details (tutors don't see pricing)
+
+---
+
+## Enrollment Change Requests
 
 ### POST /enrollments/:id/change-requests
 **Auth:** Required (PARENT)  
@@ -1758,11 +1766,13 @@
 ```typescript
 {
   requestedValues: {
-    sessionFrequency?: string,
+    sessionFrequency?: 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY',
     availableDays?: string[],
     preferredStartHour?: number,
     preferredEndHour?: number,
-    billingFrequency?: string
+    billingFrequency?: 'WEEKLY' | 'MONTHLY' | 'YEARLY',
+    startDate?: string (ISO date),
+    endDate?: string (ISO date)
   }
 }
 ```
@@ -1772,13 +1782,32 @@
 **Auth:** Required (PARENT)  
 **Response (200):** Change requests for enrollment
 
----
-
-## Enrollment Change Requests
-
 ### PATCH /change-requests/:id/cancel
 **Auth:** Required (PARENT)  
 **Response (200):** Cancelled change request (PENDING only)
+
+### GET /admin/change-requests
+**Auth:** Required (ADMIN)  
+**Query:** `status` (PENDING, APPROVED, REJECTED, CANCELLED), `page` (number), `limit` (number, max 100)  
+**Response (200):** Paginated change request list
+
+### GET /admin/change-requests/:id
+**Auth:** Required (ADMIN)  
+**Response (200):** Change request details
+
+### PATCH /admin/change-requests/:id/approve
+**Auth:** Required (ADMIN)  
+**Response (200):** Approved change request, enrollment updated, sessions flagged
+
+### PATCH /admin/change-requests/:id/reject
+**Auth:** Required (ADMIN)  
+**Body:**
+```typescript
+{
+  reason: string (min 1)
+}
+```
+**Response (200):** Rejected change request
 
 ---
 
@@ -1786,16 +1815,24 @@
 
 ### GET /sessions
 **Auth:** Required (PARENT, STUDENT, TUTOR, ADMIN)  
-**Query:** `status`, `enrollmentId`  
+**Query:** `status` (SCHEDULED, COMPLETED, MISSED, CANCELLED), `enrollmentId` (uuid), `tutorId` (uuid), `studentId` (uuid), `from` (ISO date), `to` (ISO date), `page` (number), `limit` (number, max 100)  
 **Response (200):** Sessions based on role and ownership
-
-### GET /sessions/:id
-**Auth:** Required  
-**Response (200):** Session details
 
 ### PATCH /sessions/:id
 **Auth:** Required (TUTOR, APPROVED)  
-**Body:** Session updates (status, tutorNotes, homeworkAssigned, durationMinutes, participants)  
+**Body:**
+```typescript
+{
+  status?: 'COMPLETED' | 'MISSED' | 'CANCELLED',
+  tutorNotes?: string,
+  homeworkAssigned?: string,
+  durationMinutes?: number (positive integer),
+  participants?: Array<{
+    enrollmentId: string (uuid),
+    attended: boolean
+  }>
+}
+```
 **Response (200):** Updated session
 
 ### GET /sessions/:id/recording
@@ -1818,7 +1855,7 @@
 
 ### GET /admin/class-schedule
 **Auth:** Required (ADMIN)  
-**Query:** `date`  
+**Query:** `date` (ISO date)  
 **Response (200):** Class schedule view for date
 
 ---
@@ -1831,7 +1868,7 @@
 **Body:**
 ```typescript
 {
-  enrollmentId: string,
+  enrollmentId: string (uuid),
   currency?: 'NGN' | 'USD'
 }
 ```
@@ -1849,6 +1886,10 @@
 **Auth:** Required (PARENT)  
 **Response (200):** Parent's payments
 
+### GET /payments/:id
+**Auth:** Required (owning parent or ADMIN)  
+**Response (200):** Payment details
+
 ### GET /payments/verify/:reference
 **Auth:** Required (owning parent or ADMIN)  
 **Response (200):** Payment verification status
@@ -1857,7 +1898,7 @@
 **Auth:** None (webhook)  
 **Rate Limit:** Exempt  
 **Headers:** `x-paystack-signature` (HMAC-SHA512)  
-**Body:** Paystack webhook event  
+**Body:** Paystack webhook event (raw body captured before JSON parsing)  
 **Response (200):** Webhook processed
 
 ---
@@ -1881,13 +1922,13 @@
 **Body:**
 ```typescript
 {
-  enrollmentId: string,
+  enrollmentId: string (uuid),
   periodStart: string (ISO date),
   periodEnd: string (ISO date),
   components: Array<{
     type: string,
     weight: number,
-    scoredItemId?: string,
+    scoredItemId?: string (uuid),
     attendanceRate?: number
   }>,
   tutorComment?: string
@@ -1897,11 +1938,15 @@
 
 ### GET /grades
 **Auth:** Required (TUTOR, PARENT, STUDENT, ADMIN)  
-**Query:** `studentId`, `enrollmentId`  
+**Query:** `studentId` (uuid), `enrollmentId` (uuid)  
 **Response (200):** Grades based on role:
 - Tutors: Their own grades in all statuses (includes overrideReason, rejectionReason)
 - Parents/Students: APPROVED grades only (never overrideReason, rejectionReason)
 - Admins: All except DRAFT
+
+### GET /grades/:id
+**Auth:** Required (PARENT, STUDENT, TUTOR, ADMIN)  
+**Response (200):** Grade details
 
 ### PATCH /grades/:id
 **Auth:** Required (TUTOR, APPROVED)  
@@ -1923,6 +1968,16 @@
 ### GET /grades/:id/preview
 **Auth:** Required (TUTOR, APPROVED)  
 **Response (200):** Grade preview with computed score
+
+### POST /admin/grades/bulk-approve
+**Auth:** Required (ADMIN)  
+**Body:**
+```typescript
+{
+  gradeIds: string[] (uuid array)
+}
+```
+**Response (200):** Bulk approval results
 
 ---
 
@@ -2031,7 +2086,7 @@
 
 ### GET /notifications
 **Auth:** Required  
-**Query:** `category`, `type`, `read`  
+**Query:** `category` (ASSIGNMENTS, GRADES, SESSIONS, MESSAGES, USERS, ENROLLMENT, PAYMENTS, PRICING, COMPLAINTS, QUIZZES, SCHEDULE), `type` (string), `isRead` (boolean), `entityType` (string), `entityId` (string), `page` (number), `limit` (number, max 100)  
 **Response (200):** Notifications with filters
 
 ### GET /notifications/unread-count
@@ -2102,7 +2157,7 @@
 
 ### GET /messages
 **Auth:** Required  
-**Query:** `recipientId`  
+**Query:** `recipientId` (uuid)  
 **Response (200):** Message threads
 
 ### POST /messages
@@ -2110,8 +2165,8 @@
 **Body:**
 ```typescript
 {
-  recipientId: string,
-  content: string
+  recipientId: string (uuid),
+  body: string
 }
 ```
 **Response (201):** Sent message
@@ -2119,6 +2174,10 @@
 ### GET /messages/:threadId
 **Auth:** Required  
 **Response (200):** Thread messages
+
+### PATCH /messages/:threadId/read
+**Auth:** Required  
+**Response (200):** Thread marked as read
 
 ### GET /messages/admin-contact
 **Auth:** Required  
@@ -2150,8 +2209,7 @@
 **Body:**
 ```typescript
 {
-  status: 'RESOLVED',
-  resolution?: string
+  resolution: string (min 1)
 }
 ```
 **Response (200):** Resolved complaint
