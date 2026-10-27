@@ -53,4 +53,13 @@ export class MessagesController {
       next(error);
     }
   };
+
+  getUnreadCount = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const count = await this.messagesService.getUnreadCount(req.user!.userId);
+      res.json(count);
+    } catch (error) {
+      next(error);
+    }
+  };
 }

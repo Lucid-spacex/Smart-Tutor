@@ -445,6 +445,57 @@ export class MessagesService {
 
     return {
       recipientId: admin.id,
+      fullName: admin.fullName,
+    };
+  }
+
+  async getUnreadCount(userId: string) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    });
+
+    if (!user) {
+      throw new AppError(404, 'User not found');
+    }
+
+    // For admins, count unread messages from parents and tutors in all admin-support threads
+    if (user.role === 'ADMIN') {
+      const unreadCount = await prisma.message.count({
+        where: {
+          recipient: { role: 'ADMIN' },
+          sender: { role: { in: ['PARENT', 'TUTOR'] } },
+          readAt: null,
+        },
+      });
+
+      return { unreadCount };
+    }
+
+    // For parents and tutors, count unread messages from admin in their admin-support thread
+    const thread = await prisma.thread.findUnique({
+      where: {
+        kind_participantId: {
+          kind: 'ADMIN_SUPPORT',
+          participantId: userId,
+        },
+      },
+    });
+
+    if (!thread) {
+      return { unreadCount: 0 };
+    }
+
+    const unreadCount = await prisma.message.count({
+      where: {
+        threadId: thread.id,
+        recipientId: userId,
+        readAt: null,
+      },
+    });
+
+    return { unreadCount };
+  }
     };
   }
 }

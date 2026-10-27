@@ -21,6 +21,9 @@ const blockStudents = (req: AuthRequest, res: Response, next: NextFunction): voi
 // Get admin contact for messaging (PARENT and TUTOR only)
 router.get('/admin-contact', authenticate, requireRole('PARENT', 'TUTOR'), messagesController.getAdminContact);
 
+// Get unread message count (STUDENTS blocked entirely)
+router.get('/unread-count', authenticate, blockStudents, messagesController.getUnreadCount);
+
 // Send message (allowed roles validated per permission graph in service)
 // STUDENTS blocked entirely from messaging
 router.post('/', authenticate, blockStudents, validate(createMessageSchema), messagesController.sendMessage);
