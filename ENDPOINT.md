@@ -650,28 +650,269 @@
 
 ### GET /student/me
 **Auth:** Required (STUDENT)  
-**Response (200):** Student profile
+**Response (200):**
+```json
+{
+  "id": "uuid",
+  "userId": "uuid",
+  "parentId": "uuid",
+  "fullName": "string",
+  "dateOfBirth": "ISO date",
+  "actualGrade": "GRADE_5",
+  "gradeLevel": "Grade 5",
+  "gradeBandTier": "G5_TO_G8",
+  "gender": "MALE",
+  "email": "string",
+  "preferredStartDate": "ISO date",
+  "school": "string",
+  "notes": "string",
+  "createdAt": "ISO date",
+  "updatedAt": "ISO date",
+  "user": {
+    "id": "uuid",
+    "studentCode": "ABCDEFGH",
+    "status": "ACTIVE",
+    "timezone": "Africa/Lagos"
+  },
+  "parent": {
+    "id": "uuid",
+    "fullName": "string",
+    "email": "string"
+  }
+}
+```
+**Error Codes:** 401 (Not authenticated), 404 (Student profile not found)
 
 ### GET /student/me/schedule
 **Auth:** Required (STUDENT)  
-**Response (200):** Student's class schedule
+**Response (200):**
+```json
+[
+  {
+    "sessionId": "uuid",
+    "scheduledAt": "ISO date",
+    "durationMinutes": 60,
+    "googleMeetLink": "https://meet.google.com/xxx",
+    "status": "SCHEDULED",
+    "tutor": {
+      "id": "uuid",
+      "fullName": "string"
+    },
+    "subject": "Mathematics"
+  }
+]
+```
+**Error Codes:** 401 (Not authenticated), 404 (Student profile not found)
 
 ### GET /student/me/next-class
 **Auth:** Required (STUDENT)  
-**Response (200):** Next upcoming class with timezone info
+**Response (200):**
+```json
+{
+  "session": {
+    "sessionId": "uuid",
+    "scheduledAt": "ISO date",
+    "durationMinutes": 60,
+    "googleMeetLink": "https://meet.google.com/xxx",
+    "tutor": {
+      "id": "uuid",
+      "fullName": "string"
+    },
+    "subject": "Mathematics"
+  },
+  "timezone": "Africa/Lagos"
+}
+```
+**Note:** Returns `{"message": "No upcoming classes scheduled", "session": null}` if no upcoming class. Timezone falls back to parent's timezone if student has none.  
+**Error Codes:** 401 (Not authenticated), 404 (Student profile not found)
 
 ### GET /student/me/assignments
 **Auth:** Required (STUDENT)  
-**Response (200):** Student's assignments
+**Response (200):**
+```json
+[
+  {
+    "id": "uuid",
+    "enrollmentId": "uuid",
+    "title": "string",
+    "description": "string",
+    "type": "HOMEWORK",
+    "dueDate": "ISO date",
+    "status": "PENDING",
+    "createdAt": "ISO date",
+    "updatedAt": "ISO date",
+    "enrollment": {
+      "subject": {
+        "id": "uuid",
+        "name": "Mathematics",
+        "category": "STEM"
+      }
+    }
+  }
+]
+```
+**Error Codes:** 401 (Not authenticated), 404 (Student profile not found)
 
 ### GET /student/me/grades
 **Auth:** Required (STUDENT)  
-**Response (200):** APPROVED grades only (never overrideReason or rejectionReason)
+**Response (200):**
+```json
+[
+  {
+    "id": "uuid",
+    "enrollmentId": "uuid",
+    "score": 85,
+    "status": "APPROVED",
+    "comments": "string",
+    "visibleToStudent": true,
+    "createdAt": "ISO date",
+    "updatedAt": "ISO date",
+    "enrollment": {
+      "subject": {
+        "id": "uuid",
+        "name": "Mathematics",
+        "category": "STEM"
+      }
+    },
+    "assignment": {
+      "id": "uuid",
+      "title": "string"
+    },
+    "grader": {
+      "fullName": "string"
+    }
+  }
+]
+```
+**Security:** Only APPROVED grades with visibleToStudent=true are returned. Never includes overrideReason or rejectionReason.  
+**Error Codes:** 401 (Not authenticated), 404 (Student profile not found)
+
+### GET /student/me/progress-reports
+**Auth:** Required (STUDENT)  
+**Response (200):**
+```json
+[
+  {
+    "id": "uuid",
+    "enrollmentId": "uuid",
+    "period": "Q1 2024",
+    "summary": "string",
+    "strengths": ["string"],
+    "areasToImprove": ["string"],
+    "createdAt": "ISO date",
+    "updatedAt": "ISO date",
+    "enrollment": {
+      "subject": {
+        "id": "uuid",
+        "name": "Mathematics",
+        "category": "STEM"
+      }
+    },
+    "creator": {
+      "fullName": "string"
+    }
+  }
+]
+```
+**Error Codes:** 401 (Not authenticated), 404 (Student profile not found)
 
 ### GET /student/me/performance
 **Auth:** Required (STUDENT)  
-**Query:** `period` (week, month, quarter, year, all)  
-**Response (200):** Performance overview with APPROVED grades only
+**Query:** `period` (week, month, quarter, year, all), `from` (ISO date), `to` (ISO date), `subjectId` (uuid), `includePending` (boolean)  
+**Response (200):** Performance overview with APPROVED grades only (unless includePending=true)  
+**Error Codes:** 401 (Not authenticated), 404 (Student profile not found)
+
+### GET /student/me/notifications
+**Auth:** Required (STUDENT)  
+**Response (200):** See Notifications section (this is an alias to GET /notifications)
+
+### GET /student/me/attendance
+**Auth:** Required (STUDENT)  
+**Response (200):** See Attendance section (this is an alias to GET /attendance)
+
+### GET /student/me/tutors
+**Auth:** Required (STUDENT)  
+**Response (200):**
+```json
+[
+  {
+    "tutorId": "uuid",
+    "fullName": "string",
+    "bio": "string",
+    "subjects": ["Mathematics", "Physics"],
+    "enrollmentSubject": "Mathematics",
+    "assignedSince": "ISO date"
+  }
+]
+```
+**Note:** Deduplicated by tutor (one entry per distinct tutor). Only ACTIVE enrollments with assigned tutors.  
+**Error Codes:** 401 (Not authenticated), 404 (Student profile not found)
+
+### GET /student/me/enrollments
+**Auth:** Required (STUDENT)  
+**Response (200):**
+```json
+[
+  {
+    "id": "uuid",
+    "studentId": "uuid",
+    "subjectId": "uuid",
+    "tutorId": "uuid",
+    "status": "ACTIVE",
+    "sessionFrequency": "WEEKLY",
+    "billingFrequency": "MONTHLY",
+    "startDate": "ISO date",
+    "endDate": "ISO date",
+    "createdAt": "ISO date",
+    "updatedAt": "ISO date",
+    "tutor": {
+      "id": "uuid",
+      "fullName": "string",
+      "email": "string",
+      "tutorProfile": {
+        "bio": "string",
+        "subjects": ["Mathematics"],
+        "vettingStatus": "APPROVED"
+      }
+    },
+    "subject": {
+      "id": "uuid",
+      "name": "Mathematics",
+      "category": "STEM"
+    },
+    "payments": [
+      {
+        "id": "uuid",
+        "amount": 100,
+        "currency": "USD",
+        "status": "SUCCESS",
+        "createdAt": "ISO date"
+      }
+    ]
+  }
+]
+```
+**Error Codes:** 401 (Not authenticated), 404 (Student profile not found)
+
+### GET /student/me/enrollments/:enrollmentId/sessions
+**Auth:** Required (STUDENT)  
+**Response (200):**
+```json
+[
+  {
+    "sessionId": "uuid",
+    "scheduledAt": "ISO date",
+    "durationMinutes": 60,
+    "googleMeetLink": "https://meet.google.com/xxx",
+    "status": "SCHEDULED",
+    "tutor": {
+      "id": "uuid",
+      "fullName": "string"
+    }
+  }
+]
+```
+**Error Codes:** 401 (Not authenticated), 404 (Student profile not found), 403 (You do not have access to this enrollment)
 
 ---
 
