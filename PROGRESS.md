@@ -182,8 +182,7 @@
 - [x] Students module (POST /students, GET /students, GET /students/:id, PATCH /students/:id, DELETE /students/:id, GET /students/:id/activity, POST /students/:id/regenerate-pin, GET /students/:id/attendance)
 - [x] Student (Self-Service) module (GET /student/me, /student/me/schedule, /student/me/next-class, /student/me/assignments, /student/me/grades, /student/me/progress-reports, /student/me/performance, /student/me/notifications, /student/me/attendance, /student/me/tutors, /student/me/enrollments, /student/me/enrollments/:enrollmentId/sessions)
 - [x] Tutor module (POST /tutor-profile, PATCH /tutor-profile, PATCH /tutor-profile/availability-status, GET /tutor-profile, GET /students, GET /students/:studentId, GET /students/:studentId/performance, GET /sessions, POST /sessions, PATCH /sessions/:id/reschedule, DELETE /sessions/:id, GET /students/:studentId/scored-items, POST /scored-items, PATCH /scored-items/:id, DELETE /scored-items/:id)
-- [ ] Tutor Profile module (merge with Tutor)
-- [ ] Tutor Application module
+- [x] Tutor Application module (GET /tutor-application, PATCH /tutor-application, POST /tutor-application/documents, GET /tutor-application/documents/:id, DELETE /tutor-application/documents/:id, POST /tutor-application/submit)
 - [ ] Admin module
 - [ ] Enrollments module
 - [ ] Enrollment Change Requests module

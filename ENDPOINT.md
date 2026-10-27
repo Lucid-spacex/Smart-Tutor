@@ -1257,50 +1257,153 @@
 
 ---
 
-## Tutor Profile
-
-### PATCH /tutor-profile/availability-status
-**Auth:** Required (TUTOR, APPROVED)  
-**Body:**
-```typescript
-{
-  availabilityStatus: 'AVAILABLE' | 'LIMITED' | 'UNAVAILABLE',
-  maxStudents?: number,
-  statusNote?: string
-}
-```
-**Response (200):** Updated availability status
-
 ---
 
 ## Tutor Application
 
 ### GET /tutor-application
 **Auth:** Required (TUTOR, PENDING_VETTING) - bypasses requireApprovedTutor  
-**Response (200):** Draft application with missingFields[]
+**Rate Limit:** Tier 2 (60 req / min)  
+**Response (200):**
+```json
+{
+  "id": "uuid",
+  "userId": "uuid",
+  "status": "DRAFT",
+  "birthDay": 1,
+  "birthMonth": 1,
+  "country": "string",
+  "city": "string",
+  "highestQualification": "BACHELORS",
+  "yearsOfExperience": 5,
+  "whyTeach": "string",
+  "howHeard": "GOOGLE_SEARCH",
+  "aboutYou": ["string"],
+  "lastSavedAt": "ISO date",
+  "submittedAt": null,
+  "reviewedAt": null,
+  "reviewedBy": null,
+  "rejectionReason": null,
+  "createdAt": "ISO date",
+  "updatedAt": "ISO date",
+  "subjects": [
+    {
+      "id": "uuid",
+      "applicationId": "uuid",
+      "subjectId": "uuid",
+      "subject": {
+        "id": "uuid",
+        "name": "Mathematics",
+        "category": "STEM"
+      }
+    }
+  ],
+  "documents": [
+    {
+      "id": "uuid",
+      "applicationId": "uuid",
+      "publicId": "string",
+      "originalName": "resume.pdf",
+      "mimeType": "application/pdf",
+      "sizeBytes": 102400,
+      "createdAt": "ISO date"
+    }
+  ],
+  "missingFields": ["birthDate", "country", "subjects", "documents", "profilePicture"]
+}
+```
+**Error Codes:** 401 (Not authenticated), 404 (Application not found)
 
 ### PATCH /tutor-application
 **Auth:** Required (TUTOR, PENDING_VETTING)  
-**Body:** Partial application updates (autosave)  
-**Response (200):** Updated application with lastSavedAt
+**Rate Limit:** Tier 2 (60 req / min)  
+**Body:**
+```typescript
+{
+  birthDay?: number (1-31),
+  birthMonth?: number (1-12),
+  country?: string (min 1),
+  city?: string (min 1),
+  highestQualification?: 'SSCE_WAEC' | 'OND_NCE' | 'HND' | 'BACHELORS' | 'BED_PGDE' | 'MASTERS' | 'PHD' | 'OTHER',
+  subjects?: string[] (uuid array),
+  levels?: ('PRESCHOOL_TO_G1' | 'G2_TO_G4' | 'G5_TO_G8' | 'G9_TO_G12' | 'EXAM_LEVELS')[],
+  yearsOfExperience?: number (>= 0),
+  whyTeach?: string,
+  howHeard?: 'TEACHMENEST_TUTOR_OR_STAFF' | 'PARENT_OR_FAMILY' | 'FRIEND_OR_FAMILY' | 'INSTAGRAM' | 'FACEBOOK' | 'LINKEDIN' | 'WHATSAPP_GROUP' | 'GOOGLE_SEARCH' | 'JOB_BOARD' | 'OTHER',
+  aboutYou?: string[] (max 3 items, each max 60 chars)
+}
+```
+**Response (200):** Updated application with lastSavedAt timestamp  
+**Error Codes:** 401 (Not authenticated), 404 (Application not found), 400 (Cannot update submitted application)
 
 ### POST /tutor-application/documents
 **Auth:** Required (TUTOR, PENDING_VETTING)  
+**Rate Limit:** Tier 2 (60 req / min)  
 **Content-Type:** multipart/form-data  
-**Body:** file (max 5MB, PDF/DOC/DOCX/JPG/PNG)  
-**Response (201):** Document metadata with signed Cloudinary URL (10 min expiry)
+**Body:** file (max 5MB, allowed types: PDF, DOC, DOCX, JPG, PNG)  
+**Response (201):**
+```json
+{
+  "id": "uuid",
+  "applicationId": "uuid",
+  "publicId": "string",
+  "originalName": "resume.pdf",
+  "mimeType": "application/pdf",
+  "sizeBytes": 102400,
+  "createdAt": "ISO date"
+}
+```
+**Error Codes:** 401 (Not authenticated), 400 (No file uploaded, Invalid file type, File size exceeds 5 MB limit, Maximum 5 documents allowed, Cannot upload documents for submitted application)
 
 ### GET /tutor-application/documents/:id
 **Auth:** Required (owning tutor or ADMIN)  
-**Response (200):** Document metadata with fresh signed URL
+**Rate Limit:** Tier 2 (60 req / min)  
+**Response (200):**
+```json
+{
+  "id": "uuid",
+  "originalName": "resume.pdf",
+  "mimeType": "application/pdf",
+  "sizeBytes": 102400,
+  "url": "cloudinary-signed-url",
+  "expiresAt": "ISO date (10 minutes from now)"
+}
+```
+**Note:** URL is signed and expires in 10 minutes.  
+**Error Codes:** 401 (Not authenticated), 404 (Document not found), 403 (Not authorized to access this document)
 
 ### DELETE /tutor-application/documents/:id
 **Auth:** Required (TUTOR, PENDING_VETTING)  
-**Response (200):** Document deleted from database and Cloudinary
+**Rate Limit:** Tier 2 (60 req / min)  
+**Response (200):**
+```json
+{
+  "message": "Document deleted successfully"
+}
+```
+**Error Codes:** 401 (Not authenticated), 404 (Document not found), 403 (Not authorized to delete this document), 400 (Cannot delete documents from submitted application)
 
 ### POST /tutor-application/submit
 **Auth:** Required (TUTOR, PENDING_VETTING)  
-**Response (200):** Submitted application with status
+**Rate Limit:** Tier 2 (60 req / min)  
+**Body:**
+```typescript
+{
+  birthDay: number (1-31),
+  birthMonth: number (1-12),
+  country: string (min 1),
+  city: string (min 1),
+  highestQualification: 'SSCE_WAEC' | 'OND_NCE' | 'HND' | 'BACHELORS' | 'BED_PGDE' | 'MASTERS' | 'PHD' | 'OTHER',
+  subjects: string[] (uuid array, min 1),
+  levels: ('PRESCHOOL_TO_G1' | 'G2_TO_G4' | 'G5_TO_G8' | 'G9_TO_G12' | 'EXAM_LEVELS')[] (min 1),
+  yearsOfExperience: number (>= 0),
+  whyTeach: string (min 10),
+  howHeard: 'TEACHMENEST_TUTOR_OR_STAFF' | 'PARENT_OR_FAMILY' | 'FRIEND_OR_FAMILY' | 'INSTAGRAM' | 'FACEBOOK' | 'LINKEDIN' | 'WHATSAPP_GROUP' | 'GOOGLE_SEARCH' | 'JOB_BOARD' | 'OTHER',
+  aboutYou: string[] (min 1, max 3, each max 60 chars)
+}
+```
+**Response (200):** Submitted application with status SUBMITTED and submittedAt timestamp  
+**Error Codes:** 401 (Not authenticated), 404 (Application not found), 400 (Application has already been submitted, Missing required fields: birthDate, country, subjects, documents, profilePicture, etc.)
 
 ---
 
