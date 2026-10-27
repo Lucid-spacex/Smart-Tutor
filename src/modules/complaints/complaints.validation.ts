@@ -8,7 +8,7 @@ export const createComplaintSchema = z.object({
 });
 
 export const resolveComplaintSchema = z.object({
-  reply: z.string().min(1, 'Reply is required').max(2000, 'Reply must be less than 2000 characters'),
+  resolution: z.string().min(1, 'Resolution is required').max(2000, 'Resolution must be less than 2000 characters'),
 });
 
 export type CreateComplaintInput = z.infer<typeof createComplaintSchema>;

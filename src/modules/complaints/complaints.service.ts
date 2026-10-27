@@ -90,7 +90,7 @@ export class ComplaintsService {
     });
   }
 
-  async resolveComplaint(complaintId: string, adminId: string, reply: string) {
+  async resolveComplaint(complaintId: string, adminId: string, resolution: string) {
     const complaint = await prisma.complaint.findUnique({
       where: { id: complaintId },
     });
@@ -107,7 +107,7 @@ export class ComplaintsService {
       where: { id: complaintId },
       data: {
         status: 'RESOLVED',
-        adminReply: reply,
+        adminReply: resolution,
         resolvedBy: adminId,
         resolvedAt: new Date(),
       },

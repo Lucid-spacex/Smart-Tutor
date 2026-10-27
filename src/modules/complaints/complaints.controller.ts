@@ -51,8 +51,8 @@ export class ComplaintsController {
       }
 
       const { id } = req.params;
-      const { reply } = req.body;
-      const complaint = await this.complaintsService.resolveComplaint(id, adminId, reply);
+      const { resolution } = req.body;
+      const complaint = await this.complaintsService.resolveComplaint(id, adminId, resolution);
       res.status(200).json(complaint);
     } catch (error) {
       next(error);
