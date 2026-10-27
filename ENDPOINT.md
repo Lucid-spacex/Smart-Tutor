@@ -1409,14 +1409,34 @@
 
 ## Admin
 
+### GET /admin/tutors/pending
+**Auth:** Required (ADMIN)  
+**Response (200):** Tutors with PENDING_VETTING status
+
 ### GET /admin/tutors
 **Auth:** Required (ADMIN)  
-**Query:** `status`, `applicationStatus`, `hasCapacity`, `page`, `limit`  
+**Query:** `status` (APPROVED, PENDING_VETTING, REJECTED, SUSPENDED), `applicationStatus` (DRAFT, SUBMITTED, APPROVED, REJECTED), `vettingStatus` (PENDING, APPROVED, REJECTED), `availabilityStatus` (AVAILABLE, LIMITED, UNAVAILABLE), `subjectId` (uuid), `hasCapacity` (boolean), `search` (string), `page` (number), `limit` (number, max 100)  
 **Response (200):** Paginated tutor list with application data
 
 ### GET /admin/tutors/:id
 **Auth:** Required (ADMIN)  
 **Response (200):** Comprehensive tutor data (user, application, profile, metrics)
+
+### GET /admin/tutors/:id/students
+**Auth:** Required (ADMIN)  
+**Response (200):** Tutor's assigned students
+
+### GET /admin/tutors/:id/sessions
+**Auth:** Required (ADMIN)  
+**Response (200):** Tutor's sessions
+
+### GET /admin/tutors/:id/grades
+**Auth:** Required (ADMIN)  
+**Response (200):** Tutor's submitted grades
+
+### GET /admin/tutors/:id/progress-reports
+**Auth:** Required (ADMIN)  
+**Response (200):** Tutor's progress reports
 
 ### PATCH /admin/tutors/:id/vetting
 **Auth:** Required (ADMIN)  
@@ -1424,56 +1444,47 @@
 ```typescript
 {
   vettingStatus: 'APPROVED' | 'REJECTED',
-  reason?: string
+  rejectionReason?: string (required when REJECTED)
 }
 ```
 **Response (200):** Updated tutor status
 
-### PATCH /admin/tutors/:id/suspend
+### GET /admin/enrollments/unmatched
+**Auth:** Required (ADMIN)  
+**Query:** `includeUnpaid` (boolean)  
+**Response (200):** Enrollments without assigned tutors
+
+### GET /admin/enrollments/:id/pricing
+**Auth:** Required (ADMIN)  
+**Response (200):** Enrollment pricing override details
+
+### PATCH /admin/enrollments/:id/pricing
 **Auth:** Required (ADMIN)  
 **Body:**
 ```typescript
 {
-  suspend: boolean
+  yearlyPriceNGN?: number (positive, nullable),
+  yearlyPriceUSD?: number (positive, nullable),
+  billingFrequency?: 'WEEKLY' | 'MONTHLY' | 'YEARLY',
+  note?: string
 }
 ```
-**Response (200):** Updated tutor status
+**Response (200):** Updated enrollment pricing override
 
-### GET /admin/students
+### PATCH /admin/enrollments/:id/assign-tutor
 **Auth:** Required (ADMIN)  
-**Query:** `search`, `status`, `page`, `limit`  
-**Response (200):** Paginated student list (studentCode explicitly excluded)
-
-### GET /admin/students/:id
-**Auth:** Required (ADMIN)  
-**Response (200):** Comprehensive student data (studentCode explicitly excluded)
-
-### PATCH /admin/students/:id/regenerate-pin
-**Auth:** Required (ADMIN)  
-**Response (200):**
-```json
+**Body:**
+```typescript
 {
-  "message": "PIN regenerated successfully. New credentials sent to parent email."
+  tutorId: string (uuid),
+  force?: boolean
 }
 ```
-**Security:** PIN sent to parent by email, never returned in response, studentCode never exposed
+**Response (200):** Assigned tutor
 
-### PATCH /admin/students/:id/suspend
+### GET /admin/enrollments/:id/suggested-tutors
 **Auth:** Required (ADMIN)  
-**Response (200):** Updated student status
-
-### GET /admin/parents
-**Auth:** Required (ADMIN)  
-**Query:** `search`, `status`, `page`, `limit`  
-**Response (200):** Paginated parent list
-
-### GET /admin/parents/:id
-**Auth:** Required (ADMIN)  
-**Response (200):** Parent profile with children, enrollments, payments, complaints
-
-### PATCH /admin/parents/:id/suspend
-**Auth:** Required (ADMIN)  
-**Response (200):** Updated parent status
+**Response (200):** Ranked suggested tutors based on subject, availability, capacity
 
 ### GET /admin/subjects
 **Auth:** Required (ADMIN)  
@@ -1481,71 +1492,68 @@
 
 ### POST /admin/subjects
 **Auth:** Required (ADMIN)  
-**Body:** Subject creation data with grade band prices  
+**Body:**
+```typescript
+{
+  name: string (min 1, trimmed),
+  description?: string,
+  category: 'CORE' | 'ENRICHMENT' | 'TEST_PREP',
+  prices: Array<{
+    gradeBandTier: 'PRESCHOOL_TO_G1' | 'G2_TO_G4' | 'G5_TO_G8' | 'G9_TO_G12',
+    yearlyPriceNGN: number (positive),
+    yearlyPriceUSD: number (positive)
+  }> (min 1)
+}
+```
 **Response (201):** Created subject
 
 ### PATCH /admin/subjects/:id
 **Auth:** Required (ADMIN)  
-**Body:** Partial subject updates  
+**Body:**
+```typescript
+{
+  name?: string (min 1, trimmed),
+  description?: string,
+  category?: 'CORE' | 'ENRICHMENT' | 'TEST_PREP',
+  isActive?: boolean
+}
+```
 **Response (200):** Updated subject
-
-### DELETE /admin/subjects/:id
-**Auth:** Required (ADMIN)  
-**Response (200):** Deleted subject (soft delete if enrollments exist)
 
 ### PUT /admin/subjects/:id/prices/:gradeBandTier
 **Auth:** Required (ADMIN)  
 **Body:**
 ```typescript
 {
-  yearlyPriceNGN: number,
-  yearlyPriceUSD: number,
-  isActive: boolean
+  yearlyPriceNGN: number (positive),
+  yearlyPriceUSD: number (positive),
+  isActive?: boolean,
+  note?: string
 }
 ```
 **Response (200):** Upserted subject price
 
-### GET /admin/enrollments
+### DELETE /admin/subjects/:id
 **Auth:** Required (ADMIN)  
-**Query:** `status`, `page`, `limit`  
-**Response (200):** Paginated enrollment list
+**Response (200):** Deleted subject (soft delete if enrollments exist)
 
-### GET /admin/enrollments/:id
+### GET /admin/exchange-rate/current
 **Auth:** Required (ADMIN)  
-**Response (200):** Enrollment details
-
-### PATCH /admin/enrollments/:id/assign-tutor
-**Auth:** Required (ADMIN)  
-**Body:**
-```typescript
-{
-  tutorId: string,
-  force?: boolean
-}
-```
-**Response (200):** Assigned tutor
-
-### PATCH /admin/enrollments/:id/pricing
-**Auth:** Required (ADMIN)  
-**Body:**
-```typescript
-{
-  yearlyPriceNGN?: number,
-  yearlyPriceUSD?: number,
-  billingFrequency?: 'WEEKLY' | 'MONTHLY' | 'YEARLY',
-  note?: string
-}
-```
-**Response (200):** Updated enrollment pricing
-
-### GET /admin/enrollments/:id/suggested-tutors
-**Auth:** Required (ADMIN)  
-**Response (200):** Ranked suggested tutors based on subject, availability, capacity
+**Response (200):** Current exchange rate
 
 ### GET /admin/payments
 **Auth:** Required (ADMIN)  
 **Query:** `status`, `currency`, `provider`, `parentId`, `from`, `to`, `search`, `page`, `limit`  
 **Response (200):** Paginated payment list
+
+### GET /admin/payments/summary
+**Auth:** Required (ADMIN)  
+**Query:** `from`, `to`  
+**Response (200):** Revenue totals, counts by status, success rate, daily revenue chart
+
+### GET /admin/payments/failed
+**Auth:** Required (ADMIN)  
+**Response (200):** Failed payments list
 
 ### GET /admin/payments/:id
 **Auth:** Required (ADMIN)  
@@ -1556,7 +1564,7 @@
 **Body:**
 ```typescript
 {
-  note: string
+  note: string (min 1)
 }
 ```
 **Response (200):** Added admin note
@@ -1565,76 +1573,123 @@
 **Auth:** Required (ADMIN)  
 **Response (200):** Payment verified via Paystack API, enrollment activated if successful
 
-### GET /admin/payments/summary
+### GET /admin/reports/overview
 **Auth:** Required (ADMIN)  
-**Query:** `from`, `to`  
-**Response (200):** Revenue totals, counts by status, success rate, daily revenue chart
+**Response (200):** Overview statistics
+
+### GET /admin/students
+**Auth:** Required (ADMIN)  
+**Query:** `parentId` (uuid), `search` (string), `status` (UNVERIFIED, ACTIVE, PENDING_VETTING, APPROVED, REJECTED, SUSPENDED), `gradeBandTier` (PRESCHOOL_TO_G1, G2_TO_G4, G5_TO_G8, G9_TO_G12), `enrolled` (boolean), `assigned` (boolean), `page` (number), `limit` (number, max 100)  
+**Response (200):** Paginated student list (studentCode explicitly excluded)
+
+### GET /admin/students/:id
+**Auth:** Required (ADMIN)  
+**Response (200):** Comprehensive student data (studentCode explicitly excluded)
+
+### GET /admin/students/:id/enrollments
+**Auth:** Required (ADMIN)  
+**Response (200):** Student's enrollments
+
+### GET /admin/students/:id/grades
+**Auth:** Required (ADMIN)  
+**Response (200):** Student's grades
+
+### GET /admin/students/:id/attendance
+**Auth:** Required (ADMIN)  
+**Response (200):** Student's attendance records
+
+### GET /admin/students/:id/sessions
+**Auth:** Required (ADMIN)  
+**Response (200):** Student's sessions
+
+### GET /admin/students/:id/assignments
+**Auth:** Required (ADMIN)  
+**Response (200):** Student's assignments
+
+### GET /admin/students/:id/progress-reports
+**Auth:** Required (ADMIN)  
+**Response (200):** Student's progress reports
+
+### GET /admin/students/:id/performance
+**Auth:** Required (ADMIN)  
+**Response (200):** Student performance data
+
+### PATCH /admin/students/:id/regenerate-pin
+**Auth:** Required (ADMIN)  
+**Response (200):**
+```json
+{
+  "message": "PIN regenerated successfully. New credentials sent to parent email.",
+  "emailSent": true
+}
+```
+**Security:** PIN sent to parent by email, never returned in response, studentCode never exposed
+
+### GET /admin/parents
+**Auth:** Required (ADMIN)  
+**Response (200):** Paginated parent list
+
+### GET /admin/parents/:id
+**Auth:** Required (ADMIN)  
+**Response (200):** Parent profile with children, enrollments, payments, complaints
+
+### GET /admin/users/suspended
+**Auth:** Required (ADMIN)  
+**Response (200):** Suspended users list
+
+### PATCH /admin/users/:id/suspend
+**Auth:** Required (ADMIN)  
+**Body:**
+```typescript
+{
+  reason: string (min 1)
+}
+```
+**Response (200):** User suspended
+
+### PATCH /admin/users/:id/reactivate
+**Auth:** Required (ADMIN)  
+**Response (200):** User reactivated
+
+### GET /admin/diagnostics/email
+**Auth:** Required (ADMIN)  
+**Response (200):** Email diagnostics information
 
 ### GET /admin/sessions
 **Auth:** Required (ADMIN)  
-**Response (200):** All sessions
+**Query:** `status` (SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED, MISSED), `tutorId` (uuid), `studentId` (uuid), `enrollmentId` (uuid), `from` (ISO date), `to` (ISO date), `page` (number), `limit` (number, max 100)  
+**Response (200):** Paginated sessions list
 
 ### POST /admin/sessions
 **Auth:** Required (ADMIN)  
-**Body:** Session creation (multiple enrollments)  
+**Body:**
+```typescript
+{
+  tutorId: string (uuid),
+  scheduledAt: string (ISO date),
+  durationMinutes: number (positive integer),
+  googleMeetLink?: string (url),
+  googleEventId?: string,
+  participantEnrollmentIds: string[] (uuid array, min 1),
+  sharedSessionConfirmed?: boolean
+}
+```
 **Response (201):** Created session with Google Meet link
 
-### PATCH /admin/sessions/:id
-**Auth:** Required (ADMIN)  
-**Body:** Session updates  
-**Response (200):** Updated session
-
-### GET /admin/complaints
-**Auth:** Required (ADMIN)  
-**Response (200):** All complaints
-
-### PATCH /admin/complaints/:id
+### PATCH /admin/sessions/:id/reschedule
 **Auth:** Required (ADMIN)  
 **Body:**
 ```typescript
 {
-  status: 'RESOLVED',
-  resolution?: string
+  scheduledAt?: string (ISO date),
+  googleMeetLink?: string (url)
 }
 ```
-**Response (200):** Resolved complaint
+**Response (200):** Rescheduled session
 
-### GET /admin/class-schedule
+### GET /admin/grades/pending
 **Auth:** Required (ADMIN)  
-**Query:** `date`  
-**Response (200):** Class schedule view for date
-
-### GET /admin/change-requests
-**Auth:** Required (ADMIN)  
-**Query:** `status`, `page`, `limit`  
-**Response (200):** Paginated change request list
-
-### GET /admin/change-requests/:id
-**Auth:** Required (ADMIN)  
-**Response (200):** Change request details
-
-### PATCH /admin/change-requests/:id/approve
-**Auth:** Required (ADMIN)  
-**Response (200):** Approved change request, enrollment updated, sessions flagged
-
-### PATCH /admin/change-requests/:id/reject
-**Auth:** Required (ADMIN)  
-**Body:**
-```typescript
-{
-  reason: string
-}
-```
-**Response (200):** Rejected change request
-
-### GET /admin/grades
-**Auth:** Required (ADMIN)  
-**Query:** `status`, `tutorId`, `studentId`, `subjectId`, `page`, `limit`  
-**Response (200):** Paginated grade list (excludes DRAFT)
-
-### GET /admin/grades/:id
-**Auth:** Required (ADMIN)  
-**Response (200):** Grade details (studentCode explicitly excluded)
+**Response (200):** Pending grades awaiting approval
 
 ### PATCH /admin/grades/:id/approve
 **Auth:** Required (ADMIN)  
@@ -1645,20 +1700,20 @@
 **Body:**
 ```typescript
 {
-  reason: string
+  reason: string (min 1)
 }
 ```
 **Response (200):** Rejected grade, notifies tutor only
 
-### POST /admin/grades/bulk-approve
+### PATCH /admin/complaints/:id/resolve
 **Auth:** Required (ADMIN)  
 **Body:**
 ```typescript
 {
-  gradeIds: string[]
+  resolution: string (min 1)
 }
 ```
-**Response (200):** Bulk approval results
+**Response (200):** Resolved complaint
 
 ---
 

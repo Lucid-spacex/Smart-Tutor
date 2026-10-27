@@ -183,7 +183,7 @@
 - [x] Student (Self-Service) module (GET /student/me, /student/me/schedule, /student/me/next-class, /student/me/assignments, /student/me/grades, /student/me/progress-reports, /student/me/performance, /student/me/notifications, /student/me/attendance, /student/me/tutors, /student/me/enrollments, /student/me/enrollments/:enrollmentId/sessions)
 - [x] Tutor module (POST /tutor-profile, PATCH /tutor-profile, PATCH /tutor-profile/availability-status, GET /tutor-profile, GET /students, GET /students/:studentId, GET /students/:studentId/performance, GET /sessions, POST /sessions, PATCH /sessions/:id/reschedule, DELETE /sessions/:id, GET /students/:studentId/scored-items, POST /scored-items, PATCH /scored-items/:id, DELETE /scored-items/:id)
 - [x] Tutor Application module (GET /tutor-application, PATCH /tutor-application, POST /tutor-application/documents, GET /tutor-application/documents/:id, DELETE /tutor-application/documents/:id, POST /tutor-application/submit)
-- [ ] Admin module
+- [x] Admin module (GET /admin/tutors/pending, /admin/tutors, /admin/tutors/:id, /admin/tutors/:id/students, /admin/tutors/:id/sessions, /admin/tutors/:id/grades, /admin/tutors/:id/progress-reports, PATCH /admin/tutors/:id/vetting, GET /admin/enrollments/unmatched, /admin/enrollments/:id/pricing, PATCH /admin/enrollments/:id/pricing, PATCH /admin/enrollments/:id/assign-tutor, GET /admin/enrollments/:id/suggested-tutors, GET /admin/subjects, POST /admin/subjects, PATCH /admin/subjects/:id, PUT /admin/subjects/:id/prices/:gradeBandTier, DELETE /admin/subjects/:id, GET /admin/exchange-rate/current, GET /admin/payments, /admin/payments/summary, /admin/payments/failed, /admin/payments/:id, PATCH /admin/payments/:id/note, POST /admin/payments/:id/reverify, GET /admin/reports/overview, GET /admin/students, /admin/students/:id, /admin/students/:id/enrollments, /admin/students/:id/grades, /admin/students/:id/attendance, /admin/students/:id/sessions, /admin/students/:id/assignments, /admin/students/:id/progress-reports, /admin/students/:id/performance, PATCH /admin/students/:id/regenerate-pin, GET /admin/parents, /admin/parents/:id, GET /admin/users/suspended, PATCH /admin/users/:id/suspend, PATCH /admin/users/:id/reactivate, GET /admin/diagnostics/email, GET /admin/sessions, POST /admin/sessions, PATCH /admin/sessions/:id/reschedule, GET /admin/grades/pending, PATCH /admin/grades/:id/approve, PATCH /admin/grades/:id/reject, PATCH /admin/complaints/:id/resolve)
 - [ ] Enrollments module
 - [ ] Enrollment Change Requests module
 - [ ] Sessions module
@@ -197,7 +197,7 @@
 - [ ] Notifications module
 - [ ] Messages module
 - [ ] Complaints module
-- [ ] Subjects module
+- [ ] Subjects module (merge with Admin)
 - [ ] Pricing module
 - [ ] Progress Reports module
 - [ ] Attendance module
