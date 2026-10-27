@@ -34,7 +34,7 @@ import quizRoutes from './modules/quiz/quiz.routes';
 import classRemindersRoutes from './modules/class-reminders/class-reminders.routes';
 import { adminClassScheduleRouter } from './modules/class-reminders/class-reminders.routes';
 import enrollmentChangeRequestsRoutes from './modules/enrollment-change-requests/enrollment-change-requests.routes';
-import { adminChangeRequestsRouter } from './modules/enrollment-change-requests/enrollment-change-requests.routes';
+import { adminChangeRequestsRouter, changeRequestActionsRouter } from './modules/enrollment-change-requests/enrollment-change-requests.routes';
 import scoredItemsRoutes from './modules/scored-items/scored-items.routes';
 import { initializeScheduler } from './jobs/scheduler';
 import { logger } from './config/logger';
@@ -142,6 +142,7 @@ const mountRoutes = (prefix: string = '') => {
   app.use(`${prefix}/student`, studentFacingRoutes);
   app.use(`${prefix}/enrollments`, enrollmentRoutes);
   app.use(`${prefix}/enrollments`, enrollmentChangeRequestsRoutes);
+  app.use(`${prefix}/change-requests`, changeRequestActionsRouter);
   app.use(`${prefix}/sessions`, sessionRoutes);
   app.use(`${prefix}/payments`, paymentRoutes);
   app.use(`${prefix}/progress-reports`, progressReportRoutes);

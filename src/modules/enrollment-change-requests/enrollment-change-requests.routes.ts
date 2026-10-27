@@ -10,7 +10,6 @@ const changeRequestController = new EnrollmentChangeRequestController();
 
 // Validation schemas
 const createChangeRequestSchema = z.object({
-  enrollmentId: z.string().uuid('Invalid enrollment ID'),
   requestedValues: z.object({
     startDate: z.string().optional(),
     endDate: z.string().optional(),
@@ -31,10 +30,13 @@ const changeRequestsQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(100).optional(),
 });
 
-// Parent endpoints
-router.post('/change-requests', authenticate, requireRole('PARENT'), validate(createChangeRequestSchema), changeRequestController.createChangeRequest);
-router.get('/change-requests', authenticate, requireRole('PARENT'), changeRequestController.getChangeRequests);
-router.patch('/change-requests/:id/cancel', authenticate, requireRole('PARENT'), validateUUID('id'), changeRequestController.cancelChangeRequest);
+// Parent endpoints (mounted under /api/enrollments/:id)
+router.post('/:id/change-requests', authenticate, requireRole('PARENT'), validateUUID('id'), validate(createChangeRequestSchema), changeRequestController.createChangeRequest);
+router.get('/:id/change-requests', authenticate, requireRole('PARENT'), validateUUID('id'), changeRequestController.getChangeRequests);
+
+// Change request actions (mounted under /api/change-requests)
+const changeRequestActionsRouter = Router();
+changeRequestActionsRouter.patch('/:id/cancel', authenticate, requireRole('PARENT'), validateUUID('id'), changeRequestController.cancelChangeRequest);
 
 // Admin endpoints (mounted under /admin/change-requests)
 const adminRouter = Router();
@@ -44,4 +46,5 @@ adminRouter.patch('/:id/approve', authenticate, requireRole('ADMIN'), validateUU
 adminRouter.patch('/:id/reject', authenticate, requireRole('ADMIN'), validateUUID('id'), validate(rejectChangeRequestSchema), changeRequestController.rejectChangeRequest);
 
 export { adminRouter as adminChangeRequestsRouter };
+export { changeRequestActionsRouter };
 export default router;

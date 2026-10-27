@@ -19,7 +19,8 @@ export class EnrollmentChangeRequestController {
         return;
       }
 
-      const { enrollmentId, requestedValues } = req.body;
+      const { enrollmentId } = req.params;
+      const { requestedValues } = req.body;
       const changeRequest = await this.changeRequestService.createChangeRequest(enrollmentId, parentId, { requestedValues });
       res.status(201).json(changeRequest);
     } catch (error) {
@@ -35,11 +36,7 @@ export class EnrollmentChangeRequestController {
         return;
       }
 
-      const { enrollmentId } = req.query;
-      if (!enrollmentId || typeof enrollmentId !== 'string') {
-        res.status(400).json({ error: 'enrollmentId is required' });
-        return;
-      }
+      const { id: enrollmentId } = req.params;
       const changeRequests = await this.changeRequestService.getChangeRequests(enrollmentId, parentId);
       res.status(200).json(changeRequests);
     } catch (error) {
