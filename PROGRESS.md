@@ -181,8 +181,8 @@
 - [x] Authentication module (POST /auth/register, /auth/verify, /auth/login, /auth/student-login, /auth/refresh, /auth/logout, /auth/resend-otp, /auth/forgot-password, /auth/reset-password, GET /auth/me, PATCH /auth/me, /auth/change-password, /auth/change-pin, /auth/me/timezone, /auth/me/profile-picture, DELETE /auth/me/profile-picture)
 - [x] Students module (POST /students, GET /students, GET /students/:id, PATCH /students/:id, DELETE /students/:id, GET /students/:id/activity, POST /students/:id/regenerate-pin, GET /students/:id/attendance)
 - [x] Student (Self-Service) module (GET /student/me, /student/me/schedule, /student/me/next-class, /student/me/assignments, /student/me/grades, /student/me/progress-reports, /student/me/performance, /student/me/notifications, /student/me/attendance, /student/me/tutors, /student/me/enrollments, /student/me/enrollments/:enrollmentId/sessions)
-- [ ] Tutor module
-- [ ] Tutor Profile module
+- [x] Tutor module (POST /tutor-profile, PATCH /tutor-profile, PATCH /tutor-profile/availability-status, GET /tutor-profile, GET /students, GET /students/:studentId, GET /students/:studentId/performance, GET /sessions, POST /sessions, PATCH /sessions/:id/reschedule, DELETE /sessions/:id, GET /students/:studentId/scored-items, POST /scored-items, PATCH /scored-items/:id, DELETE /scored-items/:id)
+- [ ] Tutor Profile module (merge with Tutor)
 - [ ] Tutor Application module
 - [ ] Admin module
 - [ ] Enrollments module
@@ -192,7 +192,7 @@
 - [ ] Payments module
 - [ ] Webhooks module
 - [ ] Grades module
-- [ ] Scored Items module
+- [ ] Scored Items module (merge with Tutor)
 - [ ] Assignments module
 - [ ] Quiz module
 - [ ] Notifications module

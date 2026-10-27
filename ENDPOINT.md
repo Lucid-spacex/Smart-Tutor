@@ -918,74 +918,342 @@
 
 ## Tutor
 
-### GET /tutor/me
+### POST /tutor-profile
 **Auth:** Required (TUTOR, APPROVED)  
-**Response (200):** Tutor profile
+**Body:**
+```typescript
+{
+  subjects: string[] (min 1, max 20),
+  bio: string (min 10, max 2000),
+  credentialsUrl?: string (url, max 500),
+  hourlyRate: number (positive, max 1000),
+  availability: Record<string, any>
+}
+```
+**Response (201):**
+```json
+{
+  "id": "uuid",
+  "userId": "uuid",
+  "subjects": ["Mathematics", "Physics"],
+  "bio": "string",
+  "credentialsUrl": "string",
+  "hourlyRate": 50,
+  "availability": {},
+  "availabilityStatus": "AVAILABLE",
+  "maxStudents": null,
+  "statusNote": null,
+  "statusUpdatedAt": "ISO date",
+  "createdAt": "ISO date",
+  "updatedAt": "ISO date"
+}
+```
+**Error Codes:** 401 (Not authenticated), 409 (Tutor profile already exists)
 
-### PATCH /tutor/me
+### PATCH /tutor-profile
 **Auth:** Required (TUTOR, APPROVED)  
-**Body:** Partial tutor profile updates  
-**Response (200):** Updated tutor profile
+**Body:**
+```typescript
+{
+  availability: Record<string, any>
+}
+```
+**Response (200):** Updated tutor profile  
+**Error Codes:** 401 (Not authenticated), 404 (Tutor profile not found)
 
-### GET /tutor/me/students
+### PATCH /tutor-profile/availability-status
 **Auth:** Required (TUTOR, APPROVED)  
-**Response (200):** Assigned students list (no parent contact info)
+**Body:**
+```typescript
+{
+  availabilityStatus: 'AVAILABLE' | 'LIMITED' | 'UNAVAILABLE',
+  maxStudents?: number (positive integer),
+  statusNote?: string (max 500)
+}
+```
+**Response (200):** Updated tutor profile with statusUpdatedAt timestamp  
+**Note:** If setting to UNAVAILABLE while having active students, admin is notified.  
+**Error Codes:** 401 (Not authenticated), 404 (Tutor profile not found)
 
-### GET /tutor/me/students/:studentId
+### GET /tutor-profile
 **Auth:** Required (TUTOR, APPROVED)  
-**Response (200):** Student details (no parent contact info)
+**Response (200):**
+```json
+{
+  "id": "uuid",
+  "userId": "uuid",
+  "subjects": ["Mathematics", "Physics"],
+  "bio": "string",
+  "credentialsUrl": "string",
+  "hourlyRate": 50,
+  "availability": {},
+  "availabilityStatus": "AVAILABLE",
+  "maxStudents": null,
+  "statusNote": null,
+  "statusUpdatedAt": "ISO date",
+  "createdAt": "ISO date",
+  "updatedAt": "ISO date",
+  "user": {
+    "id": "uuid",
+    "fullName": "string",
+    "email": "string",
+    "phone": "string",
+    "status": "ACTIVE"
+  }
+}
+```
+**Error Codes:** 401 (Not authenticated), 404 (Tutor profile not found)
 
-### GET /tutor/me/students/:studentId/assignments
+### GET /students
 **Auth:** Required (TUTOR, APPROVED)  
-**Response (200):** Student's assignments
+**Response (200):**
+```json
+[
+  {
+    "student": {
+      "id": "uuid"
+    },
+    "enrollment": {
+      "id": "uuid",
+      "subjectId": "uuid",
+      "sessionFrequency": "WEEKLY",
+      "startDate": "ISO date",
+      "endDate": "ISO date",
+      "status": "ACTIVE"
+    }
+  }
+]
+```
+**Security:** Pricing fields (yearlyPriceNGN, yearlyPriceUSD) excluded. Parent contact info excluded.  
+**Error Codes:** 401 (Not authenticated)
 
-### GET /tutor/me/students/:studentId/grades
+### GET /students/:studentId
 **Auth:** Required (TUTOR, APPROVED)  
-**Response (200):** All grades for student (any status, includes overrideReason and rejectionReason)
+**Response (200):**
+```json
+{
+  "student": {
+    "id": "uuid",
+    "fullName": "string",
+    "dateOfBirth": "ISO date",
+    "gender": "MALE",
+    "actualGrade": "GRADE_5",
+    "gradeLevel": "Grade 5",
+    "gradeBandTier": "G5_TO_G8",
+    "school": "string",
+    "notes": "string"
+  },
+  "enrollment": {
+    "id": "uuid",
+    "subject": {
+      "id": "uuid",
+      "name": "Mathematics",
+      "category": "STEM"
+    },
+    "status": "ACTIVE",
+    "sessionFrequency": "WEEKLY",
+    "availableDays": ["Monday", "Wednesday"],
+    "startDate": "ISO date",
+    "endDate": "ISO date"
+  },
+  "upcomingSessions": [
+    {
+      "id": "uuid",
+      "scheduledAt": "ISO date",
+      "durationMinutes": 60,
+      "googleMeetLink": "https://meet.google.com/xxx",
+      "status": "SCHEDULED",
+      "participants": [...]
+    }
+  ],
+  "pastSessions": [
+    {
+      "id": "uuid",
+      "scheduledAt": "ISO date",
+      "status": "COMPLETED",
+      "tutorNotes": "string",
+      "participants": [...]
+    }
+  ],
+  "assignments": [
+    {
+      "id": "uuid",
+      "title": "string",
+      "dueDate": "ISO date",
+      "status": "PENDING",
+      "enrollment": {
+        "subject": {
+          "name": "Mathematics"
+        }
+      }
+    }
+  ],
+  "gradesGiven": [
+    {
+      "id": "uuid",
+      "score": 85,
+      "status": "APPROVED",
+      "comments": "string",
+      "enrollment": {
+        "subject": {
+          "name": "Mathematics"
+        }
+      },
+      "assignment": {
+        "id": "uuid",
+        "title": "string"
+      }
+    }
+  ],
+  "progressReports": [
+    {
+      "id": "uuid",
+      "period": "Q1 2024",
+      "summary": "string",
+      "enrollment": {
+        "subject": {
+          "name": "Mathematics"
+        }
+      }
+    }
+  ],
+  "attendance": {
+    "totalSessions": 10,
+    "attended": 8,
+    "missed": 2,
+    "percentage": 80
+  }
+}
+```
+**Security:** Parent contact info excluded. Financial info excluded. Only shows data for enrollments where tutor is assigned.  
+**Error Codes:** 401 (Not authenticated), 403 (Not authorized to view this student), 404 (Student not found)
 
-### GET /tutor/me/students/:studentId/performance
+### GET /students/:studentId/performance
 **Auth:** Required (TUTOR, APPROVED)  
-**Response (200):** Student performance (includes pending grades count)
+**Query:** `period` (week, month, quarter, year, all), `from` (ISO date), `to` (ISO date), `subjectId` (uuid), `includePending` (boolean)  
+**Response (200):** Student performance data  
+**Error Codes:** 401 (Not authenticated)
 
-### GET /tutor/me/students/:studentId/scored-items
+### GET /sessions
 **Auth:** Required (TUTOR, APPROVED)  
-**Response (200):** Scored items for student
+**Response (200):**
+```json
+[
+  {
+    "id": "uuid",
+    "tutorId": "uuid",
+    "scheduledAt": "ISO date",
+    "durationMinutes": 60,
+    "googleMeetLink": "https://meet.google.com/xxx",
+    "googleEventId": "string",
+    "status": "SCHEDULED",
+    "tutorNotes": "string",
+    "homeworkAssigned": "string",
+    "createdAt": "ISO date",
+    "updatedAt": "ISO date",
+    "participants": [
+      {
+        "id": "uuid",
+        "sessionId": "uuid",
+        "enrollmentId": "uuid",
+        "attended": null,
+        "enrollment": {
+          "student": {
+            "id": "uuid",
+            "fullName": "string",
+            "gradeLevel": "Grade 5"
+          },
+          "subject": {
+            "id": "uuid",
+            "name": "Mathematics",
+            "category": "STEM"
+          }
+        }
+      }
+    ]
+  }
+]
+```
+**Error Codes:** 401 (Not authenticated)
 
-### POST /tutor/scored-items
+### POST /sessions
 **Auth:** Required (TUTOR, APPROVED)  
-**Body:** Scored item creation data  
-**Response (201):** Created scored item
+**Body:**
+```typescript
+{
+  enrollmentId: string (uuid),
+  scheduledAt: string (ISO date),
+  durationMinutes: number (positive integer)
+}
+```
+**Response (201):** Created session with Google Meet link  
+**Error Codes:** 401 (Not authenticated)
 
-### PATCH /tutor/scored-items/:id
+### PATCH /sessions/:id/reschedule
 **Auth:** Required (TUTOR, APPROVED)  
-**Body:** Partial scored item updates  
-**Response (200):** Updated scored item
+**Body:**
+```typescript
+{
+  scheduledAt: string (ISO date),
+  durationMinutes?: number (positive integer)
+}
+```
+**Response (200):** Rescheduled session  
+**Error Codes:** 401 (Not authenticated)
 
-### DELETE /tutor/scored-items/:id
+### DELETE /sessions/:id
 **Auth:** Required (TUTOR, APPROVED)  
-**Response (200):** Deleted scored item
+**Response (200):**
+```json
+{
+  "message": "Session deleted successfully"
+}
+```
+**Error Codes:** 401 (Not authenticated)
 
-### GET /tutor/me/sessions
+### GET /students/:studentId/scored-items
 **Auth:** Required (TUTOR, APPROVED)  
-**Response (200):** Tutor's sessions
+**Query:** `enrollmentId` (uuid), `type` (ScoredItemType enum), `unassigned` (boolean)  
+**Response (200):** Scored items for student  
+**Error Codes:** 401 (Not authenticated)
 
-### POST /tutor/sessions
+### POST /scored-items
 **Auth:** Required (TUTOR, APPROVED)  
-**Body:** Session creation (single enrollment)  
-**Response (201):** Created session with Google Meet link
+**Body:**
+```typescript
+{
+  enrollmentId: string (uuid),
+  type: 'QUIZ' | 'ASSIGNMENT' | 'EXAM' | 'PROJECT' | 'PARTICIPATION' | 'ATTENDANCE',
+  score: number (>= 0),
+  maxScore: number (> 0),
+  comment?: string
+}
+```
+**Response (201):** Created scored item  
+**Error Codes:** 401 (Not authenticated)
 
-### PATCH /tutor/sessions/:id/reschedule
+### PATCH /scored-items/:id
 **Auth:** Required (TUTOR, APPROVED)  
-**Body:** Reschedule data (scheduledAt, durationMinutes)  
-**Response (200):** Rescheduled session
+**Body:**
+```typescript
+{
+  score?: number (>= 0),
+  maxScore?: number (> 0),
+  comment?: string
+}
+```
+**Response (200):** Updated scored item  
+**Error Codes:** 401 (Not authenticated)
 
-### DELETE /tutor/sessions/:id
+### DELETE /scored-items/:id
 **Auth:** Required (TUTOR, APPROVED)  
-**Response (200):** Deleted session (must be createdBy tutor, SCHEDULED only)
-
-### GET /tutor/upcoming-classes
-**Auth:** Required (TUTOR, APPROVED)  
-**Response (200):** Upcoming classes for reminder job
+**Response (200):**
+```json
+{
+  "message": "Scored item deleted"
+}
+```
+**Error Codes:** 401 (Not authenticated)
 
 ---
 
