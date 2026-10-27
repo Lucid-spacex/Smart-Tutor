@@ -129,7 +129,6 @@ export class EnrollmentsService {
         startDate: true,
         endDate: true,
         createdAt: true,
-        updatedAt: true,
         student: {
           include: {
             user: {
@@ -172,7 +171,12 @@ export class EnrollmentsService {
 
     // Check authorization based on role
     if (userRole === 'PARENT') {
-      if (enrollments[0].student.parentId !== userId) {
+      // Need to fetch student to check parentId
+      const student = await prisma.student.findUnique({
+        where: { id: enrollments[0].studentId },
+        select: { parentId: true },
+      });
+      if (!student || student.parentId !== userId) {
         throw new AppError(403, 'Not authorized to access this enrollment group');
       }
     } else if (userRole === 'TUTOR') {
@@ -219,7 +223,6 @@ export class EnrollmentsService {
         startDate: true,
         endDate: true,
         createdAt: true,
-        updatedAt: true,
         student: true,
         subject: true,
         tutor: {
@@ -267,7 +270,6 @@ export class EnrollmentsService {
         startDate: true,
         endDate: true,
         createdAt: true,
-        updatedAt: true,
         student: true,
         subject: true,
         tutor: {
@@ -311,7 +313,6 @@ export class EnrollmentsService {
         startDate: true,
         endDate: true,
         createdAt: true,
-        updatedAt: true,
         student: true,
         subject: true,
         tutor: {
@@ -342,7 +343,12 @@ export class EnrollmentsService {
 
     // Check authorization based on role
     if (userRole === 'PARENT') {
-      if (enrollment.student.parentId !== userId) {
+      // Need to fetch student to check parentId
+      const student = await prisma.student.findUnique({
+        where: { id: enrollment.studentId },
+        select: { parentId: true },
+      });
+      if (!student || student.parentId !== userId) {
         throw new AppError(403, 'Not authorized to access this enrollment');
       }
     } else if (userRole === 'TUTOR') {

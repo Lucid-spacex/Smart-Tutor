@@ -496,6 +496,4 @@ export class MessagesService {
 
     return { unreadCount };
   }
-    };
-  }
 }

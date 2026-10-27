@@ -109,6 +109,7 @@ export class NotificationsService {
       CHANGE_REQUEST_SUBMITTED: 'SCHEDULE',
       CHANGE_REQUEST_APPROVED: 'SCHEDULE',
       CHANGE_REQUEST_REJECTED: 'SCHEDULE',
+      TUTOR_FAILED_TO_SCHEDULE: 'SESSIONS',
     };
 
     return categoryMap[type] || 'USERS';

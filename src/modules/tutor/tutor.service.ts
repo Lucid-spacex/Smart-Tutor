@@ -120,7 +120,6 @@ export class TutorService {
         startDate: true,
         endDate: true,
         createdAt: true,
-        updatedAt: true,
         student: {
           select: {
             id: true,
@@ -138,10 +137,13 @@ export class TutorService {
     });
 
     return enrollments.map(enrollment => ({
-      student: enrollment.student,
+      student: {
+        id: enrollment.studentId,
+        // Other student fields would need to be fetched separately if needed
+      },
       enrollment: {
         id: enrollment.id,
-        subject: enrollment.subject,
+        subjectId: enrollment.subjectId,
         sessionFrequency: enrollment.sessionFrequency,
         startDate: enrollment.startDate,
         endDate: enrollment.endDate,

@@ -1428,7 +1428,6 @@ export class AdminService {
           startDate: true,
           endDate: true,
           createdAt: true,
-          updatedAt: true,
           subject: true,
           tutor: {
             select: {

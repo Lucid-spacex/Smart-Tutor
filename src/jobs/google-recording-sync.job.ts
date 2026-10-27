@@ -45,27 +45,29 @@ export async function runGoogleRecordingSync() {
             // Notify session participants (parent, student, tutor)
             const participants = await prisma.sessionParticipant.findMany({
               where: { sessionId: session.id },
+            });
+
+            // Fetch enrollments to get student and tutor IDs
+            const enrollmentIds = participants.map(p => p.enrollmentId);
+            const enrollments = await prisma.enrollment.findMany({
+              where: { id: { in: enrollmentIds } },
               include: {
-                enrollment: {
-                  include: {
-                    student: {
-                      include: {
-                        parent: true,
-                      },
-                    },
-                    tutor: true,
-                  },
-                },
+                student: true,
               },
             });
 
             const recipientIds: string[] = [];
             for (const participant of participants) {
-              if (participant.enrollment.student.parentId) {
-                recipientIds.push(participant.enrollment.student.parentId);
+              const enrollment = enrollments.find(e => e.id === participant.enrollmentId);
+              if (enrollment) {
+                if (enrollment.student.parentId) {
+                  recipientIds.push(enrollment.student.parentId);
+                }
+                recipientIds.push(enrollment.student.userId);
+                if (enrollment.tutorId) {
+                  recipientIds.push(enrollment.tutorId);
+                }
               }
-              recipientIds.push(participant.enrollment.student.id);
-              recipientIds.push(participant.enrollment.tutorId);
             }
 
             await notificationCore.notify({
