@@ -2,7 +2,7 @@
 
 **Started:** 2026-10-20
 
-**CURRENT TASK (2026-10-26):** Run integration tests per user request.
+**CURRENT TASK (2026-10-27):** Continue items 9-15 from user request.
 
 ## Test File Status
 - webhook.test.ts: BLOCKED - Supertest's `.send()` alters body encoding, breaking HMAC signature verification. Middleware correctly captures raw body, but test framework interference prevents valid signature tests from passing. Need alternative approach (real HTTP client or middleware mocking).
@@ -144,3 +144,28 @@
 - ✅ SECURITY.md section 27 updated with all new endpoints
 - ✅ Build verified (npm run build successful)
 - ✅ Tags added to swagger.ts config (ScoredItems, Enrollment Change Requests, Class Reminders)
+
+## Security Fixes (Item 9)
+- [x] Verify pricing fields not exposed to tutors/students - Already correct (yearlyPrice field exists, role-based selection in enrollments.service.ts)
+- [x] Verify student PIN not returned in plaintext - Already correct (returns message only, email sent to parent)
+- [x] Verify document access authorization - Already correct (ADMIN or owning tutor only)
+- [x] Verify payment verification auth/ownership - Already correct (ADMIN or owning parent only)
+- [x] Verify quiz questions hide correctOptionIndex from students - Already correct (excluded in getQuestions)
+- [x] Verify grades visibility rules - Already correct (tutors see all with reasons, parents/students see only APPROVED without reasons)
+
+## Paystack Webhook (Item 10)
+- [x] Verify /api/webhooks/paystack is canonical handler - Already correct
+- [x] Verify /api/payments/webhook is alias - Already correct
+- [x] Verify HMAC-SHA512 on raw body - Already correct (timing-safe comparison)
+- [x] Verify idempotent - Already correct
+- [x] Verify exempt from rate limiting - Already correct (app.ts line 64)
+- [x] Verify raw-body capture before JSON parser - Already correct (rawBodyParser middleware)
+- [x] Verify no 410 response - Already correct (returns 200 or 400)
+
+## Rate Limits (Item 11)
+- [x] Fix Tier 1 to 7 per 15 minutes - Fixed (was 20 for development)
+- [x] Fix Tier 2 to 60 per minute - Fixed (was 120 for development)
+- [x] Fix Tier 3 to 300 per 15 minutes - Fixed (was 1000 for development)
+- [x] Verify webhooks exempt - Already correct
+- [x] Verify RateLimit-* headers on - Already correct (standardHeaders: true)
+- [x] Verify X-RateLimit-* headers off - Already correct (legacyHeaders: false)
