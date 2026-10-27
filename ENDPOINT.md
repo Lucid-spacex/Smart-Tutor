@@ -62,6 +62,7 @@
   "emailSent": true
 }
 ```
+**Error Codes:** 409 (User with this email already exists)
 
 ### POST /auth/verify
 **Auth:** None  
@@ -77,9 +78,24 @@
 ```json
 {
   "message": "Email verified successfully",
-  "userId": "uuid"
+  "user": {
+    "id": "uuid",
+    "fullName": "string",
+    "email": "string",
+    "phone": "string",
+    "role": "PARENT | TUTOR",
+    "status": "ACTIVE | PENDING_VETTING",
+    "studentCode": null,
+    "parentId": null,
+    "timezone": null,
+    "profilePicture": null,
+    "createdAt": "ISO date",
+    "updatedAt": "ISO date"
+  }
 }
 ```
+**Note:** Does NOT return tokens - user must login after verification.  
+**Error Codes:** 404 (User not found), 400 (Invalid or expired OTP)
 
 ### POST /auth/login
 **Auth:** None  
@@ -88,7 +104,7 @@
 ```typescript
 {
   email: string (email),
-  password: string
+  password: string (min 1)
 }
 ```
 **Response (200):**
@@ -100,11 +116,19 @@
     "id": "uuid",
     "fullName": "string",
     "email": "string",
+    "phone": "string",
     "role": "PARENT | TUTOR | ADMIN | STUDENT",
-    "status": "ACTIVE | SUSPENDED | REJECTED | PENDING_VETTING"
+    "status": "ACTIVE",
+    "studentCode": null,
+    "parentId": null,
+    "timezone": "string",
+    "profilePicture": "string",
+    "createdAt": "ISO date",
+    "updatedAt": "ISO date"
   }
 }
 ```
+**Error Codes:** 401 (Invalid credentials), 403 (Please verify your email first, Account is not active, Your account is pending admin approval)
 
 ### POST /auth/student-login
 **Auth:** None  
@@ -126,18 +150,26 @@
     "id": "uuid",
     "fullName": "string",
     "email": "string",
+    "phone": "string",
     "role": "STUDENT",
-    "status": "ACTIVE"
+    "status": "ACTIVE",
+    "studentCode": "string",
+    "parentId": "uuid",
+    "timezone": "string",
+    "profilePicture": "string",
+    "createdAt": "ISO date",
+    "updatedAt": "ISO date"
   }
 }
 ```
+**Error Codes:** 401 (Invalid credentials), 403 (Account is suspended)
 
 ### POST /auth/refresh
 **Auth:** None  
 **Body:**
 ```typescript
 {
-  refreshToken: string
+  refreshToken: string (min 1)
 }
 ```
 **Response (200):**
@@ -147,13 +179,14 @@
   "refreshToken": "jwt"
 }
 ```
+**Error Codes:** 401 (TOKEN_INVALID, TOKEN_EXPIRED, TOKEN_REVOKED, TOKEN_ALREADY_USED)
 
 ### POST /auth/logout
 **Auth:** Required  
 **Response (200):**
 ```json
 {
-  "message": "Logged out successfully"
+  "message": "Logout successful"
 }
 ```
 
@@ -169,10 +202,11 @@
 **Response (200):**
 ```json
 {
-  "message": "OTP resent successfully",
+  "message": "OTP sent successfully",
   "emailSent": true
 }
 ```
+**Error Codes:** 404 (User not found), 400 (Account is already verified)
 
 ### POST /auth/forgot-password
 **Auth:** None  
@@ -186,9 +220,11 @@
 **Response (200):**
 ```json
 {
-  "message": "Password reset email sent"
+  "message": "If the email exists, a password reset link has been sent.",
+  "emailSent": true
 }
 ```
+**Note:** Always returns success even if email doesn't exist (security best practice)
 
 ### POST /auth/reset-password
 **Auth:** None  
@@ -197,40 +233,83 @@
 ```typescript
 {
   token: string,
-  newPassword: string (min 8, complexity rules)
+  newPassword: string (min 8, 1 upper, 1 lower, 1 number, 1 special)
 }
 ```
 **Response (200):**
 ```json
 {
-  "message": "Password reset successfully"
+  "message": "Password reset successful. Please login with your new password."
 }
 ```
+**Error Codes:** 400 (Invalid or expired reset token, Reset token has already been used)
 
 ### GET /auth/me
 **Auth:** Required  
-**Response (200):** Full user profile with role-specific data
+**Response (200):**
+```json
+{
+  "id": "uuid",
+  "fullName": "string",
+  "email": "string",
+  "phone": "string",
+  "role": "PARENT | TUTOR | ADMIN | STUDENT",
+  "status": "ACTIVE",
+  "studentCode": "string",
+  "parentId": "uuid",
+  "timezone": "string",
+  "profilePicture": "string",
+  "createdAt": "ISO date",
+  "updatedAt": "ISO date"
+}
+```
+**Error Codes:** 401 (Not authenticated), 404 (User not found)
 
 ### PATCH /auth/me
-**Auth:** Required  
-**Body:** Partial user profile updates  
-**Response (200):** Updated user profile
-
-### PATCH /auth/change-password
 **Auth:** Required  
 **Body:**
 ```typescript
 {
-  currentPassword: string,
-  newPassword: string (min 8, complexity rules)
+  fullName?: string,
+  phone?: string,
+  address?: string
 }
 ```
 **Response (200):**
 ```json
 {
-  "message": "Password changed successfully"
+  "id": "uuid",
+  "fullName": "string",
+  "email": "string",
+  "phone": "string",
+  "role": "PARENT | TUTOR | ADMIN | STUDENT",
+  "status": "ACTIVE",
+  "studentCode": "string",
+  "parentId": "uuid",
+  "timezone": "string",
+  "profilePicture": "string",
+  "createdAt": "ISO date",
+  "updatedAt": "ISO date"
 }
 ```
+**Error Codes:** 401 (Not authenticated)
+
+### PATCH /auth/change-password
+**Auth:** Required (PARENT, TUTOR, ADMIN only - not STUDENT)  
+**Body:**
+```typescript
+{
+  currentPassword: string (min 1),
+  newPassword: string (min 8, 1 upper, 1 lower, 1 number, 1 special)
+}
+```
+**Response (200):**
+```json
+{
+  "message": "Password changed successfully. Please login again."
+}
+```
+**Error Codes:** 401 (Not authenticated, Current password is incorrect), 400 (Students must use the PIN change endpoint to update their PIN), 404 (User not found)
 
 ### PATCH /auth/change-pin
 **Auth:** Required (STUDENT only)  
@@ -244,39 +323,49 @@
 **Response (200):**
 ```json
 {
-  "message": "PIN changed successfully"
+  "message": "PIN changed successfully. Please login again."
 }
 ```
+**Error Codes:** 401 (Not authenticated, Current PIN is incorrect), 400 (Only students can change their PIN), 404 (User not found)
 
 ### PATCH /auth/me/timezone
 **Auth:** Required  
 **Body:**
 ```typescript
 {
-  timezone: string (IANA format, e.g., "Africa/Lagos")
+  timezone: string (IANA format, e.g., "Africa/Lagos", "America/New_York", "UTC")
 }
 ```
-**Response (200):** Updated user profile
+**Response (200):**
+```json
+{
+  "message": "Timezone updated successfully"
+}
+```
+**Error Codes:** 400 (Invalid timezone format)
 
 ### PATCH /auth/me/profile-picture
 **Auth:** Required  
 **Content-Type:** multipart/form-data  
-**Body:** file (max 5MB, image types)  
+**Body:** file (image, uploaded via multer)  
 **Response (200):**
 ```json
 {
-  "profilePictureUrl": "cloudinary-url"
+  "message": "Profile picture updated successfully",
+  "profilePicture": "cloudinary-url"
 }
 ```
+**Error Codes:** 401 (Not authenticated), 400 (No file uploaded), 404 (User not found)
 
 ### DELETE /auth/me/profile-picture
 **Auth:** Required  
 **Response (200):**
 ```json
 {
-  "message": "Profile picture removed"
+  "message": "Profile picture deleted successfully"
 }
 ```
+**Error Codes:** 401 (Not authenticated), 404 (User not found)
 
 ---
 

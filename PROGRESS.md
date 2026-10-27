@@ -177,19 +177,36 @@
 - [x] Fix TypeScript build errors - Fixed (schema compatibility issues)
 - [x] Run npm run build - Successful
 
-## ENDPOINT.md Generation (Item 14)
-- [x] Generate from actual route files, controllers, and Zod schemas
-- [x] Include method, path, auth, roles, parameters, validation
-- [x] Include response fields with examples
-- [x] Include security rules table (what each role never receives)
-- [x] Include error format and specific codes
-- [x] Include rate limiting tiers and 429 behavior
-- [x] Include enum reference
-- [x] Include pagination defaults
-- [x] Include SSE notification streaming details
-- [x] Include grading workflow, class reminders, change requests
-- [x] Include messaging rules, webhook security
-- [x] Include changes since old API section
+## ENDPOINT.md Regeneration (Current Task)
+- [x] Authentication module (POST /auth/register, /auth/verify, /auth/login, /auth/student-login, /auth/refresh, /auth/logout, /auth/resend-otp, /auth/forgot-password, /auth/reset-password, GET /auth/me, PATCH /auth/me, /auth/change-password, /auth/change-pin, /auth/me/timezone, /auth/me/profile-picture, DELETE /auth/me/profile-picture)
+- [ ] Students module
+- [ ] Student (Self-Service) module
+- [ ] Tutor module
+- [ ] Tutor Profile module
+- [ ] Tutor Application module
+- [ ] Admin module
+- [ ] Enrollments module
+- [ ] Enrollment Change Requests module
+- [ ] Sessions module
+- [ ] Class Reminders module
+- [ ] Payments module
+- [ ] Webhooks module
+- [ ] Grades module
+- [ ] Scored Items module
+- [ ] Assignments module
+- [ ] Quiz module
+- [ ] Notifications module
+- [ ] Messages module
+- [ ] Complaints module
+- [ ] Subjects module
+- [ ] Pricing module
+- [ ] Progress Reports module
+- [ ] Attendance module
+- [ ] Performance module
+- [ ] Add missing endpoints
+- [ ] Resolve configuration values
+- [ ] Add final sections (security table, error format, rate limits, enum reference, base URL, pagination, changes since old API)
+- [ ] Run npx prisma generate and npm run build
 
 ## Final Table (Item 15)
 
