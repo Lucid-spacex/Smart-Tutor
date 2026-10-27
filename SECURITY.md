@@ -1297,6 +1297,63 @@ Type '{ connect: { id: string; }; }' is not assignable to type 'undefined'.
 - `PATCH /notifications/:id/read` - Mark as read
 - `PATCH /notifications/read-all` - Mark all as read
 
+---
+
+## 31. Security Configuration Updates (2026-10-27)
+
+**Security Notice**: As of 2026-10-27, rate limiting has been reset to production defaults and security controls have been verified.
+
+### Rate Limiting Production Defaults:
+- **Tier 1 (Strict)**: 7 requests per 15 minutes (auth endpoints, payment initiation, student login)
+- **Tier 1b (Student Login)**: 5 requests per 15 minutes (stricter due to 6-digit PIN space)
+- **Tier 2 (Moderate)**: 60 requests per minute (all mutating operations)
+- **Tier 3 (Loose)**: 300 requests per 15 minutes (all read operations)
+- **Webhook Exception**: `/api/webhooks/*` and `/api/payments/webhook` exempt from all rate limiting
+
+### Rate Limit Headers:
+- **Standard headers enabled**: `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset` (RFC 6585)
+- **Legacy headers disabled**: `X-RateLimit-*` headers turned off across all tiers
+
+### Paystack Webhook Security:
+- **Canonical handler**: `/api/webhooks/paystack` with HMAC-SHA512 signature verification
+- **Alias handler**: `/api/payments/webhook` routes to same handler
+- **Raw body capture**: Uses `rawBodyParser` middleware to capture body before JSON parsing
+- **Timing-safe comparison**: Signature verification uses `crypto.timingSafeEqual()` to prevent timing attacks
+- **Idempotency**: Webhook processing is idempotent against retried provider events
+- **No 410 responses**: Returns 200 on success, 400 on invalid signature (never 410)
+
+### Verified Security Controls:
+
+#### Pricing Visibility:
+- **Tutors and students**: Never receive `yearlyPriceNGN` or `yearlyPriceUSD` from enrollment, session, student, or tutor endpoints
+- **Parents and admins**: Can view pricing information
+- **Implementation**: Role-based field selection in `EnrollmentsService.getEnrollmentsByParent` and `getEnrollmentsByTutor`
+
+#### Student PIN Security:
+- **POST /students**: Returns message only, PIN sent to parent via email
+- **POST /students/:id/regenerate-pin**: Returns message only, new PIN sent to parent via email
+- **PATCH /admin/students/:id/regenerate-pin**: Returns message only, new PIN sent to parent via email
+- **Admin responses**: Never include `studentCode` in any admin endpoint response
+
+#### Document Access Authorization:
+- **GET /tutor-application/documents/:id**: Only accessible by owning tutor or admins
+- **Implementation**: Ownership check in `TutorApplicationService.getDocumentSignedUrl`
+
+#### Payment Verification Ownership:
+- **GET /payments/verify/:reference**: Requires authentication and ownership (owning parent or admin)
+- **Implementation**: Authorization check in `PaymentsService.verifyPaymentByReference`
+
+#### Quiz Question Security:
+- **Students never receive `correctOptionIndex`**: Excluded from quiz question responses
+- **Tutors and admins**: See full question data including correct answer
+- **Implementation**: Role-based filtering in `QuizService.getQuestions`
+
+#### Grades Visibility Rules:
+- **Tutors**: See their own grades in all statuses (DRAFT, PENDING_APPROVAL, APPROVED, REJECTED) with `overrideReason` and `rejectionReason`
+- **Parents and students**: See only APPROVED grades, never `overrideReason` or `rejectionReason`
+- **Admins**: See all grades except DRAFT in review lists
+- **Implementation**: Role-based field selection in `NewGradesService.getGrades`
+
 ### Complaints (`/complaints`)
 - `POST /complaints` - File complaint
 - `GET /complaints` - List complaints
