@@ -1726,7 +1726,7 @@
 {
   studentId: string (uuid),
   subjectIds: string[] (uuid array),
-  sessionFrequency: 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY',
+  sessionFrequency: 'WEEKLY' | 'TWICE_WEEKLY' | 'THRICE_WEEKLY' | 'FIVE_TIMES_WEEKLY',
   availableDays: string[],
   preferredStartHour: number,
   preferredEndHour: number,
@@ -1766,17 +1766,16 @@
 ```typescript
 {
   requestedValues: {
-    sessionFrequency?: 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY',
+    startDate?: string (ISO date),
+    endDate?: string (ISO date),
     availableDays?: string[],
     preferredStartHour?: number,
-    preferredEndHour?: number,
-    billingFrequency?: 'WEEKLY' | 'MONTHLY' | 'YEARLY',
-    startDate?: string (ISO date),
-    endDate?: string (ISO date)
+    preferredEndHour?: number
   }
 }
 ```
-**Response (201):** Created change request
+**Response (201):** Created change request  
+**Note:** Only schedule fields are allowed (startDate, endDate, availableDays, preferredStartHour, preferredEndHour). Changes to sessionFrequency, billingFrequency, or subjects are rejected.
 
 ### GET /enrollments/:id/change-requests
 **Auth:** Required (PARENT)  
@@ -1934,7 +1933,8 @@
   tutorComment?: string
 }
 ```
-**Response (201):** Created DRAFT grade
+**Response (201):** Created DRAFT grade  
+**Note:** Component weights must total exactly 100.
 
 ### GET /grades
 **Auth:** Required (TUTOR, PARENT, STUDENT, ADMIN)  
@@ -2145,7 +2145,8 @@
 **Response:** SSE stream with events:
 - `message`: Notification data
 - `heartbeat`: Keep-alive (every 30s)
-- Last-Event-ID supported for reconnection
+- Last-Event-ID supported for reconnection  
+**SSE Event Names:** message, heartbeat
 
 **Notification Categories:** ASSIGNMENTS, GRADES, SESSIONS, MESSAGES, USERS, ENROLLMENT, PAYMENTS, PRICING, COMPLAINTS, QUIZZES, SCHEDULE
 
@@ -2173,7 +2174,7 @@
 
 ### GET /messages/:threadId
 **Auth:** Required  
-**Response (200):** Thread messages
+**Response (200):** Thread messages (path: /messages/:threadId)
 
 ### PATCH /messages/:threadId/read
 **Auth:** Required  
@@ -2392,7 +2393,7 @@ All errors follow this format:
 **EnrollmentStatus:** PENDING_PAYMENT, ACTIVE, SUSPENDED, COMPLETED  
 **SessionStatus:** SCHEDULED, COMPLETED, MISSED, CANCELLED  
 **GradeStatus:** DRAFT, PENDING_APPROVAL, APPROVED, REJECTED  
-**SessionFrequency:** WEEKLY, BIWEEKLY, MONTHLY  
+**SessionFrequency:** WEEKLY, TWICE_WEEKLY, THRICE_WEEKLY, FIVE_TIMES_WEEKLY  
 **BillingFrequency:** WEEKLY, MONTHLY, YEARLY  
 **GradeBandTier:** PRESCHOOL_TO_G1, G2_TO_G4, G5_TO_G8, G9_TO_G12  
 **NotificationCategory:** ASSIGNMENTS, GRADES, SESSIONS, MESSAGES, USERS, ENROLLMENT, PAYMENTS, PRICING, COMPLAINTS, QUIZZES, SCHEDULE  
