@@ -433,6 +433,31 @@ export class PaymentsService {
     });
   }
 
+  async getPaymentById(paymentId: string, userId: string, userRole: string) {
+    const payment = await prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: {
+        enrollment: {
+          include: {
+            student: true,
+            subject: true,
+          },
+        },
+      },
+    });
+
+    if (!payment) {
+      throw new AppError(404, 'Payment not found');
+    }
+
+    // SECURITY: Only the payment owner (parent) or admins can view
+    if (userRole !== 'ADMIN' && payment.parentId !== userId) {
+      throw new AppError(403, 'Not authorized to view this payment');
+    }
+
+    return payment;
+  }
+
   async verifyPaymentByReference(reference: string, userId: string, userRole: string) {
     const payment = await prisma.payment.findFirst({
       where: { providerReference: reference },

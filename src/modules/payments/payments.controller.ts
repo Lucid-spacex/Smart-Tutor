@@ -84,4 +84,21 @@ export class PaymentsController {
       next(error);
     }
   };
+
+  getPaymentById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const userId = req.user?.userId;
+      const userRole = req.user?.role;
+      if (!userId || !userRole) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id } = req.params;
+      const payment = await this.paymentsService.getPaymentById(id, userId, userRole);
+      res.status(200).json(payment);
+    } catch (error) {
+      next(error);
+    }
+  };
 }
