@@ -2325,18 +2325,78 @@
 
 ### POST /complaints
 **Auth:** Required (PARENT)  
-**Body:** Complaint creation data  
-**Response (201):** Created complaint
+**Body:**
+```typescript
+{
+  aboutType: 'STUDENT' | 'TUTOR' | 'PARENT' | 'GENERAL',
+  aboutId?: string (uuid, required if aboutType is STUDENT, TUTOR, or PARENT),
+  subject?: string (max 200, optional - defaults to first 80 characters of description),
+  description: string (min 1, max 2000)
+}
+```
+**Response (201):**
+```json
+{
+  "id": "uuid",
+  "filedBy": "uuid",
+  "aboutType": "string",
+  "aboutId": "uuid",
+  "subject": "string",
+  "description": "string",
+  "status": "OPEN",
+  "adminReply": null,
+  "resolvedBy": null,
+  "resolvedAt": null,
+  "createdAt": "ISO date",
+  "updatedAt": "ISO date",
+  "filer": {
+    "id": "uuid",
+    "fullName": "string",
+    "email": "string",
+    "role": "PARENT"
+  }
+}
+```
+**Note:** `aboutId` must be a valid UUID and is required when `aboutType` is STUDENT, TUTOR, or PARENT. When omitted with aboutType=GENERAL, the complaint is about the platform in general.
 
 ### GET /complaints
 **Auth:** Required (PARENT, ADMIN)  
-**Response (200):** Complaints based on role
+**Response (200):**
+```json
+[
+  {
+    "id": "uuid",
+    "filedBy": "uuid",
+    "aboutType": "string",
+    "aboutId": "uuid",
+    "subject": "string",
+    "description": "string",
+    "status": "OPEN",
+    "adminReply": null,
+    "resolvedBy": null,
+    "resolvedAt": null,
+    "createdAt": "ISO date",
+    "updatedAt": "ISO date",
+    "filer": {
+      "id": "uuid",
+      "fullName": "string",
+      "email": "string",
+      "role": "PARENT"
+    },
+    "resolver": {
+      "id": "uuid",
+      "fullName": "string"
+    }
+  }
+]
+```
+**Note:** Parents see only their own complaints. Admins see all complaints. Tutors cannot access complaints (they use messaging instead).
 
 ### GET /complaints/:id
 **Auth:** Required  
-**Response (200):** Complaint details
+**Response (200):** Complaint details (same shape as POST response with resolver included if resolved)
 
-### PATCH /complaints/:id
+### PATCH /complaints/:id/resolve
 **Auth:** Required (ADMIN)  
 **Body:**
 ```typescript

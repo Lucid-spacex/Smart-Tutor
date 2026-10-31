@@ -15,12 +15,15 @@ export class ComplaintsService {
       throw new Error('Not authorized to file complaints');
     }
 
+    // Default subject to first 80 characters of description if not provided
+    const subject = data.subject || data.description.substring(0, 80);
+
     const complaint = await prisma.complaint.create({
       data: {
         filedBy: userId,
         aboutType: data.aboutType,
         aboutId: data.aboutId || null,
-        subject: data.subject,
+        subject,
         description: data.description,
         status: 'OPEN',
       },
@@ -42,7 +45,7 @@ export class ComplaintsService {
       type: 'GENERAL' as NotificationType,
       category: 'COMPLAINTS' as NotificationCategory,
       title: 'New Complaint Filed',
-      body: `Complaint "${data.subject}" filed by ${complaint.filer.fullName}`,
+      body: `Complaint "${subject}" filed by ${complaint.filer.fullName}`,
       entityType: 'Complaint',
       entityId: complaint.id,
       dedupeKey: `complaint-filed-${complaint.id}`,

@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const createComplaintSchema = z.object({
   aboutType: z.enum(['STUDENT', 'TUTOR', 'PARENT', 'GENERAL']),
   aboutId: z.string().uuid('Invalid ID').optional(),
-  subject: z.string().min(1, 'Subject is required').max(200, 'Subject must be less than 200 characters'),
+  subject: z.string().max(200, 'Subject must be less than 200 characters').optional(),
   description: z.string().min(1, 'Description is required').max(2000, 'Description must be less than 2000 characters'),
 });
 
