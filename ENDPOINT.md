@@ -2090,10 +2090,33 @@
 
 ## Notifications
 
+**Availability:** All roles (ADMIN, PARENT, TUTOR, STUDENT) can access these endpoints at `/notifications`. No `/admin/notifications` aliases exist.
+
 ### GET /notifications
 **Auth:** Required  
 **Query:** `category` (ASSIGNMENTS, GRADES, SESSIONS, MESSAGES, USERS, ENROLLMENT, PAYMENTS, PRICING, COMPLAINTS, QUIZZES, SCHEDULE), `type` (string), `isRead` (boolean), `entityType` (string), `entityId` (string), `page` (number), `limit` (number, max 100)  
-**Response (200):** Notifications with filters
+**Response (200):**
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "type": "string",
+      "category": "ASSIGNMENTS",
+      "title": "string",
+      "body": "string",
+      "entityType": "string",
+      "entityId": "string",
+      "isRead": false,
+      "readAt": "ISO date",
+      "createdAt": "ISO date"
+    }
+  ],
+  "page": 1,
+  "limit": 20,
+  "total": 100
+}
+```
 
 ### GET /notifications/unread-count
 **Auth:** Required  
@@ -2119,11 +2142,22 @@
 
 ### PATCH /notifications/:id/read
 **Auth:** Required  
-**Response (200):** Notification marked as read
+**Response (200):**
+```json
+{
+  "message": "Notification marked as read"
+}
+```
 
 ### PATCH /notifications/read-all
 **Auth:** Required  
-**Response (200):** All notifications marked as read
+**Query:** `category` (optional)  
+**Response (200):**
+```json
+{
+  "message": "All notifications marked as read"
+}
+```
 
 ### PATCH /notifications/read-by-entity
 **Auth:** Required  
@@ -2134,25 +2168,32 @@
   entityId: string
 }
 ```
-**Response (200):** Notifications for entity marked as read
+**Response (200):**
+```json
+{
+  "message": "Notifications marked as read"
+}
+```
 
 ### POST /notifications/stream-ticket
 **Auth:** Required  
 **Response (200):**
 ```json
 {
-  "ticket": "sse-ticket"
+  "ticket": "sse-ticket",
+  "expiresAt": "ISO date"
 }
 ```
+**Note:** Ticket expires in 30 seconds. Uses in-memory storage (not database), so no migration dependencies.
 
 ### GET /notifications/stream
 **Auth:** Required (SSE)  
-**Query:** `ticket` (from stream-ticket)  
+**Query:** `ticket` (from stream-ticket) or use Authorization header with JWT  
 **Response:** SSE stream with events:
-- `message`: Notification data
-- `heartbeat`: Keep-alive (every 30s)
-- Last-Event-ID supported for reconnection  
-**SSE Event Names:** message, heartbeat
+- `notification`: Notification data (same shape as GET /notifications response)
+- `heartbeat`: Keep-alive (every 25 seconds)
+- Last-Event-ID supported for reconnection (replays notifications after the last received ID)  
+**SSE Event Names:** notification, heartbeat
 
 **Notification Categories:** ASSIGNMENTS, GRADES, SESSIONS, MESSAGES, USERS, ENROLLMENT, PAYMENTS, PRICING, COMPLAINTS, QUIZZES, SCHEDULE
 
