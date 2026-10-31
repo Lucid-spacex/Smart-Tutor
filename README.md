@@ -150,7 +150,7 @@ Smart-Tutor/
    # JWT
    JWT_ACCESS_SECRET="your-super-secret-access-token-key"
    JWT_REFRESH_SECRET="your-super-secret-refresh-token-key"
-   JWT_ACCESS_EXPIRY="15m"
+   JWT_ACCESS_EXPIRY="1d"
    JWT_REFRESH_EXPIRY="7d"
 
    # Paystack

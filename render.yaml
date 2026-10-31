@@ -12,7 +12,7 @@ services:
       - key: JWT_REFRESH_SECRET
         sync: false
       - key: JWT_ACCESS_EXPIRY
-        value: 15m
+        value: 1d
       - key: JWT_REFRESH_EXPIRY
         value: 7d
       - key: PAYSTACK_SECRET_KEY
