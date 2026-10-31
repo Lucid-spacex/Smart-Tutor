@@ -45,15 +45,23 @@ export class AdminService {
   }
 
   async getPendingTutors() {
-    return prisma.user.findMany({
+    const tutors = await prisma.user.findMany({
       where: {
         role: 'TUTOR',
         status: 'PENDING_VETTING',
       },
       include: {
         tutorProfile: true,
+        tutorApplication: true,
       },
     });
+
+    // Add applicationStatus field
+    return tutors.map(tutor => ({
+      ...tutor,
+      applicationStatus: tutor.tutorApplication ? tutor.tutorApplication.status : 'NONE',
+      submittedAt: tutor.tutorApplication?.submittedAt || null,
+    }));
   }
 
   async getTutors(filters?: {
@@ -81,11 +89,7 @@ export class AdminService {
       where.status = 'APPROVED';
     }
 
-    if (applicationStatus) {
-      where.tutorApplication = {
-        status: applicationStatus,
-      };
-    }
+    // Note: applicationStatus filter is applied after query to include tutors without applications
 
     if (vettingStatus) {
       where.tutorProfile = {
@@ -154,12 +158,20 @@ export class AdminService {
           return {
             ...tutor,
             currentStudentCount,
+            applicationStatus: tutor.tutorApplication ? tutor.tutorApplication.status : 'NONE',
+            submittedAt: tutor.tutorApplication?.submittedAt || null,
           };
         })
       );
 
+      // Filter by applicationStatus if provided
+      let filteredTutors = enrichedTutors;
+      if (applicationStatus) {
+        filteredTutors = enrichedTutors.filter(tutor => tutor.applicationStatus === applicationStatus);
+      }
+
       // Filter by capacity
-      const filteredTutors = enrichedTutors.filter(tutor => {
+      filteredTutors = filteredTutors.filter(tutor => {
         const maxStudents = tutor.tutorProfile?.maxStudents;
         if (!maxStudents) return true; // No limit set
         return tutor.currentStudentCount < maxStudents;
@@ -201,7 +213,7 @@ export class AdminService {
       prisma.user.count({ where }),
     ]);
 
-    // Add current student count for each tutor
+    // Add current student count and applicationStatus for each tutor
     const enrichedTutors = await Promise.all(
       tutors.map(async (tutor) => {
         const currentStudentCount = await prisma.enrollment.count({
@@ -214,15 +226,23 @@ export class AdminService {
         return {
           ...tutor,
           currentStudentCount,
+          applicationStatus: tutor.tutorApplication ? tutor.tutorApplication.status : 'NONE',
+          submittedAt: tutor.tutorApplication?.submittedAt || null,
         };
       })
     );
 
+    // Filter by applicationStatus if provided
+    let filteredTutors = enrichedTutors;
+    if (applicationStatus) {
+      filteredTutors = enrichedTutors.filter(tutor => tutor.applicationStatus === applicationStatus);
+    }
+
     return {
-      data: enrichedTutors,
+      data: filteredTutors,
       page,
       limit,
-      total,
+      total: applicationStatus ? filteredTutors.length : total,
     };
   }
 
