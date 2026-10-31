@@ -29,6 +29,31 @@ async function main() {
   });
   console.log('✅ Admin user created:', admin.email);
 
+  // One-time backfill: Create DRAFT TutorApplication for any tutor user who lacks one
+  console.log('\n🔄 Running backfill for missing tutor applications...');
+  const tutorsWithoutApplications = await prisma.user.findMany({
+    where: {
+      role: 'TUTOR',
+      tutorApplication: null,
+    },
+  });
+
+  for (const tutor of tutorsWithoutApplications) {
+    await prisma.tutorApplication.create({
+      data: {
+        userId: tutor.id,
+        status: 'DRAFT',
+      },
+    });
+    console.log(`✅ Created DRAFT application for tutor: ${tutor.email}`);
+  }
+
+  if (tutorsWithoutApplications.length === 0) {
+    console.log('ℹ️  No tutors without applications found.');
+  } else {
+    console.log(`✅ Backfill completed: ${tutorsWithoutApplications.length} tutor applications created.`);
+  }
+
   console.log('\n🎉 Database seed completed successfully!');
 
   console.log('\n📋 Admin Credentials:');

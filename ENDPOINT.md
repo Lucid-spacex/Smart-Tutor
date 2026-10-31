@@ -2203,37 +2203,121 @@
 
 ## Messages
 
-### GET /messages
-**Auth:** Required  
-**Query:** `recipientId` (uuid)  
-**Response (200):** Message threads
+### GET /messages/admin-contact
+**Auth:** Required (PARENT, TUTOR only)  
+**Response (200):**
+```json
+{
+  "recipientId": "uuid",
+  "fullName": "string"
+}
+```
+**Note:** Returns an active admin user ID. Parents and tutors use this ID to start an admin support thread.
+
+### GET /messages/threads
+**Auth:** Required (ADMIN, PARENT, TUTOR only - STUDENTS blocked)  
+**Response (200):**
+```json
+[
+  {
+    "threadId": "uuid",
+    "otherParticipant": {
+      "id": "uuid",
+      "fullName": "string",
+      "role": "ADMIN"
+    },
+    "lastMessage": {
+      "id": "uuid",
+      "body": "string",
+      "createdAt": "ISO date",
+      "senderId": "uuid",
+      "readAt": "ISO date"
+    },
+    "unreadCount": 0
+  }
+]
+```
+**Note:** Admins see all ADMIN_SUPPORT threads (one per parent/tutor). Non-admins see only their single admin-support thread.
+
+### GET /messages/threads/:threadId
+**Auth:** Required (ADMIN, PARENT, TUTOR only - STUDENTS blocked)  
+**Response (200):**
+```json
+[
+  {
+    "id": "uuid",
+    "senderId": "uuid",
+    "recipientId": "uuid",
+    "body": "string",
+    "threadId": "uuid",
+    "readAt": "ISO date",
+    "createdAt": "ISO date",
+    "sender": {
+      "id": "uuid",
+      "fullName": "string",
+      "role": "ADMIN"
+    },
+    "recipient": {
+      "id": "uuid",
+      "fullName": "string",
+      "role": "PARENT"
+    }
+  }
+]
+```
+**Note:** Returns all messages in a thread in chronological order. User must be a participant in the thread.
 
 ### POST /messages
-**Auth:** Required  
+**Auth:** Required (ADMIN, PARENT, TUTOR only - STUDENTS blocked)  
 **Body:**
 ```typescript
 {
   recipientId: string (uuid),
-  body: string
+  body: string (min 1, max 2000)
 }
 ```
-**Response (201):** Sent message
+**Response (201):**
+```json
+{
+  "id": "uuid",
+  "senderId": "uuid",
+  "recipientId": "uuid",
+  "body": "string",
+  "threadId": "uuid",
+  "readAt": null,
+  "createdAt": "ISO date",
+  "sender": {
+    "id": "uuid",
+    "fullName": "string",
+    "role": "PARENT"
+  },
+  "recipient": {
+    "id": "uuid",
+    "fullName": "string",
+    "role": "ADMIN"
+  }
+}
+```
+**Note:** recipientId validation requires UUID format (matches User ID type). Permission matrix: Admin can message any parent/tutor/admin. Parent can message admin. Tutor can message admin. All other pairs are rejected.
 
-### GET /messages/:threadId
-**Auth:** Required  
-**Response (200):** Thread messages (path: /messages/:threadId)
-
-### PATCH /messages/:threadId/read
-**Auth:** Required  
-**Response (200):** Thread marked as read
-
-### GET /messages/admin-contact
-**Auth:** Required  
-**Response (200):** Active admin ID for starting admin thread
+### PATCH /messages/threads/:threadId/read
+**Auth:** Required (ADMIN, PARENT, TUTOR only - STUDENTS blocked)  
+**Response (200):**
+```json
+{
+  "message": "Messages marked as read"
+}
+```
+**Note:** For admin support threads, when an admin marks as read, all messages from non-admin participants are marked as read for all admins (shared read state).
 
 ### GET /messages/unread-count
-**Auth:** Required  
-**Response (200):** Unread message count
+**Auth:** Required (ADMIN, PARENT, TUTOR only - STUDENTS blocked)  
+**Response (200):**
+```json
+{
+  "unreadCount": 5
+}
+```
 
 ---
 

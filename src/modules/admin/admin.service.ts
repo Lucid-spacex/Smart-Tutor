@@ -56,11 +56,16 @@ export class AdminService {
       },
     });
 
-    // Add applicationStatus field
+    // Add applicationStatus field, include name and email
     return tutors.map(tutor => ({
-      ...tutor,
+      id: tutor.id,
+      fullName: tutor.fullName,
+      email: tutor.email,
+      status: tutor.status,
       applicationStatus: tutor.tutorApplication ? tutor.tutorApplication.status : 'NONE',
       submittedAt: tutor.tutorApplication?.submittedAt || null,
+      tutorProfile: tutor.tutorProfile,
+      tutorApplication: tutor.tutorApplication,
     }));
   }
 
