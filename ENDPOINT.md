@@ -37,6 +37,12 @@
 
 ## Authentication
 
+**Token Lifetimes:**
+- Access Tokens: 1 day (configurable via `JWT_ACCESS_EXPIRY` environment variable, default `1d`)
+- Refresh Tokens: 7 days (configurable via `JWT_REFRESH_EXPIRY` environment variable, default `7d`)
+- Refresh tokens are rotated on every use and checked for replay attacks
+- Per-request session and status verification enforces revocation even with unexpired tokens
+
 ### POST /auth/register
 **Auth:** None  
 **Rate Limit:** Tier 1 (7 req / 15 min)  

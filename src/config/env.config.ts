@@ -11,8 +11,8 @@ const envSchema = z.object({
   JWT_ACCESS_EXPIRY: z.string().default('1d'),
   JWT_REFRESH_EXPIRY: z.string().default('7d'),
   // Extended token expiry for development (optional)
-  JWT_ACCESS_EXPIRY_DEV: z.string().default('7d'),
-  JWT_REFRESH_EXPIRY_DEV: z.string().default('30d'),
+  JWT_ACCESS_EXPIRY_DEV: z.string().default('1d'),
+  JWT_REFRESH_EXPIRY_DEV: z.string().default('7d'),
 
   // Paystack
   PAYSTACK_SECRET_KEY: z.string().optional(),
