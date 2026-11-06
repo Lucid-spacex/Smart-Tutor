@@ -542,7 +542,7 @@ export class PaymentsService {
     if (payment.status === 'FAILED') {
       timeline.push({
         event: 'Payment Failed',
-        timestamp: payment.updatedAt,
+        timestamp: payment.createdAt,
         details: 'Payment transaction failed',
       });
     }
@@ -550,7 +550,7 @@ export class PaymentsService {
     if (payment.status === 'EXPIRED') {
       timeline.push({
         event: 'Payment Expired',
-        timestamp: payment.updatedAt,
+        timestamp: payment.createdAt,
         details: 'Payment expired before completion',
       });
     }
