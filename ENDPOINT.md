@@ -1981,11 +1981,81 @@
 
 ### GET /payments
 **Auth:** Required (PARENT)  
-**Response (200):** Parent's payments
+**Query:** `status` (PENDING, SUCCESS, FAILED, EXPIRED, REFUNDED), `page` (number), `limit` (number, max 100)  
+**Response (200):**
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "reference": "paystack-reference",
+      "amount": 100,
+      "currency": "USD",
+      "status": "SUCCESS",
+      "createdAt": "ISO date",
+      "paidAt": "ISO date",
+      "provider": "PAYSTACK",
+      "enrollment": {
+        "student": {
+          "fullName": "string"
+        },
+        "subject": {
+          "name": "Mathematics"
+        },
+        "billingFrequency": "MONTHLY",
+        "enrollmentGroupId": "uuid"
+      }
+    }
+  ],
+  "page": 1,
+  "limit": 20,
+  "total": 100
+}
+```
+**Note:** Returns the parent's payments from the database (not Paystack API), newest first. Never includes gateway secrets. Each row includes enrollment info (student fullName, subject name, billingFrequency, enrollmentGroupId).
 
 ### GET /payments/:id
 **Auth:** Required (owning parent or ADMIN)  
-**Response (200):** Payment details
+**Response (200):**
+```json
+{
+  "id": "uuid",
+  "parentId": "uuid",
+  "enrollmentId": "uuid",
+  "enrollmentGroupId": "uuid",
+  "amount": 100,
+  "currency": "USD",
+  "provider": "PAYSTACK",
+  "providerReference": "paystack-reference",
+  "status": "SUCCESS",
+  "paidAt": "ISO date",
+  "createdAt": "ISO date",
+  "updatedAt": "ISO date",
+  "enrollment": {
+    "student": {
+      "id": "uuid",
+      "fullName": "string"
+    },
+    "subject": {
+      "id": "uuid",
+      "name": "Mathematics"
+    }
+  },
+  "timeline": [
+    {
+      "event": "Payment Initiated",
+      "timestamp": "ISO date",
+      "details": "Payment of USD 100 initiated"
+    },
+    {
+      "event": "Payment Successful",
+      "timestamp": "ISO date",
+      "details": "Payment verified and enrollment activated"
+    }
+  ]
+}
+```
+**Note:** For parents, includes a timeline of payment events. For admins, returns full payment details without timeline. Never includes gateway secrets.
 
 ### GET /payments/verify/:reference
 **Auth:** Required (owning parent or ADMIN)  

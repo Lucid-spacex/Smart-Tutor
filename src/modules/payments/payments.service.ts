@@ -418,19 +418,61 @@ export class PaymentsService {
     return updatedPayment;
   }
 
-  async getPaymentsByParent(parentId: string) {
-    return prisma.payment.findMany({
-      where: { parentId },
-      include: {
-        enrollment: {
-          include: {
-            student: true,
-            subject: true,
+  async getPaymentsByParent(parentId: string, filters: { status?: string; page?: number; limit?: number } = {}) {
+    const { status, page = 1, limit = 20 } = filters;
+    const skip = (page - 1) * limit;
+
+    const where: any = { parentId };
+    if (status) {
+      where.status = status;
+    }
+
+    const [payments, total] = await Promise.all([
+      prisma.payment.findMany({
+        where,
+        include: {
+          enrollment: {
+            include: {
+              student: true,
+              subject: true,
+            },
           },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: Math.min(limit, 100),
+      }),
+      prisma.payment.count({ where }),
+    ]);
+
+    // Enrich with enrollment info
+    const enrichedPayments = payments.map(payment => ({
+      id: payment.id,
+      reference: payment.providerReference,
+      amount: payment.amount,
+      currency: payment.currency,
+      status: payment.status,
+      createdAt: payment.createdAt,
+      paidAt: payment.paidAt,
+      provider: payment.provider,
+      enrollment: payment.enrollment ? {
+        student: {
+          fullName: payment.enrollment.student.fullName,
+        },
+        subject: {
+          name: payment.enrollment.subject.name,
+        },
+        billingFrequency: payment.enrollment.billingFrequency,
+        enrollmentGroupId: payment.enrollment.enrollmentGroupId,
+      } : null,
+    }));
+
+    return {
+      data: enrichedPayments,
+      page,
+      limit,
+      total,
+    };
   }
 
   async getPaymentById(paymentId: string, userId: string, userRole: string) {
@@ -456,6 +498,67 @@ export class PaymentsService {
     }
 
     return payment;
+  }
+
+  async getPaymentByIdWithTimeline(paymentId: string, userId: string, userRole: string) {
+    const payment = await prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: {
+        enrollment: {
+          include: {
+            student: true,
+            subject: true,
+          },
+        },
+      },
+    });
+
+    if (!payment) {
+      throw new AppError(404, 'Payment not found');
+    }
+
+    // SECURITY: Only the payment owner (parent) or admins can view
+    if (userRole !== 'ADMIN' && payment.parentId !== userId) {
+      throw new AppError(403, 'Not authorized to view this payment');
+    }
+
+    // Build timeline from payment events
+    const timeline = [
+      {
+        event: 'Payment Initiated',
+        timestamp: payment.createdAt,
+        details: `Payment of ${payment.currency} ${payment.amount} initiated`,
+      },
+    ];
+
+    if (payment.paidAt) {
+      timeline.push({
+        event: 'Payment Successful',
+        timestamp: payment.paidAt,
+        details: 'Payment verified and enrollment activated',
+      });
+    }
+
+    if (payment.status === 'FAILED') {
+      timeline.push({
+        event: 'Payment Failed',
+        timestamp: payment.updatedAt,
+        details: 'Payment transaction failed',
+      });
+    }
+
+    if (payment.status === 'EXPIRED') {
+      timeline.push({
+        event: 'Payment Expired',
+        timestamp: payment.updatedAt,
+        details: 'Payment expired before completion',
+      });
+    }
+
+    return {
+      ...payment,
+      timeline,
+    };
   }
 
   async verifyPaymentByReference(reference: string, userId: string, userRole: string) {

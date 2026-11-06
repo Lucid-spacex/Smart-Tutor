@@ -56,7 +56,13 @@ export class PaymentsController {
         return;
       }
 
-      const payments = await this.paymentsService.getPaymentsByParent(parentId);
+      const filters = {
+        status: req.query.status as string,
+        page: req.query.page ? parseInt(req.query.page as string) : 1,
+        limit: req.query.limit ? parseInt(req.query.limit as string) : 20,
+      };
+
+      const payments = await this.paymentsService.getPaymentsByParent(parentId, filters);
       res.status(200).json(payments);
     } catch (error) {
       next(error);
@@ -95,7 +101,10 @@ export class PaymentsController {
       }
 
       const { id } = req.params;
-      const payment = await this.paymentsService.getPaymentById(id, userId, userRole);
+      // Parents get timeline, admins get full payment details
+      const payment = userRole === 'PARENT'
+        ? await this.paymentsService.getPaymentByIdWithTimeline(id, userId, userRole)
+        : await this.paymentsService.getPaymentById(id, userId, userRole);
       res.status(200).json(payment);
     } catch (error) {
       next(error);
