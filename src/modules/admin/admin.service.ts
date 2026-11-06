@@ -251,6 +251,103 @@ export class AdminService {
     };
   }
 
+  async getBadgeCounts(adminId: string) {
+    // Get counts that stay correct regardless of read state
+    const [
+      pendingTutorApplications,
+      pendingGrades,
+      openComplaints,
+      unmatchedPaidEnrollments,
+      pendingChangeRequests,
+      unscheduledWithin24h,
+      failedPayments,
+      unreadMessages,
+    ] = await Promise.all([
+      // Tutor applications with SUBMITTED status
+      prisma.tutorApplication.count({
+        where: { status: 'SUBMITTED' },
+      }),
+      // Grades with PENDING_APPROVAL status
+      prisma.grade.count({
+        where: { status: 'PENDING_APPROVAL' },
+      }),
+      // Complaints with OPEN status
+      prisma.complaint.count({
+        where: { status: 'OPEN' },
+      }),
+      // Enrollments without assigned tutors that have payment
+      prisma.enrollment.count({
+        where: {
+          tutorId: null,
+          payments: {
+            some: {
+              status: 'SUCCESS',
+            },
+          },
+        },
+      }),
+      // Change requests with PENDING status
+      prisma.enrollmentChangeRequest.count({
+        where: { status: 'PENDING' },
+      }),
+      // Sessions scheduled within 24 hours
+      prisma.session.count({
+        where: {
+          status: 'SCHEDULED',
+          scheduledAt: {
+            gte: new Date(),
+            lte: new Date(Date.now() + 24 * 60 * 60 * 1000),
+          },
+        },
+      }),
+      // Failed payments
+      prisma.payment.count({
+        where: { status: 'FAILED' },
+      }),
+      // Unread messages for this admin (from parents/tutors in admin-support threads)
+      prisma.message.count({
+        where: {
+          recipient: { role: 'ADMIN' },
+          sender: { role: { in: ['PARENT', 'TUTOR'] } },
+          readAt: null,
+        },
+      }),
+    ]);
+
+    // Get unread new parents and new tutors from notifications per admin
+    // Use USER_VERIFIED type and filter by entityType
+    const unreadNewParents = await prisma.notification.count({
+      where: {
+        userId: adminId,
+        isRead: false,
+        entityType: 'PARENT',
+        type: 'USER_VERIFIED',
+      },
+    });
+
+    const unreadNewTutors = await prisma.notification.count({
+      where: {
+        userId: adminId,
+        isRead: false,
+        entityType: 'TUTOR',
+        type: 'USER_VERIFIED',
+      },
+    });
+
+    return {
+      pendingTutorApplications,
+      pendingGrades,
+      openComplaints,
+      unmatchedPaidEnrollments,
+      pendingChangeRequests,
+      unscheduledWithin24h,
+      failedPayments,
+      unreadMessages,
+      unreadNewParents,
+      unreadNewTutors,
+    };
+  }
+
   async getTutorById(tutorId: string) {
     const tutor = await prisma.user.findUnique({
       where: { id: tutorId, role: 'TUTOR' },

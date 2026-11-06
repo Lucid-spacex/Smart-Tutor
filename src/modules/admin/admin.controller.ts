@@ -447,6 +447,21 @@ export class AdminController {
     }
   };
 
+  getBadgeCounts = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const adminId = req.user?.userId;
+      if (!adminId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const counts = await this.adminService.getBadgeCounts(adminId);
+      res.status(200).json(counts);
+    } catch (error) {
+      next(error);
+    }
+  };
+
   // Parent Directory
   getParents = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {

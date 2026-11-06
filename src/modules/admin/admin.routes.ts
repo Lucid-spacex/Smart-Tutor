@@ -41,6 +41,9 @@ router.delete('/subjects/:id', authenticate, requireRole('ADMIN'), validateUUID(
 // Exchange Rate
 router.get('/exchange-rate/current', authenticate, requireRole('ADMIN'), adminController.getCurrentExchangeRate);
 
+// Badge counts
+router.get('/badge-counts', authenticate, requireRole('ADMIN'), adminController.getBadgeCounts);
+
 // Payments & Reports - static routes before parameter routes
 router.get('/payments', authenticate, requireRole('ADMIN'), adminController.getPayments);
 router.get('/payments/summary', authenticate, requireRole('ADMIN'), adminController.getPaymentsSummary);

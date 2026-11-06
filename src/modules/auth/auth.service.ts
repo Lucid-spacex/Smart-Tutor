@@ -68,7 +68,7 @@ export class AuthService {
       category: 'USERS' as NotificationCategory,
       title: 'New User Registration',
       body: `New ${data.role} registered: ${data.email}`,
-      entityType: 'User',
+      entityType: data.role, // PARENT or TUTOR
       entityId: user.id,
       dedupeKey: `user-registered-${user.id}`,
     });
@@ -119,7 +119,7 @@ export class AuthService {
       category: 'USERS' as NotificationCategory,
       title: 'User Verified',
       body: `${user.role} verified email: ${user.email}`,
-      entityType: 'User',
+      entityType: user.role, // PARENT or TUTOR
       entityId: user.id,
       dedupeKey: `user-verified-${user.id}`,
     });

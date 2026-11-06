@@ -1639,6 +1639,25 @@
 **Auth:** Required (ADMIN)  
 **Response (200):** Current exchange rate
 
+### GET /admin/badge-counts
+**Auth:** Required (ADMIN)  
+**Response (200):**
+```json
+{
+  "pendingTutorApplications": number,
+  "pendingGrades": number,
+  "openComplaints": number,
+  "unmatchedPaidEnrollments": number,
+  "pendingChangeRequests": number,
+  "unscheduledWithin24h": number,
+  "failedPayments": number,
+  "unreadMessages": number,
+  "unreadNewParents": number,
+  "unreadNewTutors": number
+}
+```
+**Note:** Counts that stay correct regardless of read state. `unreadNewParents` and `unreadNewTutors` are computed from unread notifications per admin with entityType=PARENT/TUTOR and type=USER_VERIFIED.
+
 ### GET /admin/payments
 **Auth:** Required (ADMIN)  
 **Query:** `status`, `currency`, `provider`, `parentId`, `from`, `to`, `search`, `page`, `limit`  
