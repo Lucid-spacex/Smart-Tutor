@@ -1417,12 +1417,104 @@
 
 ### GET /admin/tutors/pending
 **Auth:** Required (ADMIN)  
-**Response (200):** Tutors with PENDING_VETTING status
+**Response (200):**
+```json
+[
+  {
+    "id": "uuid",
+    "fullName": "string",
+    "email": "string",
+    "status": "PENDING_VETTING",
+    "applicationStatus": "DRAFT | SUBMITTED | NONE",
+    "submittedAt": "ISO date | null",
+    "tutorProfile": {
+      "id": "uuid",
+      "userId": "uuid",
+      "subjects": ["Mathematics"],
+      "bio": "string",
+      "hourlyRate": 50,
+      "availability": {},
+      "availabilityStatus": "AVAILABLE",
+      "maxStudents": null,
+      "statusNote": null,
+      "statusUpdatedAt": "ISO date",
+      "createdAt": "ISO date",
+      "updatedAt": "ISO date"
+    },
+    "tutorApplication": {
+      "id": "uuid",
+      "userId": "uuid",
+      "status": "DRAFT | SUBMITTED",
+      "submittedAt": "ISO date | null",
+      "createdAt": "ISO date",
+      "updatedAt": "ISO date"
+    } | null
+  }
+]
+```
+**Note:** Returns every PENDING_VETTING tutor, including those with DRAFT or no application (applicationStatus = NONE). Includes name (fullName), email, applicationStatus, and submittedAt. The applicationStatus filter works when supplied to GET /admin/tutors.
 
 ### GET /admin/tutors
 **Auth:** Required (ADMIN)  
 **Query:** `status` (APPROVED, PENDING_VETTING, REJECTED, SUSPENDED), `applicationStatus` (DRAFT, SUBMITTED, APPROVED, REJECTED), `vettingStatus` (PENDING, APPROVED, REJECTED), `availabilityStatus` (AVAILABLE, LIMITED, UNAVAILABLE), `subjectId` (uuid), `hasCapacity` (boolean), `search` (string), `page` (number), `limit` (number, max 100)  
-**Response (200):** Paginated tutor list with application data
+**Response (200):**
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "fullName": "string",
+      "email": "string",
+      "phone": "string",
+      "role": "TUTOR",
+      "status": "APPROVED",
+      "createdAt": "ISO date",
+      "updatedAt": "ISO date",
+      "tutorProfile": {
+        "id": "uuid",
+        "userId": "uuid",
+        "subjects": ["Mathematics"],
+        "bio": "string",
+        "hourlyRate": 50,
+        "availability": {},
+        "availabilityStatus": "AVAILABLE",
+        "maxStudents": null,
+        "statusNote": null,
+        "statusUpdatedAt": "ISO date",
+        "createdAt": "ISO date",
+        "updatedAt": "ISO date",
+        "tutorSubjects": [
+          {
+            "id": "uuid",
+            "tutorProfileId": "uuid",
+            "subjectId": "uuid",
+            "subject": {
+              "id": "uuid",
+              "name": "Mathematics",
+              "category": "STEM"
+            }
+          }
+        ]
+      },
+      "tutorApplication": {
+        "id": "uuid",
+        "userId": "uuid",
+        "status": "SUBMITTED",
+        "submittedAt": "ISO date",
+        "createdAt": "ISO date",
+        "updatedAt": "ISO date"
+      } | null,
+      "currentStudentCount": 5,
+      "applicationStatus": "DRAFT | SUBMITTED | NONE",
+      "submittedAt": "ISO date | null"
+    }
+  ],
+  "page": 1,
+  "limit": 20,
+  "total": 100
+}
+```
+**Note:** When status=PENDING_VETTING, returns all tutors with that status even when applicationStatus is DRAFT or there is no application row. Includes applicationStatus (DRAFT, SUBMITTED, or NONE), submittedAt, fullName, and email. The applicationStatus filter works when supplied (filters after query to include tutors without applications).
 
 ### GET /admin/tutors/:id
 **Auth:** Required (ADMIN)  
