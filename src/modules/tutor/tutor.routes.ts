@@ -12,10 +12,11 @@ const router = Router();
 const tutorController = new TutorController();
 
 // /tutor-profile endpoints - require approved tutor
-router.post('/tutor-profile', authenticate, requireRole('TUTOR'), requireApprovedTutor, validate(createTutorProfileSchema), tutorController.createTutorProfile);
-router.patch('/tutor-profile', authenticate, requireRole('TUTOR'), requireApprovedTutor, validate(updateAvailabilitySchema), tutorController.updateAvailability);
-router.patch('/tutor-profile/availability-status', authenticate, requireRole('TUTOR'), requireApprovedTutor, tutorController.updateAvailabilityStatus);
-router.get('/tutor-profile', authenticate, requireRole('TUTOR'), requireApprovedTutor, tutorController.getTutorProfile);
+// Note: These are mounted at /tutor-profile in app.ts, so paths are relative to that
+router.post('/', authenticate, requireRole('TUTOR'), requireApprovedTutor, validate(createTutorProfileSchema), tutorController.createTutorProfile);
+router.patch('/', authenticate, requireRole('TUTOR'), requireApprovedTutor, validate(updateAvailabilitySchema), tutorController.updateAvailability);
+router.patch('/availability-status', authenticate, requireRole('TUTOR'), requireApprovedTutor, tutorController.updateAvailabilityStatus);
+router.get('/', authenticate, requireRole('TUTOR'), requireApprovedTutor, tutorController.getTutorProfile);
 
 // /tutor/students & /tutor/sessions - require approved tutor
 router.get('/students', authenticate, requireRole('TUTOR'), requireApprovedTutor, tutorController.getAssignedStudents);

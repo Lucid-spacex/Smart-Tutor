@@ -58,6 +58,7 @@ async function main() {
 
   console.log('\n📋 Admin Credentials:');
   console.log('   Email:', adminEmail);
+  
   if (!process.env.ADMIN_SEED_PASSWORD) {
     console.log('   Password: admin123456! (default - change immediately)');
   } else {
