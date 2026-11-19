@@ -57,7 +57,19 @@
   phone: string (min 10),
   address?: string (min 5, required for TUTOR),
   password: string (min 8, 1 upper, 1 lower, 1 number, 1 special),
-  role: 'PARENT' | 'TUTOR'
+  role: 'PARENT' | 'TUTOR',
+  // Tutor application fields (required when role=TUTOR)
+  birthDay?: number (1-31),
+  birthMonth?: number (1-12),
+  country?: string (min 1),
+  city?: string (min 1),
+  highestQualification?: 'SSCE_WAEC' | 'OND_NCE' | 'HND' | 'BACHELORS' | 'BED_PGDE' | 'MASTERS' | 'PHD' | 'OTHER',
+  subjects?: string[] (uuid array, min 1),
+  levels?: ('PRESCHOOL_TO_G1' | 'G2_TO_G4' | 'G5_TO_G8' | 'G9_TO_G12' | 'EXAM_LEVELS')[] (min 1),
+  yearsOfExperience?: number (>= 0),
+  whyTeach?: string (min 10),
+  howHeard?: 'TEACHMENEST_TUTOR_OR_STAFF' | 'PARENT_OR_FAMILY' | 'FRIEND_OR_FAMILY' | 'INSTAGRAM' | 'FACEBOOK' | 'LINKEDIN' | 'WHATSAPP_GROUP' | 'GOOGLE_SEARCH' | 'JOB_BOARD' | 'OTHER',
+  aboutYou?: string[] (min 1, max 3, each max 60 chars)
 }
 ```
 **Response (201):**
@@ -68,6 +80,7 @@
   "emailSent": true
 }
 ```
+**Note:** For TUTOR role, the application is created in SUBMITTED state during registration. The tutor cannot login until approved by admin after an interview. If rejected, the tutor account is completely deleted from the database.  
 **Error Codes:** 409 (User with this email already exists)
 
 ### POST /auth/verify
@@ -100,7 +113,10 @@
   }
 }
 ```
-**Note:** Does NOT return tokens - user must login after verification.  
+**Note:** 
+- PARENT: status becomes ACTIVE, can login immediately
+- TUTOR: status becomes PENDING_VETTING, cannot login until admin approves after interview
+- Does NOT return tokens - user must login after verification  
 **Error Codes:** 404 (User not found), 400 (Invalid or expired OTP)
 
 ### POST /auth/login
@@ -134,7 +150,7 @@
   }
 }
 ```
-**Error Codes:** 401 (Invalid credentials), 403 (Please verify your email first, Account is not active, Your account is pending admin approval)
+**Error Codes:** 401 (Invalid credentials), 403 (Please verify your email first, Account is not active, Your account is pending admin approval (tutors must be approved after interview))
 
 ### POST /auth/student-login
 **Auth:** None  
@@ -1266,6 +1282,8 @@
 ---
 
 ## Tutor Application
+
+**Note:** Tutor applications are now submitted during registration (POST /auth/register with role=TUTOR). The application is created in SUBMITTED state directly. The endpoints below are for viewing/managing the application after registration, but tutors cannot access them until approved by admin. Tutors cannot login until their application is approved after an interview.
 
 ### GET /tutor-application
 **Auth:** Required (TUTOR, PENDING_VETTING) - bypasses requireApprovedTutor  

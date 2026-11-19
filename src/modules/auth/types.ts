@@ -21,6 +21,18 @@ export interface RegisterData {
   address?: string; // Required for TUTOR, optional for PARENT
   password: string;
   role: 'PARENT' | 'TUTOR';
+  // Tutor application fields (required when role=TUTOR)
+  birthDay?: number;
+  birthMonth?: number;
+  country?: string;
+  city?: string;
+  highestQualification?: string;
+  subjects?: string[];
+  levels?: string[];
+  yearsOfExperience?: number;
+  whyTeach?: string;
+  howHeard?: string;
+  aboutYou?: string[];
 }
 
 export interface VerifyData {

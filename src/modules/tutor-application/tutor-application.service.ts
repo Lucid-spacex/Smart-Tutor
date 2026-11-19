@@ -458,24 +458,53 @@ export class TutorApplicationService {
 
       logger.info({ userId, adminId }, 'Approved tutor application');
     } else {
-      // REJECTED
-      await prisma.user.update({
-        where: { id: userId },
-        data: { status: 'REJECTED' },
+      // REJECTED - Delete tutor from database entirely
+      await prisma.$transaction(async (tx) => {
+        // Delete tutor application
+        await tx.tutorApplication.delete({
+          where: { userId },
+        });
+
+        // Delete tutor application subjects
+        await tx.tutorApplicationSubject.deleteMany({
+          where: { applicationId: userId },
+        });
+
+        // Delete tutor application documents
+        const documents = await tx.tutorApplicationDocument.findMany({
+          where: { applicationId: userId },
+        });
+
+        // Delete documents from Cloudinary
+        for (const doc of documents) {
+          try {
+            await cloudinary.uploader.destroy(doc.publicId);
+          } catch (error) {
+            logger.warn({ publicId: doc.publicId, error }, 'Failed to delete document from Cloudinary');
+          }
+        }
+
+        await tx.tutorApplicationDocument.deleteMany({
+          where: { applicationId: userId },
+        });
+
+        // Delete refresh tokens
+        await tx.refreshToken.deleteMany({
+          where: { userId },
+        });
+
+        // Delete notifications
+        await tx.notification.deleteMany({
+          where: { userId },
+        });
+
+        // Delete the user
+        await tx.user.delete({
+          where: { id: userId },
+        });
       });
 
-      // Notify tutor (use core service with flag)
-      await this.notificationCoreService.notify({
-        recipientIds: [userId],
-        type: 'TUTOR_REJECTED',
-        category: 'USERS',
-        title: 'Application Rejected',
-        body: `Your tutor application was not approved. Reason: ${reason}`,
-        entityType: 'TutorApplication',
-        entityId: application.id,
-        isTutorApplicationNotification: true,
-      });
-
+      // Send rejection email before deletion (since user no longer exists after)
       await sendNotificationEmail(
         application.user.email!,
         application.user.fullName,
@@ -483,7 +512,7 @@ export class TutorApplicationService {
         `Your tutor application was not approved. Reason: ${reason}`
       );
 
-      logger.info({ userId, adminId, reason }, 'Rejected tutor application');
+      logger.info({ userId, adminId, reason }, 'Rejected and deleted tutor application');
     }
 
     // Update application

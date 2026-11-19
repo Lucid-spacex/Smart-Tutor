@@ -1,5 +1,46 @@
 import { z } from 'zod';
 
+// Tutor application fields (used in registration for TUTOR role)
+const tutorApplicationFields = {
+  birthDay: z.number().int().min(1).max(31, 'Invalid day'),
+  birthMonth: z.number().int().min(1).max(12, 'Invalid month'),
+  country: z.string().min(1, 'Country is required'),
+  city: z.string().min(1, 'City is required'),
+  highestQualification: z.enum([
+    'SSCE_WAEC',
+    'OND_NCE',
+    'HND',
+    'BACHELORS',
+    'BED_PGDE',
+    'MASTERS',
+    'PHD',
+    'OTHER',
+  ]),
+  subjects: z.array(z.string().uuid()).min(1, 'At least one subject is required'),
+  levels: z.array(z.enum([
+    'PRESCHOOL_TO_G1',
+    'G2_TO_G4',
+    'G5_TO_G8',
+    'G9_TO_G12',
+    'EXAM_LEVELS',
+  ])).min(1, 'At least one level is required'),
+  yearsOfExperience: z.number().int().min(0, 'Years of experience is required'),
+  whyTeach: z.string().min(10, 'Please tell us why you want to teach (at least 10 characters)'),
+  howHeard: z.enum([
+    'TEACHMENEST_TUTOR_OR_STAFF',
+    'PARENT_OR_FAMILY',
+    'FRIEND_OR_FAMILY',
+    'INSTAGRAM',
+    'FACEBOOK',
+    'LINKEDIN',
+    'WHATSAPP_GROUP',
+    'GOOGLE_SEARCH',
+    'JOB_BOARD',
+    'OTHER',
+  ]),
+  aboutYou: z.array(z.string().max(60)).min(1, 'Please tell us about yourself').max(3, 'About you should be at most 3 paragraphs'),
+};
+
 export const registerSchema = z.object({
   firstName: z.string().min(1, 'First name is required').optional(),
   lastName: z.string().min(1, 'Last name is required').optional(),
@@ -15,6 +56,8 @@ export const registerSchema = z.object({
     .regex(/[0-9]/, 'Password must contain at least one number')
     .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character'),
   role: z.enum(['PARENT', 'TUTOR']),
+  // Tutor application fields (required when role=TUTOR)
+  ...tutorApplicationFields,
 }).refine((data) => {
   // Either fullName OR (firstName + lastName) must be provided
   if (data.fullName) return true;
@@ -30,6 +73,18 @@ export const registerSchema = z.object({
 }, {
   message: 'Address is required for tutors',
   path: ['address'],
+}).refine((data) => {
+  // Tutor application fields are required when role=TUTOR
+  if (data.role === 'TUTOR') {
+    return !!(data.birthDay && data.birthMonth && data.country && data.city &&
+              data.highestQualification && data.subjects && data.subjects.length > 0 &&
+              data.levels && data.levels.length > 0 && data.yearsOfExperience !== undefined &&
+              data.whyTeach && data.howHeard && data.aboutYou && data.aboutYou.length > 0);
+  }
+  return true;
+}, {
+  message: 'Tutor application fields are required when registering as a tutor',
+  path: ['role'],
 });
 
 export const verifySchema = z.object({

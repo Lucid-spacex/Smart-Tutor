@@ -55,6 +55,39 @@ export class AuthService {
       },
     });
 
+    // For tutors, create the application in SUBMITTED state directly
+    if (data.role === 'TUTOR' && data.subjects && data.subjects.length > 0) {
+      await prisma.tutorApplication.create({
+        data: {
+          userId: user.id,
+          status: 'SUBMITTED',
+          birthDay: data.birthDay || 1,
+          birthMonth: data.birthMonth || 1,
+          country: data.country || '',
+          city: data.city || '',
+          highestQualification: (data.highestQualification as any) || 'OTHER',
+          levels: (data.levels as any) || [],
+          yearsOfExperience: data.yearsOfExperience || 0,
+          whyTeach: data.whyTeach || '',
+          howHeard: (data.howHeard as any) || 'OTHER',
+          aboutYou: data.aboutYou || [],
+          submittedAt: new Date(),
+        },
+      });
+
+      // Connect subjects to the application
+      if (data.subjects && data.subjects.length > 0) {
+        await prisma.tutorApplicationSubject.createMany({
+          data: data.subjects.map((subjectId) => ({
+            applicationId: user.id,
+            subjectId,
+          })),
+        });
+      }
+
+      logger.info({ userId: user.id }, 'Tutor application created in SUBMITTED state during registration');
+    }
+
     // Store OTP securely in database
     await storeOTP(data.email, otp);
 
@@ -100,6 +133,7 @@ export class AuthService {
     }
 
     // Update user status based on role
+    // Parents become ACTIVE immediately, tutors stay PENDING_VETTING until admin approval
     const newStatus = user.role === 'PARENT' ? 'ACTIVE' : 'PENDING_VETTING';
 
     const updatedUser = await prisma.user.update({
@@ -107,10 +141,8 @@ export class AuthService {
       data: { status: newStatus },
     });
 
-    // Create tutor application draft if tutor (not tutor profile)
-    if (user.role === 'TUTOR') {
-      await this.tutorApplicationService.createDraftApplication(user.id);
-    }
+    // Note: Tutor application is now created during registration (in SUBMITTED state)
+    // No need to create a draft here anymore
 
     // Notify admins of user verification (include role)
     await this.notificationCore.notify({
