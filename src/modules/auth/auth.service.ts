@@ -57,7 +57,7 @@ export class AuthService {
 
     // For tutors, create the application in SUBMITTED state directly
     if (data.role === 'TUTOR' && data.subjects && data.subjects.length > 0) {
-      await prisma.tutorApplication.create({
+      const application = await prisma.tutorApplication.create({
         data: {
           userId: user.id,
           status: 'SUBMITTED',
@@ -79,13 +79,13 @@ export class AuthService {
       if (data.subjects && data.subjects.length > 0) {
         await prisma.tutorApplicationSubject.createMany({
           data: data.subjects.map((subjectId) => ({
-            applicationId: user.id,
+            applicationId: application.id,
             subjectId,
           })),
         });
       }
 
-      logger.info({ userId: user.id }, 'Tutor application created in SUBMITTED state during registration');
+      logger.info({ userId: user.id, applicationId: application.id }, 'Tutor application created in SUBMITTED state during registration');
     }
 
     // Store OTP securely in database
