@@ -471,7 +471,7 @@ export class TutorApplicationService {
         });
 
         // Delete tutor application documents
-        const documents = await tx.tutorApplicationDocument.findMany({
+        const documents = await tx.tutorDocument.findMany({
           where: { applicationId: userId },
         });
 
@@ -484,7 +484,7 @@ export class TutorApplicationService {
           }
         }
 
-        await tx.tutorApplicationDocument.deleteMany({
+        await tx.tutorDocument.deleteMany({
           where: { applicationId: userId },
         });
 
