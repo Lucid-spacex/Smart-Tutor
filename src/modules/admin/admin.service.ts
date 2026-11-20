@@ -3149,8 +3149,8 @@ export class AdminService {
         SELECT TO_CHAR("paidAt", 'YYYY-MM') as period, currency, SUM(amount) as amount
         FROM "Payment"
         WHERE status = 'SUCCESS'
-        ${from ? `AND "paidAt" >= $1` : ''}
-        ${to ? `AND "paidAt" <= $2` : ''}
+        ${from ? `AND "paidAt" >= $1::timestamp` : ''}
+        ${to ? `AND "paidAt" <= $2::timestamp` : ''}
         ${currency ? `AND currency = $3` : ''}
         GROUP BY TO_CHAR("paidAt", 'YYYY-MM'), currency
         ORDER BY period DESC
@@ -3165,8 +3165,8 @@ export class AdminService {
         SELECT DATE("paidAt") as period, currency, SUM(amount) as amount
         FROM "Payment"
         WHERE status = 'SUCCESS'
-        ${from ? `AND "paidAt" >= $1` : ''}
-        ${to ? `AND "paidAt" <= $2` : ''}
+        ${from ? `AND "paidAt" >= $1::timestamp` : ''}
+        ${to ? `AND "paidAt" <= $2::timestamp` : ''}
         ${currency ? `AND currency = $3` : ''}
         GROUP BY DATE("paidAt"), currency
         ORDER BY period DESC
@@ -3199,8 +3199,8 @@ export class AdminService {
       JOIN "Enrollment" e ON p."enrollmentId" = e.id
       JOIN "Subject" s ON e."subjectId" = s.id
       WHERE p.status = 'SUCCESS'
-      ${from ? `AND p."paidAt" >= $1` : ''}
-      ${to ? `AND p."paidAt" <= $2` : ''}
+      ${from ? `AND p."paidAt" >= $1::timestamp` : ''}
+      ${to ? `AND p."paidAt" <= $2::timestamp` : ''}
       GROUP BY s.name
       ORDER BY collected DESC
       LIMIT 10
