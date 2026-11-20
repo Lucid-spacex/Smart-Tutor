@@ -3145,27 +3145,37 @@ export class AdminService {
     // Time series (daily or monthly)
     let timeSeries: any[];
     if (useMonthlySeries) {
-      timeSeries = await prisma.$queryRaw<Array<{ period: string; currency: string; amount: bigint }>>`
+      const query = `
         SELECT TO_CHAR("paidAt", 'YYYY-MM') as period, currency, SUM(amount) as amount
         FROM "Payment"
         WHERE status = 'SUCCESS'
-        ${from ? `AND "paidAt" >= ${startDate.toISOString()}` : ''}
-        ${to ? `AND "paidAt" <= ${endDate.toISOString()}` : ''}
-        ${currency ? `AND currency = ${currency}` : ''}
+        ${from ? `AND "paidAt" >= $1` : ''}
+        ${to ? `AND "paidAt" <= $2` : ''}
+        ${currency ? `AND currency = $3` : ''}
         GROUP BY TO_CHAR("paidAt", 'YYYY-MM'), currency
         ORDER BY period DESC
       `;
+      const params: any[] = [];
+      if (from) params.push(startDate.toISOString());
+      if (to) params.push(endDate.toISOString());
+      if (currency) params.push(currency);
+      timeSeries = await prisma.$queryRawUnsafe<Array<{ period: string; currency: string; amount: bigint }>>(query, ...params);
     } else {
-      timeSeries = await prisma.$queryRaw<Array<{ period: string; currency: string; amount: bigint }>>`
+      const query = `
         SELECT DATE("paidAt") as period, currency, SUM(amount) as amount
         FROM "Payment"
         WHERE status = 'SUCCESS'
-        ${from ? `AND "paidAt" >= ${startDate.toISOString()}` : ''}
-        ${to ? `AND "paidAt" <= ${endDate.toISOString()}` : ''}
-        ${currency ? `AND currency = ${currency}` : ''}
+        ${from ? `AND "paidAt" >= $1` : ''}
+        ${to ? `AND "paidAt" <= $2` : ''}
+        ${currency ? `AND currency = $3` : ''}
         GROUP BY DATE("paidAt"), currency
         ORDER BY period DESC
       `;
+      const params: any[] = [];
+      if (from) params.push(startDate.toISOString());
+      if (to) params.push(endDate.toISOString());
+      if (currency) params.push(currency);
+      timeSeries = await prisma.$queryRawUnsafe<Array<{ period: string; currency: string; amount: bigint }>>(query, ...params);
     }
 
     // Group time series by period
@@ -3183,18 +3193,22 @@ export class AdminService {
     }));
 
     // By subject (top 10)
-    const bySubject = await prisma.$queryRaw<Array<{ subjectName: string; collected: bigint; count: bigint }>>`
+    const subjectQuery = `
       SELECT s.name as "subjectName", SUM(p.amount) as collected, COUNT(*) as count
       FROM "Payment" p
       JOIN "Enrollment" e ON p."enrollmentId" = e.id
       JOIN "Subject" s ON e."subjectId" = s.id
       WHERE p.status = 'SUCCESS'
-      ${from ? `AND p."paidAt" >= ${startDate.toISOString()}` : ''}
-      ${to ? `AND p."paidAt" <= ${endDate.toISOString()}` : ''}
+      ${from ? `AND p."paidAt" >= $1` : ''}
+      ${to ? `AND p."paidAt" <= $2` : ''}
       GROUP BY s.name
       ORDER BY collected DESC
       LIMIT 10
     `;
+    const subjectParams: any[] = [];
+    if (from) subjectParams.push(startDate.toISOString());
+    if (to) subjectParams.push(endDate.toISOString());
+    const bySubject = await prisma.$queryRawUnsafe<Array<{ subjectName: string; collected: bigint; count: bigint }>>(subjectQuery, ...subjectParams);
 
     // By status counts
     const byStatus = await prisma.payment.groupBy({
