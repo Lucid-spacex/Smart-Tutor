@@ -506,11 +506,14 @@ export class AdminController {
         currency: req.query.currency as string,
         provider: req.query.provider as string,
         parentId: req.query.parentId as string,
+        studentId: req.query.studentId as string,
+        subjectId: req.query.subjectId as string,
         from: req.query.from as string,
         to: req.query.to as string,
         search: req.query.search as string,
         page: req.query.page ? parseInt(req.query.page as string) : 1,
         limit: req.query.limit ? parseInt(req.query.limit as string) : 20,
+        sort: req.query.sort as string || 'createdAt:desc',
       };
       const result = await this.adminService.getPayments(filters);
       res.status(200).json(result);
@@ -538,6 +541,43 @@ export class AdminController {
       };
       const summary = await this.adminService.getPaymentsSummary(filters);
       res.status(200).json(summary);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getOutstandingPayments = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const filters = {
+        page: req.query.page ? parseInt(req.query.page as string) : 1,
+        limit: req.query.limit ? parseInt(req.query.limit as string) : 20,
+        sort: req.query.sort as string || 'daysWaiting:desc',
+      };
+      const result = await this.adminService.getOutstandingPayments(filters);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  exportPaymentsCsv = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const adminId = req.user?.userId;
+      const filters = {
+        status: req.query.status as string,
+        currency: req.query.currency as string,
+        provider: req.query.provider as string,
+        parentId: req.query.parentId as string,
+        studentId: req.query.studentId as string,
+        subjectId: req.query.subjectId as string,
+        from: req.query.from as string,
+        to: req.query.to as string,
+        search: req.query.search as string,
+      };
+      const csv = await this.adminService.exportPaymentsCsv(filters, adminId);
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=payments-export.csv');
+      res.send(csv);
     } catch (error) {
       next(error);
     }

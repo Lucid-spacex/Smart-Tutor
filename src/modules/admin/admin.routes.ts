@@ -47,6 +47,8 @@ router.get('/badge-counts', authenticate, requireRole('ADMIN'), adminController.
 // Payments & Reports - static routes before parameter routes
 router.get('/payments', authenticate, requireRole('ADMIN'), adminController.getPayments);
 router.get('/payments/summary', authenticate, requireRole('ADMIN'), adminController.getPaymentsSummary);
+router.get('/payments/outstanding', authenticate, requireRole('ADMIN'), adminController.getOutstandingPayments);
+router.get('/payments/export.csv', authenticate, requireRole('ADMIN'), adminController.exportPaymentsCsv);
 router.get('/payments/failed', authenticate, requireRole('ADMIN'), adminController.getFailedPayments);
 router.get('/payments/:id', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.getPaymentById);
 router.patch('/payments/:id/note', authenticate, requireRole('ADMIN'), validateUUID('id'), validate(addPaymentNoteSchema), adminController.addPaymentNote);

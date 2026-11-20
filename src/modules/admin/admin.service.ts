@@ -2747,13 +2747,16 @@ export class AdminService {
     currency?: string;
     provider?: string;
     parentId?: string;
+    studentId?: string;
+    subjectId?: string;
     from?: string;
     to?: string;
     search?: string;
     page?: number;
     limit?: number;
+    sort?: string;
   }) {
-    const { status, currency, provider, parentId, from, to, search, page = 1, limit = 20 } = filters || {};
+    const { status, currency, provider, parentId, studentId, subjectId, from, to, search, page = 1, limit = 20, sort = 'createdAt:desc' } = filters || {};
     const skip = (page - 1) * limit;
 
     // Validate provider filter - only PAYSTACK is supported
@@ -2792,9 +2795,34 @@ export class AdminService {
     if (search) {
       where.OR = [
         { providerReference: { contains: search, mode: 'insensitive' } },
+        { receiptNumber: { contains: search, mode: 'insensitive' } },
         { parent: { fullName: { contains: search, mode: 'insensitive' } } },
         { parent: { email: { contains: search, mode: 'insensitive' } } },
       ];
+    }
+
+    // Handle enrollment filters (single or group)
+    if (studentId || subjectId) {
+      if (studentId && subjectId) {
+        // Both specified - filter by enrollment matching both
+        where.enrollment = {
+          studentId,
+          subjectId,
+        };
+      } else if (studentId) {
+        where.enrollment = { studentId };
+      } else if (subjectId) {
+        where.enrollment = { subjectId };
+      }
+    }
+
+    // Parse sort parameter
+    const [sortField, sortDirection] = sort.split(':');
+    const orderBy: any = {};
+    if (sortField === 'createdAt' || sortField === 'paidAt' || sortField === 'amount') {
+      orderBy[sortField] = sortDirection === 'asc' ? 'asc' : 'desc';
+    } else {
+      orderBy.createdAt = 'desc'; // default
     }
 
     const [payments, total] = await Promise.all([
@@ -2810,42 +2838,57 @@ export class AdminService {
           },
           enrollment: {
             include: {
-              student: true,
+              student: {
+                select: {
+                  id: true,
+                  fullName: true,
+                },
+              },
               subject: true,
             },
           },
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         skip,
         take: Math.min(limit, 100),
       }),
       prisma.payment.count({ where }),
     ]);
 
-    // Enrich with NGN equivalent for USD payments
-    const enrichedPayments = await Promise.all(
-      payments.map(async (payment) => {
-        let chargedAmountNGN = Number(payment.amount);
-        if (payment.currency === 'USD') {
-          // Get latest exchange rate
-          const rate = await prisma.exchangeRate.findFirst({
-            where: {
-              fromCurrency: 'USD',
-              toCurrency: 'NGN',
-            },
-            orderBy: { fetchedAt: 'desc' },
-          });
-          if (rate) {
-            chargedAmountNGN = Number(payment.amount) * Number(rate.rate);
-          }
-        }
+    // Enrich with NGN equivalent using exchangeRateUsed
+    const enrichedPayments = payments.map((payment) => {
+      let chargedAmountNGN = Number(payment.amount);
+      if (payment.currency === 'USD' && payment.exchangeRateUsed) {
+        chargedAmountNGN = Number(payment.amount) * Number(payment.exchangeRateUsed);
+      }
 
-        return {
-          ...payment,
-          chargedAmountNGN,
-        };
-      })
-    );
+      // Build subjects array
+      let subjects = [];
+      if (payment.enrollment) {
+        subjects = [payment.enrollment.subject.name];
+      } else if (payment.enrollmentGroupId) {
+        // For group payments, we'd need to fetch all enrollments - this is a simplified version
+        // In production, add a group relation or fetch separately
+      }
+
+      return {
+        id: payment.id,
+        reference: payment.providerReference,
+        receiptNumber: payment.receiptNumber,
+        amount: payment.amount,
+        currency: payment.currency,
+        status: payment.status,
+        createdAt: payment.createdAt,
+        paidAt: payment.paidAt,
+        parent: payment.parent,
+        student: payment.enrollment?.student || null,
+        subjects,
+        enrollmentGroupId: payment.enrollmentGroupId,
+        hasAdminNote: !!payment.adminNote,
+        failureReason: payment.status === 'FAILED' ? 'Payment failed or was declined' : null,
+        chargedAmountNGN,
+      };
+    });
 
     return {
       data: enrichedPayments,
@@ -2895,25 +2938,55 @@ export class AdminService {
       });
     }
 
-    // Calculate NGN equivalent
+    // Calculate NGN equivalent using exchangeRateUsed
     let chargedAmountNGN = Number(payment.amount);
-    if (payment.currency === 'USD') {
-      const rate = await prisma.exchangeRate.findFirst({
-        where: {
-          fromCurrency: 'USD',
-          toCurrency: 'NGN',
-        },
-        orderBy: { fetchedAt: 'desc' },
-      });
-      if (rate) {
-        chargedAmountNGN = Number(payment.amount) * Number(rate.rate);
-      }
+    if (payment.currency === 'USD' && payment.exchangeRateUsed) {
+      chargedAmountNGN = Number(payment.amount) * Number(payment.exchangeRateUsed);
     }
 
+    // Get audit entries from AdminActionLog for this payment
+    const auditLogs = await prisma.adminActionLog.findMany({
+      where: {
+        targetType: 'PAYMENT',
+        targetId: paymentId,
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        admin: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+          },
+        },
+      },
+    });
+
     return {
-      ...payment,
+      id: payment.id,
+      reference: payment.providerReference,
+      receiptNumber: payment.receiptNumber,
+      amount: payment.amount,
+      currency: payment.currency,
+      status: payment.status,
+      createdAt: payment.createdAt,
+      paidAt: payment.paidAt,
+      provider: payment.provider,
+      exchangeRateUsed: payment.exchangeRateUsed,
+      adminNote: payment.adminNote,
+      parent: payment.parent,
+      student: payment.enrollment?.student || null,
+      subject: payment.enrollment?.subject || null,
+      enrollmentGroupId: payment.enrollmentGroupId,
       chargedAmountNGN,
       timeline,
+      auditLogs: auditLogs.map(log => ({
+        id: log.id,
+        action: log.action,
+        admin: log.admin,
+        createdAt: log.createdAt,
+        details: log.details,
+      })),
     };
   }
 
@@ -3106,6 +3179,183 @@ export class AdminService {
         count: item._count,
       })),
     };
+  }
+
+  async getOutstandingPayments(filters?: { page?: number; limit?: number; sort?: string }) {
+    const { page = 1, limit = 20, sort = 'daysWaiting:desc' } = filters || {};
+    const skip = (page - 1) * limit;
+
+    // Find enrollments in PENDING_PAYMENT status
+    const pendingEnrollments = await prisma.enrollment.findMany({
+      where: {
+        status: 'PENDING_PAYMENT',
+      },
+      include: {
+        student: {
+          include: {
+            parent: true,
+          },
+        },
+        subject: true,
+      },
+    });
+
+    // Group by enrollmentGroupId
+    const groups = new Map<string, any[]>();
+    pendingEnrollments.forEach(e => {
+      const groupId = e.enrollmentGroupId || e.id; // Use enrollment ID as group ID if no group
+      if (!groups.has(groupId)) {
+        groups.set(groupId, []);
+      }
+      groups.get(groupId)!.push(e);
+    });
+
+    // Build group data
+    const outstandingData = await Promise.all(
+      Array.from(groups.entries()).map(async ([groupId, enrollments]) => {
+        const groupEnrollments = enrollments;
+        const firstEnrollment = groupEnrollments[0];
+        const parent = firstEnrollment.student.parent;
+        const student = firstEnrollment.student;
+        const subjects = groupEnrollments.map(e => e.subject.name);
+        const createdAt = firstEnrollment.createdAt;
+
+        // Calculate expected amount using price resolution
+        let expectedAmount = 0;
+        let expectedCurrency = 'USD';
+        for (const e of groupEnrollments) {
+          // Use existing price resolution logic (simplified)
+          expectedAmount += Number(e.yearlyPrice || 0) / 12; // Monthly default
+        }
+
+        // Calculate days waiting
+        const daysWaiting = Math.floor((Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
+
+        // Get latest payment attempt for this group
+        const latestPayment = await prisma.payment.findFirst({
+          where: {
+            OR: [
+              { enrollmentGroupId: groupId },
+              { enrollmentId: { in: groupEnrollments.map(e => e.id) } },
+            ],
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        return {
+          enrollmentGroupId: groupId,
+          parent: {
+            name: parent.fullName,
+            email: parent.email,
+            phone: parent.phone,
+          },
+          student: {
+            id: student.id,
+            fullName: student.fullName,
+          },
+          subjects,
+          expectedAmount,
+          expectedCurrency,
+          createdAt,
+          daysWaiting,
+          latestPaymentStatus: latestPayment?.status || null,
+        };
+      })
+    );
+
+    // Sort by daysWaiting
+    const [sortField, sortDirection] = sort.split(':');
+    if (sortField === 'daysWaiting') {
+      outstandingData.sort((a, b) => {
+        return sortDirection === 'asc'
+          ? a.daysWaiting - b.daysWaiting
+          : b.daysWaiting - a.daysWaiting;
+      });
+    }
+
+    // Paginate
+    const total = outstandingData.length;
+    const paginatedData = outstandingData.slice(skip, skip + limit);
+
+    return {
+      data: paginatedData,
+      page,
+      limit,
+      total,
+    };
+  }
+
+  async exportPaymentsCsv(filters?: {
+    status?: string;
+    currency?: string;
+    provider?: string;
+    parentId?: string;
+    studentId?: string;
+    subjectId?: string;
+    from?: string;
+    to?: string;
+    search?: string;
+  }, adminId?: string) {
+    // Get payments with same filters as getPayments, but no pagination
+    const result = await this.getPayments({ ...filters, page: 1, limit: 10000 });
+
+    if (result.data.length === 0) {
+      throw new Error('No payments to export');
+    }
+
+    // Build CSV header
+    const headers = [
+      'ID',
+      'Reference',
+      'Receipt Number',
+      'Amount',
+      'Currency',
+      'Status',
+      'Created At',
+      'Paid At',
+      'Parent Name',
+      'Parent Email',
+      'Student Name',
+      'Subjects',
+      'Enrollment Group ID',
+    ];
+
+    // Build CSV rows
+    const rows = result.data.map(p => [
+      p.id,
+      p.reference || '',
+      p.receiptNumber || '',
+      p.amount.toString(),
+      p.currency,
+      p.status,
+      p.createdAt.toISOString(),
+      p.paidAt?.toISOString() || '',
+      p.parent?.fullName || '',
+      p.parent?.email || '',
+      p.student?.fullName || '',
+      p.subjects?.join('; ') || '',
+      p.enrollmentGroupId || '',
+    ]);
+
+    // Combine header and rows
+    const csvContent = [headers, ...rows]
+      .map(row => row.map(cell => `"${cell}"`).join(','))
+      .join('\n');
+
+    // Log to admin action log
+    if (adminId) {
+      await prisma.adminActionLog.create({
+        data: {
+          adminId,
+          action: 'EXPORT_PAYMENTS_CSV',
+          targetType: 'PAYMENT',
+          targetId: 'bulk',
+          details: { count: result.data.length, filters },
+        },
+      });
+    }
+
+    return csvContent;
   }
 
   async getEmailDiagnostics() {
