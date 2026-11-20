@@ -11,6 +11,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationCoreService } from '../notifications/notification-core.service';
 import { PerformanceService } from '../performance/performance.service';
 import { TutorApplicationService } from '../tutor-application/tutor-application.service';
+import { SubjectsService } from '../subjects/subjects.service';
 import { GradeBandTier, NotificationCategory, NotificationType } from '@prisma/client';
 import { CreateSessionInput, RescheduleSessionInput } from '../sessions/sessions.validation';
 import { config } from '../../config/env.config';
@@ -23,6 +24,7 @@ export class AdminService {
   private notificationCore: NotificationCoreService;
   private performanceService: PerformanceService;
   private tutorApplicationService: TutorApplicationService;
+  private subjectsService: SubjectsService;
 
   constructor() {
     this.enrollmentsService = new EnrollmentsService();
@@ -32,6 +34,7 @@ export class AdminService {
     this.notificationCore = new NotificationCoreService();
     this.performanceService = new PerformanceService();
     this.tutorApplicationService = new TutorApplicationService();
+    this.subjectsService = new SubjectsService();
   }
 
   // Generate a 6-digit numeric PIN for student login
@@ -261,6 +264,7 @@ export class AdminService {
       pendingChangeRequests,
       unscheduledWithin24h,
       failedPayments,
+      outstandingEnrollments,
       unreadMessages,
     ] = await Promise.all([
       // Tutor applications with SUBMITTED status
@@ -300,9 +304,23 @@ export class AdminService {
           },
         },
       }),
-      // Failed payments
+      // Failed payments in the last 14 days
       prisma.payment.count({
-        where: { status: 'FAILED' },
+        where: {
+          status: 'FAILED',
+          createdAt: {
+            gte: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
+          },
+        },
+      }),
+      // Outstanding enrollments (PENDING_PAYMENT older than 24 hours)
+      prisma.enrollment.count({
+        where: {
+          status: 'PENDING_PAYMENT',
+          createdAt: {
+            lte: new Date(Date.now() - 24 * 60 * 60 * 1000),
+          },
+        },
       }),
       // Unread messages for this admin (from parents/tutors in admin-support threads)
       prisma.message.count({
@@ -342,6 +360,7 @@ export class AdminService {
       pendingChangeRequests,
       unscheduledWithin24h,
       failedPayments,
+      outstandingEnrollments,
       unreadMessages,
       unreadNewParents,
       unreadNewTutors,
@@ -2577,6 +2596,32 @@ export class AdminService {
       take: 10,
     });
 
+    // Get payment summary (total paid per currency, pending count)
+    const [totalPaidNGN, totalPaidUSD, pendingPaymentCount] = await Promise.all([
+      prisma.payment.aggregate({
+        where: {
+          parentId,
+          status: 'SUCCESS',
+          currency: 'NGN',
+        },
+        _sum: { amount: true },
+      }),
+      prisma.payment.aggregate({
+        where: {
+          parentId,
+          status: 'SUCCESS',
+          currency: 'USD',
+        },
+        _sum: { amount: true },
+      }),
+      prisma.payment.count({
+        where: {
+          parentId,
+          status: 'PENDING',
+        },
+      }),
+    ]);
+
     // Get complaint count
     const complaintCount = await prisma.complaint.count({
       where: { filedBy: parentId },
@@ -2636,6 +2681,9 @@ export class AdminService {
       children: enrichedChildren,
       recentPayments,
       complaintCount,
+      totalPaidNGN: Number(totalPaidNGN._sum.amount || 0),
+      totalPaidUSD: Number(totalPaidUSD._sum.amount || 0),
+      pendingPaymentCount,
     };
   }
 
@@ -2863,7 +2911,7 @@ export class AdminService {
       }
 
       // Build subjects array
-      let subjects = [];
+      let subjects: string[] = [];
       if (payment.enrollment) {
         subjects = [payment.enrollment.subject.name];
       } else if (payment.enrollmentGroupId) {
@@ -2951,15 +2999,6 @@ export class AdminService {
         targetId: paymentId,
       },
       orderBy: { createdAt: 'desc' },
-      include: {
-        admin: {
-          select: {
-            id: true,
-            fullName: true,
-            email: true,
-          },
-        },
-      },
     });
 
     return {
@@ -2983,7 +3022,7 @@ export class AdminService {
       auditLogs: auditLogs.map(log => ({
         id: log.id,
         action: log.action,
-        admin: log.admin,
+        adminId: log.adminId,
         createdAt: log.createdAt,
         details: log.details,
       })),
@@ -3193,7 +3232,14 @@ export class AdminService {
       include: {
         student: {
           include: {
-            parent: true,
+            user: {
+              select: {
+                id: true,
+                fullName: true,
+                email: true,
+                phone: true,
+              },
+            },
           },
         },
         subject: true,
@@ -3215,7 +3261,7 @@ export class AdminService {
       Array.from(groups.entries()).map(async ([groupId, enrollments]) => {
         const groupEnrollments = enrollments;
         const firstEnrollment = groupEnrollments[0];
-        const parent = firstEnrollment.student.parent;
+        const parent = firstEnrollment.student.user;
         const student = firstEnrollment.student;
         const subjects = groupEnrollments.map(e => e.subject.name);
         const createdAt = firstEnrollment.createdAt;
@@ -3223,9 +3269,33 @@ export class AdminService {
         // Calculate expected amount using price resolution
         let expectedAmount = 0;
         let expectedCurrency = 'USD';
+
         for (const e of groupEnrollments) {
-          // Use existing price resolution logic (simplified)
-          expectedAmount += Number(e.yearlyPrice || 0) / 12; // Monthly default
+          // Use SubjectsService to resolve price
+          const price = await this.subjectsService.resolveEnrollmentPrice(e.id);
+          let yearlyPriceNGN = price.yearlyPriceNGN;
+          let yearlyPriceUSD = price.yearlyPriceUSD;
+
+          let subNGN = yearlyPriceNGN;
+          let subUSD = yearlyPriceUSD;
+
+          switch (e.billingFrequency) {
+            case 'WEEKLY':
+              subNGN = yearlyPriceNGN / 52;
+              subUSD = yearlyPriceUSD / 52;
+              break;
+            case 'MONTHLY':
+              subNGN = yearlyPriceNGN / 12;
+              subUSD = yearlyPriceUSD / 12;
+              break;
+            case 'YEARLY':
+              break;
+          }
+
+          subNGN = Math.round(subNGN * 100) / 100;
+          subUSD = Math.round(subUSD * 100) / 100;
+
+          expectedAmount += subUSD; // Default to USD for display
         }
 
         // Calculate days waiting

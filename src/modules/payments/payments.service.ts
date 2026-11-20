@@ -7,6 +7,7 @@ import { AppError } from '../../middleware/error-handler.middleware';
 import { SubjectsService } from '../subjects/subjects.service';
 import { NotificationCoreService } from '../notifications/notification-core.service';
 import { NotificationCategory, NotificationType } from '@prisma/client';
+import { sendPaymentReceiptEmail } from '../../utils/email.util';
 
 export class PaymentsService {
   private paymentProvider: PaymentProvider;
@@ -436,6 +437,58 @@ export class PaymentsService {
         dedupeKey: `payment-success-${payment.id}`,
       });
 
+      // Send receipt email (fail silently if email fails)
+      try {
+        const parent = await prisma.user.findUnique({
+          where: { id: payment.parentId },
+          select: { fullName: true, email: true },
+        });
+
+        if (parent && parent.email) {
+          let studentNames: string[] = [];
+          let subjectNames: string[] = [];
+          let billingFrequency: string | undefined;
+
+          if (payment.enrollmentGroupId) {
+            const enrollments = await prisma.enrollment.findMany({
+              where: { enrollmentGroupId: payment.enrollmentGroupId },
+              include: { student: true, subject: true },
+            });
+            studentNames = [...new Set(enrollments.map(e => e.student.fullName))];
+            subjectNames = [...new Set(enrollments.map(e => e.subject.name))];
+            billingFrequency = enrollments[0]?.billingFrequency;
+          } else if (payment.enrollmentId) {
+            const enrollment = await prisma.enrollment.findUnique({
+              where: { id: payment.enrollmentId },
+              include: { student: true, subject: true },
+            });
+            if (enrollment) {
+              studentNames = [enrollment.student.fullName];
+              subjectNames = [enrollment.subject.name];
+              billingFrequency = enrollment.billingFrequency;
+            }
+          }
+
+          await sendPaymentReceiptEmail(
+            parent.email,
+            parent.fullName,
+            {
+              receiptNumber: updatedPayment.receiptNumber || 'N/A',
+              paidAt: updatedPayment.paidAt || new Date(),
+              amount: Number(updatedPayment.amount),
+              currency: updatedPayment.currency,
+              reference: updatedPayment.providerReference || '',
+              studentNames,
+              subjectNames,
+              billingFrequency,
+              platformName: 'Smart-Tutor',
+            }
+          );
+        }
+      } catch (emailError) {
+        logger.error({ paymentId: payment.id, error: emailError }, 'Failed to send receipt email - continuing without failing');
+      }
+
       // Notify admins on EXPIRED → SUCCESS transitions for review
       if (payment.status === 'EXPIRED') {
         await this.notificationCore.notify({
@@ -722,6 +775,58 @@ export class PaymentsService {
             dedupeKey: `payment-success-${payment.id}`,
           });
 
+          // Send receipt email (fail silently if email fails)
+          try {
+            const parent = await prisma.user.findUnique({
+              where: { id: payment.parentId },
+              select: { fullName: true, email: true },
+            });
+
+            if (parent && parent.email) {
+              let studentNames: string[] = [];
+              let subjectNames: string[] = [];
+              let billingFrequency: string | undefined;
+
+              if (payment.enrollmentGroupId) {
+                const enrollments = await prisma.enrollment.findMany({
+                  where: { enrollmentGroupId: payment.enrollmentGroupId },
+                  include: { student: true, subject: true },
+                });
+                studentNames = [...new Set(enrollments.map(e => e.student.fullName))];
+                subjectNames = [...new Set(enrollments.map(e => e.subject.name))];
+                billingFrequency = enrollments[0]?.billingFrequency;
+              } else if (payment.enrollmentId) {
+                const enrollment = await prisma.enrollment.findUnique({
+                  where: { id: payment.enrollmentId },
+                  include: { student: true, subject: true },
+                });
+                if (enrollment) {
+                  studentNames = [enrollment.student.fullName];
+                  subjectNames = [enrollment.subject.name];
+                  billingFrequency = enrollment.billingFrequency;
+                }
+              }
+
+              await sendPaymentReceiptEmail(
+                parent.email,
+                parent.fullName,
+                {
+                  receiptNumber: updatedPayment.receiptNumber || 'N/A',
+                  paidAt: updatedPayment.paidAt || new Date(),
+                  amount: Number(updatedPayment.amount),
+                  currency: updatedPayment.currency,
+                  reference: updatedPayment.providerReference || '',
+                  studentNames,
+                  subjectNames,
+                  billingFrequency,
+                  platformName: 'Smart-Tutor',
+                }
+              );
+            }
+          } catch (emailError) {
+            logger.error({ paymentId: payment.id, error: emailError }, 'Failed to send receipt email - continuing without failing');
+          }
+
           // Return updated payment with relations
           return await prisma.payment.findFirst({
             where: { id: updatedPayment.id },
@@ -782,9 +887,9 @@ export class PaymentsService {
     }
 
     // Get enrollment group data if group payment
-    let enrollments = [];
-    let subjects = [];
-    let students = [];
+    let enrollments: any[] = [];
+    let subjects: string[] = [];
+    let students: string[] = [];
     if (payment.enrollmentGroupId) {
       enrollments = await prisma.enrollment.findMany({
         where: { enrollmentGroupId: payment.enrollmentGroupId },

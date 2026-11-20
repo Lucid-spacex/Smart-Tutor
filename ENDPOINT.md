@@ -1658,7 +1658,7 @@
 **Response (200):** Current exchange rate
 
 ### GET /admin/badge-counts
-**Auth:** Required (ADMIN)  
+**Auth:** Required (ADMIN)
 **Response (200):**
 ```json
 {
@@ -1669,30 +1669,206 @@
   "pendingChangeRequests": number,
   "unscheduledWithin24h": number,
   "failedPayments": number,
+  "outstandingEnrollments": number,
   "unreadMessages": number,
   "unreadNewParents": number,
   "unreadNewTutors": number
 }
 ```
-**Note:** Counts that stay correct regardless of read state. `unreadNewParents` and `unreadNewTutors` are computed from unread notifications per admin with entityType=PARENT/TUTOR and type=USER_VERIFIED.
+**Note:** Counts that stay correct regardless of read state. `failedPayments` counts FAILED payments in the last 14 days. `outstandingEnrollments` counts PENDING_PAYMENT enrollments older than 24 hours. `unreadNewParents` and `unreadNewTutors` are computed from unread notifications per admin with entityType=PARENT/TUTOR and type=USER_VERIFIED.
 
 ### GET /admin/payments
-**Auth:** Required (ADMIN)  
-**Query:** `status`, `currency`, `provider`, `parentId`, `from`, `to`, `search`, `page`, `limit`  
-**Response (200):** Paginated payment list
+**Auth:** Required (ADMIN)
+**Query:** `status` (PENDING, SUCCESS, FAILED, EXPIRED, REFUNDED), `currency` (NGN, USD), `provider` (PAYSTACK), `parentId` (uuid), `studentId` (uuid), `subjectId` (uuid), `from` (ISO date), `to` (ISO date), `search` (string - searches reference, receiptNumber, parent name/email), `page` (number), `limit` (number, max 100), `sort` (string, e.g., createdAt:desc, paidAt:asc, amount:desc)
+**Response (200):**
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "reference": "paystack-reference",
+      "receiptNumber": "RCT-202601-000001",
+      "amount": 100,
+      "currency": "USD",
+      "status": "SUCCESS",
+      "createdAt": "ISO date",
+      "paidAt": "ISO date",
+      "parent": {
+        "id": "uuid",
+        "fullName": "John Doe",
+        "email": "john@example.com"
+      },
+      "student": {
+        "id": "uuid",
+        "fullName": "Jane Doe"
+      },
+      "subjects": ["Mathematics"],
+      "enrollmentGroupId": "uuid",
+      "hasAdminNote": true,
+      "failureReason": null,
+      "chargedAmountNGN": 150000
+    }
+  ],
+  "page": 1,
+  "limit": 20,
+  "total": 100
+}
+```
+**Note:** Never exposes gateway secrets, card numbers, or raw provider payloads. Admin responses never contain studentCode. Single-enrollment payments include student and subject; group payments need to fetch enrollments separately.
 
 ### GET /admin/payments/summary
-**Auth:** Required (ADMIN)  
-**Query:** `from`, `to`  
-**Response (200):** Revenue totals, counts by status, success rate, daily revenue chart
+**Auth:** Required (ADMIN)
+**Query:** `from` (ISO date), `to` (ISO date), `currency` (NGN, USD - optional, if specified filters by currency only)
+**Response (200):**
+```json
+{
+  "byCurrency": {
+    "NGN": {
+      "collectedTotal": 750000,
+      "pendingTotal": 150000,
+      "failedTotal": 50000,
+      "count": 50,
+      "successCount": 40,
+      "successRate": 80,
+      "averagePayment": 18750
+    },
+    "USD": {
+      "collectedTotal": 500,
+      "pendingTotal": 100,
+      "failedTotal": 50,
+      "count": 30,
+      "successCount": 25,
+      "successRate": 83.33,
+      "averagePayment": 20
+    }
+  },
+  "totalCollectedNGNEquivalent": 1500000,
+  "changePercent": 15.5,
+  "dailySeries": [
+    {
+      "date": "2026-01-15",
+      "collected": {
+        "NGN": 50000,
+        "USD": 50
+      }
+    }
+  ],
+  "bySubject": [
+    {
+      "subjectName": "Mathematics",
+      "collected": 300000,
+      "count": 20
+    }
+  ],
+  "byStatus": [
+    {
+      "status": "SUCCESS",
+      "count": 65
+    },
+    {
+      "status": "PENDING",
+      "count": 10
+    },
+    {
+      "status": "FAILED",
+      "count": 5
+    }
+  ]
+}
+```
+**Note:** Per-currency metrics (never mix NGN and USD in one total). `totalCollectedNGNEquivalent` uses `exchangeRateUsed` to convert USD to NGN. `changePercent` compares to previous period of equal length. `dailySeries` or `monthlySeries` (if range > 92 days) shows collected per currency per period. `bySubject` shows top 10 subjects by collected amount. `byStatus` shows counts by payment status.
+
+### GET /admin/payments/outstanding
+**Auth:** Required (ADMIN)
+**Query:** `page` (number), `limit` (number, max 100), `sort` (string, e.g., daysWaiting:desc)
+**Response (200):**
+```json
+{
+  "data": [
+    {
+      "enrollmentGroupId": "uuid",
+      "parent": {
+        "name": "John Doe",
+        "email": "john@example.com",
+        "phone": "+2348000000000"
+      },
+      "student": {
+        "id": "uuid",
+        "fullName": "Jane Doe"
+      },
+      "subjects": ["Mathematics", "English"],
+      "expectedAmount": 150,
+      "expectedCurrency": "USD",
+      "createdAt": "ISO date",
+      "daysWaiting": 5,
+      "latestPaymentStatus": "FAILED"
+    }
+  ],
+  "page": 1,
+  "limit": 20,
+  "total": 10
+}
+```
+**Note:** Returns enrollments in PENDING_PAYMENT status, grouped by enrollmentGroupId. Uses server-side price resolution (never client values). Sortable by daysWaiting. Paginated.
 
 ### GET /admin/payments/failed
-**Auth:** Required (ADMIN)  
-**Response (200):** Failed payments list
+**Auth:** Required (ADMIN)
+**Response (200):** Failed payments list (filtered by status=FAILED)
 
 ### GET /admin/payments/:id
-**Auth:** Required (ADMIN)  
-**Response (200):** Payment details with timeline and NGN equivalent
+**Auth:** Required (ADMIN)
+**Response (200):**
+```json
+{
+  "id": "uuid",
+  "reference": "paystack-reference",
+  "receiptNumber": "RCT-202601-000001",
+  "amount": 100,
+  "currency": "USD",
+  "status": "SUCCESS",
+  "createdAt": "ISO date",
+  "paidAt": "ISO date",
+  "provider": "PAYSTACK",
+  "exchangeRateUsed": 1500,
+  "adminNote": "Internal note",
+  "parent": {
+    "id": "uuid",
+    "fullName": "John Doe",
+    "email": "john@example.com",
+    "phone": "+2348000000000"
+  },
+  "student": {
+    "id": "uuid",
+    "fullName": "Jane Doe"
+  },
+  "subject": {
+    "id": "uuid",
+    "name": "Mathematics"
+  },
+  "enrollmentGroupId": "uuid",
+  "chargedAmountNGN": 150000,
+  "timeline": [
+    {
+      "event": "Initiated",
+      "timestamp": "ISO date"
+    },
+    {
+      "event": "Paid",
+      "timestamp": "ISO date"
+    }
+  ],
+  "auditLogs": [
+    {
+      "id": "uuid",
+      "action": "PAYMENT_REVERIFIED",
+      "adminId": "uuid",
+      "createdAt": "ISO date",
+      "details": {}
+    }
+  ]
+}
+```
+**Note:** Full payment details with NGN equivalent using exchangeRateUsed. Includes audit entries from AdminActionLog for this payment. Never exposes gateway secrets or raw card data. StudentCode never included.
 
 ### PATCH /admin/payments/:id/note
 **Auth:** Required (ADMIN)  
@@ -1765,8 +1941,71 @@
 **Response (200):** Paginated parent list
 
 ### GET /admin/parents/:id
-**Auth:** Required (ADMIN)  
-**Response (200):** Parent profile with children, enrollments, payments, complaints
+**Auth:** Required (ADMIN)
+**Response (200):**
+```json
+{
+  "id": "uuid",
+  "fullName": "John Doe",
+  "email": "john@example.com",
+  "phone": "+2348000000000",
+  "status": "ACTIVE",
+  "timezone": "Africa/Lagos",
+  "profilePicture": "url",
+  "createdAt": "ISO date",
+  "updatedAt": "ISO date",
+  "children": [
+    {
+      "id": "uuid",
+      "fullName": "Jane Doe",
+      "dateOfBirth": "ISO date",
+      "actualGrade": "GRADE_5",
+      "gradeLevel": "Grade 5",
+      "gradeBandTier": "G5_TO_G8",
+      "status": "ACTIVE",
+      "enrollments": [
+        {
+          "id": "uuid",
+          "subject": {
+            "id": "uuid",
+            "name": "Mathematics"
+          },
+          "status": "ACTIVE",
+          "effectivePriceNGN": 150000,
+          "effectivePriceUSD": 100,
+          "priceSource": "subject_price",
+          "hasPendingPayment": false
+        }
+      ]
+    }
+  ],
+  "recentPayments": [
+    {
+      "id": "uuid",
+      "reference": "paystack-ref",
+      "receiptNumber": "RCT-202601-000001",
+      "amount": 100,
+      "currency": "USD",
+      "status": "SUCCESS",
+      "createdAt": "ISO date",
+      "paidAt": "ISO date",
+      "enrollment": {
+        "student": {
+          "fullName": "Jane Doe"
+        },
+        "subject": {
+          "name": "Mathematics"
+        }
+      }
+    }
+  ],
+  "complaintCount": 0,
+  "totalPaidNGN": 750000,
+  "totalPaidUSD": 500,
+  "pendingPaymentCount": 2
+}
+```
+**Note:** Includes totalPaid per currency (SUCCESS payments only), pending payment count, last 10 payments with status, and complaint count. StudentCode never exposed to admins.
 
 ### GET /admin/users/suspended
 **Auth:** Required (ADMIN)  
@@ -2018,7 +2257,7 @@
 
 ### GET /payments
 **Auth:** Required (PARENT)  
-**Query:** `status` (PENDING, SUCCESS, FAILED, EXPIRED, REFUNDED), `page` (number), `limit` (number, max 100)  
+**Query:** `status` (PENDING, SUCCESS, FAILED, EXPIRED, REFUNDED), `from` (ISO date), `to` (ISO date), `page` (number), `limit` (number, max 100)  
 **Response (200):**
 ```json
 {
@@ -2026,6 +2265,7 @@
     {
       "id": "uuid",
       "reference": "paystack-reference",
+      "receiptNumber": "RCT-202601-000001",
       "amount": 100,
       "currency": "USD",
       "status": "SUCCESS",
@@ -2046,10 +2286,16 @@
   ],
   "page": 1,
   "limit": 20,
-  "total": 100
+  "total": 100,
+  "summary": {
+    "totalPaidPerCurrency": {
+      "USD": 500,
+      "NGN": 75000
+    }
+  }
 }
 ```
-**Note:** Returns the parent's payments from the database (not Paystack API), newest first. Never includes gateway secrets. Each row includes enrollment info (student fullName, subject name, billingFrequency, enrollmentGroupId).
+**Note:** Returns the parent's payments from the database (not Paystack API), newest first. Never includes gateway secrets. Each row includes enrollment info (student fullName, subject name, billingFrequency, enrollmentGroupId). Summary fields show total paid per currency (SUCCESS payments only).
 
 ### GET /payments/:id
 **Auth:** Required (owning parent or ADMIN)  
@@ -2064,6 +2310,8 @@
   "currency": "USD",
   "provider": "PAYSTACK",
   "providerReference": "paystack-reference",
+  "receiptNumber": "RCT-202601-000001",
+  "exchangeRateUsed": 1500,
   "status": "SUCCESS",
   "paidAt": "ISO date",
   "createdAt": "ISO date",
@@ -2092,18 +2340,45 @@
   ]
 }
 ```
-**Note:** For parents, includes a timeline of payment events. For admins, returns full payment details without timeline. Never includes gateway secrets.
+**Note:** For parents, includes a timeline of payment events. For admins, returns full payment details with audit logs. Never includes gateway secrets.
 
 ### GET /payments/verify/:reference
 **Auth:** Required (owning parent or ADMIN)  
 **Response (200):** Payment verification status
 
+### GET /payments/:id/receipt
+**Auth:** Required (owning parent or ADMIN)  
+**Response (200):**
+```json
+{
+  "receiptNumber": "RCT-202601-000001",
+  "paidAt": "ISO date",
+  "amount": 100,
+  "currency": "USD",
+  "reference": "paystack-reference",
+  "parentName": "John Doe",
+  "parentEmail": "john@example.com",
+  "studentNames": ["Jane Doe"],
+  "subjectNames": ["Mathematics"],
+  "billingFrequency": "MONTHLY",
+  "enrollmentGroupId": "uuid",
+  "platformName": "Smart-Tutor"
+}
+```
+**Error Codes:** 404 (Payment not found), 403 (Not authorized), 409 (Receipt only available for successful payments)
+
+### GET /payments/:id/receipt.pdf
+**Auth:** Required (owning parent or ADMIN)  
+**Response (200):** PDF file (Content-Type: application/pdf, Content-Disposition: attachment)  
+**Error Codes:** 404 (Payment not found), 403 (Not authorized), 409 (Receipt only available for successful payments)
+
 ### POST /payments/webhook
-**Auth:** None (webhook)  
-**Rate Limit:** Exempt  
-**Headers:** `x-paystack-signature` (HMAC-SHA512)  
-**Body:** Paystack webhook event (raw body captured before JSON parsing)  
+**Auth:** None (webhook)
+**Rate Limit:** Exempt
+**Headers:** `x-paystack-signature` (HMAC-SHA512)
+**Body:** Paystack webhook event (raw body captured before JSON parsing)
 **Response (200):** Webhook processed
+**Note:** On payment SUCCESS, assigns receiptNumber (RCT-YYYYMM-000123 format) and exchangeRateUsed (NGN per USD) exactly once (idempotent). Emails receipt to parent (fails silently if email fails). Creates PAYMENT_SUCCESS notification for parent with link to receipt, and PAYMENT_SUCCESS notification for admins. On payment FAILED, creates PAYMENT_FAILED notification for parent and admins. On EXPIRED→SUCCESS transition (via webhook or admin reverify), creates payment-expired-needs-review notification for admins.
 
 ---
 
