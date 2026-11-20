@@ -132,4 +132,48 @@ export class AssignmentsController {
       next(error);
     }
   };
+
+  getAssignmentSubmissions = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const userId = req.user?.userId;
+      const userRole = req.user?.role;
+      if (!userId || !userRole) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id } = req.params;
+      const submissions = await this.assignmentsService.getAssignmentSubmissions(id, userId, userRole);
+      res.status(200).json(submissions);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getSubmission = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const userId = req.user?.userId;
+      const userRole = req.user?.role;
+      if (!userId || !userRole) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id, submissionId } = req.params;
+      const submission = await this.assignmentsService.getSubmission(id, submissionId, userId, userRole);
+      res.status(200).json(submission);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getAssignmentSchema = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const schema = await this.assignmentsService.getAssignmentSchema(id);
+      res.status(200).json(schema);
+    } catch (error) {
+      next(error);
+    }
+  };
 }

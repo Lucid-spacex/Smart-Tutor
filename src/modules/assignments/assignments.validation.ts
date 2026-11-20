@@ -1,13 +1,26 @@
 import { z } from 'zod';
 
 export const createAssignmentSchema = z.object({
-  enrollmentId: z.string().uuid('Invalid enrollment ID'),
+  enrollmentId: z.string().uuid('Invalid enrollment ID').optional(),
+  enrollmentIds: z.array(z.string().uuid('Invalid enrollment ID')).optional(),
   title: z.string().min(1, 'Title is required').max(200, 'Title must be less than 200 characters'),
   description: z.string().optional(),
   type: z.enum(['ASSIGNMENT', 'CLASSWORK', 'TEST', 'HOMEWORK', 'PROJECT', 'QUIZ']),
   dueDate: z.string().refine((val) => !isNaN(Date.parse(val)), 'Invalid due date'),
   attachmentUrl: z.string().url('Invalid attachment URL').optional(),
   attachmentName: z.string().optional(),
+}).refine((data) => {
+  // Either enrollmentId or enrollmentIds must be provided
+  return !!(data.enrollmentId || (data.enrollmentIds && data.enrollmentIds.length > 0));
+}, {
+  message: 'Either enrollmentId or enrollmentIds must be provided',
+  path: ['enrollmentId'],
+}).refine((data) => {
+  // Cannot provide both
+  return !(data.enrollmentId && data.enrollmentIds && data.enrollmentIds.length > 0);
+}, {
+  message: 'Provide either enrollmentId or enrollmentIds, not both',
+  path: ['enrollmentIds'],
 });
 
 export const updateAssignmentSchema = z.object({

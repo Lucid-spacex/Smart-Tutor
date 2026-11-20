@@ -2212,16 +2212,61 @@
 
 ### POST /assignments
 **Auth:** Required (TUTOR, APPROVED)  
-**Body:** Assignment creation data  
-**Response (201):** Created assignment
+**Body:**
+```typescript
+{
+  enrollmentId?: string (uuid, single enrollment),
+  enrollmentIds?: string[] (uuid array, multiple enrollments),
+  title: string (min 1, max 200),
+  description?: string,
+  type: 'ASSIGNMENT' | 'CLASSWORK' | 'TEST' | 'HOMEWORK' | 'PROJECT' | 'QUIZ',
+  dueDate: string (ISO date),
+  attachmentUrl?: string,
+  attachmentName?: string
+}
+```
+**Response (201):** Created assignment (array if enrollmentIds provided)  
+**Note:** Provide either enrollmentId (single) or enrollmentIds[] (multiple). For multiple enrollments, creates one assignment per enrollment in a transaction. All students/parents are notified.
 
 ### GET /assignments
 **Auth:** Required  
-**Response (200):** Assignments based on role
+**Query:** `enrollmentId` (uuid), `status` (PENDING, COMPLETED, SUBMITTED, GRADED, CANCELLED)  
+**Response (200):** Assignments based on role (filtered by enrollment for tutors/students/parents)
 
 ### GET /assignments/:id
 **Auth:** Required  
 **Response (200):** Assignment details
+
+### GET /assignments/:id/schema
+**Auth:** Required  
+**Response (200):** Assignment schema with enrollment and subject info
+```json
+{
+  "id": "uuid",
+  "enrollmentId": "uuid",
+  "title": "string",
+  "description": "string",
+  "type": "ASSIGNMENT | CLASSWORK | TEST | HOMEWORK | PROJECT | QUIZ",
+  "dueDate": "ISO date",
+  "status": "PENDING | COMPLETED | SUBMITTED | GRADED | CANCELLED",
+  "attachmentUrl": "string | null",
+  "attachmentName": "string | null",
+  "createdAt": "ISO date",
+  "updatedAt": "ISO date",
+  "enrollment": {
+    "id": "uuid",
+    "subject": {
+      "id": "uuid",
+      "name": "string",
+      "category": "string"
+    },
+    "student": {
+      "id": "uuid",
+      "fullName": "string"
+    }
+  }
+}
+```
 
 ### PATCH /assignments/:id
 **Auth:** Required (TUTOR, APPROVED)  
@@ -2234,8 +2279,62 @@
 
 ### POST /assignments/:id/submit
 **Auth:** Required (STUDENT)  
-**Body:** Assignment submission with optional attachments  
-**Response (201):** Submitted assignment
+**Body:**
+```typescript
+{
+  textAnswer?: string,
+  attachmentUrl?: string,
+  attachmentName?: string
+}
+```
+**Response (201):** Submitted assignment  
+**Note:** Flips assignment.status to SUBMITTED. Cannot submit again (400 error if already submitted).
+
+### GET /assignments/:id/submissions
+**Auth:** Required (TUTOR for own assignments, PARENT for children's assignments)  
+**Response (200):** All submissions for the assignment
+```json
+[
+  {
+    "id": "uuid",
+    "assignmentId": "uuid",
+    "studentId": "uuid",
+    "textAnswer": "string | null",
+    "attachmentUrl": "string | null",
+    "attachmentName": "string | null",
+    "submittedAt": "ISO date",
+    "feedbackText": "string | null",
+    "feedbackAttachmentUrl": "string | null",
+    "feedbackAttachmentName": "string | null",
+    "gradedAt": "ISO date | null",
+    "student": {
+      "id": "uuid",
+      "fullName": "string",
+      "user": {
+        "id": "uuid",
+        "email": "string"
+      }
+    }
+  }
+]
+```
+
+### GET /assignments/:id/submissions/:submissionId
+**Auth:** Required (TUTOR for own assignments, STUDENT for own submissions, PARENT for children's submissions)  
+**Response (200):** Specific submission with full details
+
+### PATCH /assignments/:id/submissions/:submissionId/feedback
+**Auth:** Required (TUTOR, APPROVED)  
+**Body:**
+```typescript
+{
+  feedbackText?: string,
+  feedbackAttachmentUrl?: string,
+  feedbackAttachmentName?: string
+}
+```
+**Response (200):** Updated submission with feedback  
+**Note:** Sets gradedAt timestamp
 
 ---
 

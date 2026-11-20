@@ -14,77 +14,168 @@ export class AssignmentsService {
   }
 
   async createAssignment(tutorId: string, data: any) {
-    // Verify enrollment exists and tutor is assigned
-    const enrollment = await prisma.enrollment.findUnique({
-      where: { id: data.enrollmentId },
-      include: {
-        student: true,
-        subject: true,
-      },
-    });
+    // Handle single enrollment (legacy)
+    if (data.enrollmentId) {
+      const enrollment = await prisma.enrollment.findUnique({
+        where: { id: data.enrollmentId },
+        include: {
+          student: true,
+          subject: true,
+        },
+      });
 
-    if (!enrollment) {
-      throw new AppError(404, 'Enrollment not found');
-    }
+      if (!enrollment) {
+        throw new AppError(404, 'Enrollment not found');
+      }
 
-    if (enrollment.tutorId !== tutorId) {
-      throw new AppError(403, 'You are not assigned to this enrollment and cannot create assignments for it');
-    }
+      if (enrollment.tutorId !== tutorId) {
+        throw new AppError(403, 'You are not assigned to this enrollment and cannot create assignments for it');
+      }
 
-    let attachmentUrl = null;
-    let attachmentName = null;
+      let attachmentUrl = null;
+      let attachmentName = null;
 
-    // Upload attachment to Cloudinary if provided
-    if (data.attachmentBase64) {
-      const uploadResult = await this.cloudinaryService.uploadFile(
-        data.attachmentBase64,
-        'assignments',
-        'raw'
-      );
-      attachmentUrl = uploadResult.url;
-      attachmentName = uploadResult.filename;
-    }
+      // Upload attachment to Cloudinary if provided
+      if (data.attachmentBase64) {
+        const uploadResult = await this.cloudinaryService.uploadFile(
+          data.attachmentBase64,
+          'assignments',
+          'raw'
+        );
+        attachmentUrl = uploadResult.url;
+        attachmentName = uploadResult.filename;
+      }
 
-    const assignment = await prisma.assignment.create({
-      data: {
-        enrollmentId: data.enrollmentId,
-        createdBy: tutorId,
-        title: data.title,
-        description: data.description,
-        type: data.type,
-        dueDate: new Date(data.dueDate),
-        status: 'PENDING',
-        attachmentUrl,
-        attachmentName,
-      },
-      include: {
-        enrollment: {
-          include: {
-            student: true,
-            subject: true,
+      const assignment = await prisma.assignment.create({
+        data: {
+          enrollmentId: data.enrollmentId,
+          createdBy: tutorId,
+          title: data.title,
+          description: data.description,
+          type: data.type,
+          dueDate: new Date(data.dueDate),
+          status: 'PENDING',
+          attachmentUrl,
+          attachmentName,
+        },
+        include: {
+          enrollment: {
+            include: {
+              student: true,
+              subject: true,
+            },
           },
         },
-      },
-    });
+      });
 
-    // Notify student and parent of new assignment
-    const recipients = [assignment.enrollment.student.userId];
-    if (assignment.enrollment.student.parentId) {
-      recipients.push(assignment.enrollment.student.parentId);
+      // Notify student and parent of new assignment
+      const recipients = [assignment.enrollment.student.userId];
+      if (assignment.enrollment.student.parentId) {
+        recipients.push(assignment.enrollment.student.parentId);
+      }
+
+      await this.notificationCore.notify({
+        recipientIds: recipients,
+        type: 'ASSIGNMENT_POSTED' as NotificationType,
+        category: 'ASSIGNMENTS' as NotificationCategory,
+        title: 'New Assignment Posted',
+        body: `A new assignment "${assignment.title}" has been posted`,
+        entityType: 'Assignment',
+        entityId: assignment.id,
+        dedupeKey: `assignment-posted-${assignment.id}`,
+      });
+
+      return assignment;
     }
 
-    await this.notificationCore.notify({
-      recipientIds: recipients,
-      type: 'ASSIGNMENT_POSTED' as NotificationType,
-      category: 'ASSIGNMENTS' as NotificationCategory,
-      title: 'New Assignment Posted',
-      body: `A new assignment "${assignment.title}" has been posted`,
-      entityType: 'Assignment',
-      entityId: assignment.id,
-      dedupeKey: `assignment-posted-${assignment.id}`,
-    });
+    // Handle multiple enrollments (new)
+    if (data.enrollmentIds && data.enrollmentIds.length > 0) {
+      const enrollments = await prisma.enrollment.findMany({
+        where: { id: { in: data.enrollmentIds } },
+        include: {
+          student: true,
+          subject: true,
+        },
+      });
 
-    return assignment;
+      if (enrollments.length === 0) {
+        throw new AppError(404, 'No valid enrollments found');
+      }
+
+      // Verify tutor is assigned to all enrollments
+      const unauthorized = enrollments.find(e => e.tutorId !== tutorId);
+      if (unauthorized) {
+        throw new AppError(403, 'You are not assigned to all specified enrollments');
+      }
+
+      let attachmentUrl = null;
+      let attachmentName = null;
+
+      // Upload attachment to Cloudinary if provided
+      if (data.attachmentBase64) {
+        const uploadResult = await this.cloudinaryService.uploadFile(
+          data.attachmentBase64,
+          'assignments',
+          'raw'
+        );
+        attachmentUrl = uploadResult.url;
+        attachmentName = uploadResult.filename;
+      }
+
+      // Create one assignment per enrollment
+      const assignments = await prisma.$transaction(async (tx) => {
+        const createdAssignments = [];
+        for (const enrollment of enrollments) {
+          const assignment = await tx.assignment.create({
+            data: {
+              enrollmentId: enrollment.id,
+              createdBy: tutorId,
+              title: data.title,
+              description: data.description,
+              type: data.type,
+              dueDate: new Date(data.dueDate),
+              status: 'PENDING',
+              attachmentUrl,
+              attachmentName,
+            },
+            include: {
+              enrollment: {
+                include: {
+                  student: true,
+                  subject: true,
+                },
+              },
+            },
+          });
+          createdAssignments.push(assignment);
+        }
+        return createdAssignments;
+      });
+
+      // Notify all students and parents
+      const allRecipients = new Set<string>();
+      for (const assignment of assignments) {
+        allRecipients.add(assignment.enrollment.student.userId);
+        if (assignment.enrollment.student.parentId) {
+          allRecipients.add(assignment.enrollment.student.parentId);
+        }
+      }
+
+      await this.notificationCore.notify({
+        recipientIds: Array.from(allRecipients),
+        type: 'ASSIGNMENT_POSTED' as NotificationType,
+        category: 'ASSIGNMENTS' as NotificationCategory,
+        title: 'New Assignment Posted',
+        body: `A new assignment "${data.title}" has been posted`,
+        entityType: 'Assignment',
+        entityId: assignments[0].id,
+        dedupeKey: `assignment-posted-${assignments[0].id}`,
+      });
+
+      return assignments;
+    }
+
+    throw new AppError(400, 'Either enrollmentId or enrollmentIds must be provided');
   }
 
   async getAssignments(userId: string, userRole: string, filters?: { enrollmentId?: string; status?: string }) {
@@ -393,6 +484,12 @@ export class AssignmentsService {
       },
     });
 
+    // Update assignment status to SUBMITTED
+    await prisma.assignment.update({
+      where: { id: assignmentId },
+      data: { status: 'SUBMITTED' },
+    });
+
     // Notify tutor of assignment submission
     if (submission.assignment.enrollment.tutorId) {
       await this.notificationCore.notify({
@@ -478,5 +575,144 @@ export class AssignmentsService {
         },
       },
     });
+  }
+
+  async getAssignmentSubmissions(assignmentId: string, userId: string, userRole: string) {
+    const assignment = await prisma.assignment.findUnique({
+      where: { id: assignmentId },
+      include: {
+        enrollment: {
+          include: {
+            student: true,
+            subject: true,
+            tutor: true,
+          },
+        },
+      },
+    });
+
+    if (!assignment) {
+      throw new AppError(404, 'Assignment not found');
+    }
+
+    // Authorization: only the assigned tutor or the student's parent can view submissions
+    if (userRole === 'TUTOR' && assignment.createdBy !== userId) {
+      throw new AppError(403, 'Not authorized to view submissions for this assignment');
+    }
+
+    if (userRole === 'PARENT') {
+      const parentStudentIds = await prisma.student.findMany({
+        where: { parentId: userId },
+        select: { id: true },
+      });
+      const studentIds = parentStudentIds.map(s => s.id);
+      if (!studentIds.includes(assignment.enrollment.studentId)) {
+        throw new AppError(403, 'Not authorized to view submissions for this assignment');
+      }
+    }
+
+    const submissions = await prisma.assignmentSubmission.findMany({
+      where: { assignmentId },
+      include: {
+        student: {
+          include: {
+            user: true,
+          },
+        },
+      },
+      orderBy: { submittedAt: 'desc' },
+    });
+
+    return submissions;
+  }
+
+  async getSubmission(assignmentId: string, submissionId: string, userId: string, userRole: string) {
+    const submission = await prisma.assignmentSubmission.findUnique({
+      where: { id: submissionId },
+      include: {
+        student: {
+          include: {
+            user: true,
+          },
+        },
+        assignment: {
+          include: {
+            enrollment: {
+              include: {
+                subject: true,
+                tutor: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!submission) {
+      throw new AppError(404, 'Submission not found');
+    }
+
+    if (submission.assignmentId !== assignmentId) {
+      throw new AppError(400, 'Submission does not belong to this assignment');
+    }
+
+    // Authorization: only the assigned tutor, the submitting student, or the student's parent can view
+    if (userRole === 'TUTOR' && submission.assignment.createdBy !== userId) {
+      throw new AppError(403, 'Not authorized to view this submission');
+    }
+
+    if (userRole === 'STUDENT' && submission.student.userId !== userId) {
+      throw new AppError(403, 'Not authorized to view this submission');
+    }
+
+    if (userRole === 'PARENT' && submission.student.parentId !== userId) {
+      throw new AppError(403, 'Not authorized to view this submission');
+    }
+
+    return submission;
+  }
+
+  async getAssignmentSchema(assignmentId: string) {
+    const assignment = await prisma.assignment.findUnique({
+      where: { id: assignmentId },
+      include: {
+        enrollment: {
+          include: {
+            subject: true,
+            student: true,
+          },
+        },
+      },
+    });
+
+    if (!assignment) {
+      throw new AppError(404, 'Assignment not found');
+    }
+
+    return {
+      id: assignment.id,
+      enrollmentId: assignment.enrollmentId,
+      title: assignment.title,
+      description: assignment.description,
+      type: assignment.type,
+      dueDate: assignment.dueDate,
+      status: assignment.status,
+      attachmentUrl: assignment.attachmentUrl,
+      attachmentName: assignment.attachmentName,
+      createdAt: assignment.createdAt,
+      updatedAt: assignment.updatedAt,
+      enrollment: {
+        id: assignment.enrollment.id,
+        subject: {
+          id: assignment.enrollment.subject.id,
+          name: assignment.enrollment.subject.name,
+          category: assignment.enrollment.subject.category,
+        },
+        student: {
+          id: assignment.enrollment.student.id,
+          fullName: assignment.enrollment.student.fullName,
+        },
+      },
+    };
   }
 }

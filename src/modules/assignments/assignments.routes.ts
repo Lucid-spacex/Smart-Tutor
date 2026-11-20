@@ -24,6 +24,15 @@ router.delete('/:id', authenticate, requireRole('TUTOR'), validateUUID('id'), as
 // Student submits assignment
 router.post('/:id/submit', authenticate, requireRole('STUDENT'), validateUUID('id'), validate(submitAssignmentSchema), uploadAttachment, handleUploadError, assignmentsController.submitAssignment);
 
+// Get all submissions for an assignment
+router.get('/:id/submissions', authenticate, validateUUID('id'), assignmentsController.getAssignmentSubmissions);
+
+// Get a specific submission
+router.get('/:id/submissions/:submissionId', authenticate, validateUUID('id'), validateUUID('submissionId'), assignmentsController.getSubmission);
+
+// Get assignment schema
+router.get('/:id/schema', authenticate, validateUUID('id'), assignmentsController.getAssignmentSchema);
+
 // Tutor provides feedback on submission
 router.patch('/:id/submissions/:submissionId/feedback', authenticate, requireRole('TUTOR'), validateUUID('id'), validateUUID('submissionId'), validate(provideFeedbackSchema), uploadAttachment, handleUploadError, assignmentsController.provideFeedback);
 
