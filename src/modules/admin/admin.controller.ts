@@ -534,6 +534,7 @@ export class AdminController {
       const filters = {
         from: req.query.from as string,
         to: req.query.to as string,
+        currency: req.query.currency as string,
       };
       const summary = await this.adminService.getPaymentsSummary(filters);
       res.status(200).json(summary);

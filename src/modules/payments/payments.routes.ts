@@ -21,12 +21,18 @@ router.post('/webhook', rawBodyParser, paymentsController.processWebhook);
 // GET /payments — Tier 3 (Loose) via app.ts global read limiter.
 router.get('/', authenticate, requireRole('PARENT'), paymentsController.getPayments);
 
-// GET /payments/:id — Get payment by ID
-// Requires authentication: parent (owner) or admin
-router.get('/:id', authenticate, paymentsController.getPaymentById);
-
 // GET /payments/verify/:reference — Verify payment status by reference
 // Requires authentication: parent (owner) or admin
 router.get('/verify/:reference', authenticate, paymentsController.verifyPayment);
+
+// GET /payments/:id/receipt — Get JSON receipt (PARENT owner or ADMIN)
+router.get('/:id/receipt', authenticate, paymentsController.getReceipt);
+
+// GET /payments/:id/receipt.pdf — Get PDF receipt (PARENT owner or ADMIN)
+router.get('/:id/receipt.pdf', authenticate, paymentsController.getReceiptPdf);
+
+// GET /payments/:id — Get payment by ID
+// Requires authentication: parent (owner) or admin
+router.get('/:id', authenticate, paymentsController.getPaymentById);
 
 export default router;

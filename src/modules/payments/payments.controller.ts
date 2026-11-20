@@ -58,6 +58,8 @@ export class PaymentsController {
 
       const filters = {
         status: req.query.status as string,
+        from: req.query.from as string,
+        to: req.query.to as string,
         page: req.query.page ? parseInt(req.query.page as string) : 1,
         limit: req.query.limit ? parseInt(req.query.limit as string) : 20,
       };
@@ -106,6 +108,42 @@ export class PaymentsController {
         ? await this.paymentsService.getPaymentByIdWithTimeline(id, userId, userRole)
         : await this.paymentsService.getPaymentById(id, userId, userRole);
       res.status(200).json(payment);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getReceipt = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const userId = req.user?.userId;
+      const userRole = req.user?.role;
+      if (!userId || !userRole) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id } = req.params;
+      const receipt = await this.paymentsService.getReceipt(id, userId, userRole);
+      res.status(200).json(receipt);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getReceiptPdf = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const userId = req.user?.userId;
+      const userRole = req.user?.role;
+      if (!userId || !userRole) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id } = req.params;
+      const pdfBuffer = await this.paymentsService.getReceiptPdf(id, userId, userRole);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename=receipt-${id}.pdf`);
+      res.send(pdfBuffer);
     } catch (error) {
       next(error);
     }

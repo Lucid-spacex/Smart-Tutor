@@ -2098,33 +2098,70 @@ export class AdminService {
     }
 
     // Update payment status if successful
-    const updated = await prisma.payment.update({
-      where: { id: paymentId },
-      data: {
-        status: 'SUCCESS',
-        paidAt: new Date(result.data.paid_at),
-      },
-    });
+    const updated = await prisma.$transaction(async (tx) => {
+      const paidAt = new Date(result.data.paid_at);
 
-    // Activate enrollment(s) idempotently
-    let enrollmentIds: string[] = [];
-    if (payment.enrollmentId) {
-      await prisma.enrollment.update({
-        where: { id: payment.enrollmentId },
-        data: { status: 'ACTIVE' },
+      // Generate receipt number if not already assigned
+      let receiptNumber = payment.receiptNumber;
+      if (!receiptNumber) {
+        const yearMonth = paidAt.toISOString().slice(0, 7).replace('-', '');
+        const lastPayment = await tx.payment.findFirst({
+          where: {
+            receiptNumber: {
+              startsWith: `RCT-${yearMonth}-`,
+            },
+          },
+          orderBy: {
+            receiptNumber: 'desc',
+          },
+          select: {
+            receiptNumber: true,
+          },
+        });
+
+        let nextSequence = 1;
+        if (lastPayment && lastPayment.receiptNumber) {
+          const lastSequence = parseInt(lastPayment.receiptNumber.split('-')[2], 10);
+          nextSequence = lastSequence + 1;
+        }
+        receiptNumber = `RCT-${yearMonth}-${String(nextSequence).padStart(6, '0')}`;
+      }
+
+      // Get exchange rate (placeholder)
+      const exchangeRate = payment.currency === 'NGN' ? 1 : (payment.currency === 'USD' ? 1500 : null);
+
+      const p = await tx.payment.update({
+        where: { id: paymentId },
+        data: {
+          status: 'SUCCESS',
+          paidAt,
+          receiptNumber,
+          exchangeRateUsed: exchangeRate || undefined,
+        },
       });
-      enrollmentIds.push(payment.enrollmentId);
-    } else if (payment.enrollmentGroupId) {
-      const enrollments = await prisma.enrollment.findMany({
-        where: { enrollmentGroupId: payment.enrollmentGroupId },
-        select: { id: true },
-      });
-      await prisma.enrollment.updateMany({
-        where: { enrollmentGroupId: payment.enrollmentGroupId },
-        data: { status: 'ACTIVE' },
-      });
-      enrollmentIds = enrollments.map(e => e.id);
-    }
+
+      // Activate enrollment(s) idempotently
+      let enrollmentIds: string[] = [];
+      if (payment.enrollmentId) {
+        await tx.enrollment.update({
+          where: { id: payment.enrollmentId },
+          data: { status: 'ACTIVE' },
+        });
+        enrollmentIds.push(payment.enrollmentId);
+      } else if (payment.enrollmentGroupId) {
+        const enrollments = await tx.enrollment.findMany({
+          where: { enrollmentGroupId: payment.enrollmentGroupId },
+          select: { id: true },
+        });
+        await tx.enrollment.updateMany({
+          where: { enrollmentGroupId: payment.enrollmentGroupId },
+          data: { status: 'ACTIVE' },
+        });
+        enrollmentIds = enrollments.map(e => e.id);
+      }
+
+      return p;
+    });
 
     // Log to admin action log
     await prisma.adminActionLog.create({
@@ -2880,78 +2917,193 @@ export class AdminService {
     };
   }
 
-  async getPaymentsSummary(filters?: { from?: string; to?: string }) {
-    const { from, to } = filters || {};
+  async getPaymentsSummary(filters?: { from?: string; to?: string; currency?: string }) {
+    const { from, to, currency } = filters || {};
 
-    const where: any = {
-      status: 'SUCCESS',
+    // Determine date range
+    const startDate = from ? new Date(from) : new Date(new Date().setDate(new Date().getDate() - 30));
+    const endDate = to ? new Date(to) : new Date();
+
+    // Calculate previous period of equal length
+    const daysDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+    const prevStartDate = new Date(startDate.getTime() - daysDiff * 24 * 60 * 60 * 1000);
+    const prevEndDate = new Date(endDate.getTime() - daysDiff * 24 * 60 * 60 * 1000);
+
+    const useMonthlySeries = daysDiff > 92;
+
+    // Base where clause for current period
+    const currentWhere: any = {
+      paidAt: {
+        gte: startDate,
+        lte: endDate,
+      },
     };
-
-    if (from || to) {
-      where.paidAt = {};
-      if (from) {
-        where.paidAt.gte = new Date(from);
-      }
-      if (to) {
-        where.paidAt.lte = new Date(to);
-      }
+    if (currency) {
+      currentWhere.currency = currency;
     }
 
-    // Total revenue by currency
-    const revenueByCurrency = await prisma.payment.groupBy({
-      by: ['currency'],
-      where,
-      _sum: {
-        amount: true,
+    // Base where clause for previous period
+    const prevWhere: any = {
+      paidAt: {
+        gte: prevStartDate,
+        lte: prevEndDate,
       },
-    });
+    };
+    if (currency) {
+      prevWhere.currency = currency;
+    }
 
-    // Counts by status
-    const countsByStatus = await prisma.payment.groupBy({
-      by: ['status'],
-      where: from || to ? { createdAt: {} } : undefined,
-      ...(from && { where: { ...where, createdAt: { gte: new Date(from) } } }),
-      ...(to && { where: { ...where, createdAt: { lte: new Date(to) } } }),
+    // Per currency metrics
+    const currencyWhere = currency ? { ...currentWhere, currency } : currentWhere;
+    const paymentsByCurrency = await prisma.payment.groupBy({
+      by: ['currency', 'status'],
+      where: currencyWhere,
+      _sum: { amount: true },
       _count: true,
     });
 
-    // Revenue per day (for chart)
-    const revenuePerDay = await prisma.$queryRaw<Array<{ date: string; amount: bigint }>>`
-      SELECT DATE("paidAt") as date, SUM(amount) as amount
-      FROM "Payment"
-      WHERE status = 'SUCCESS'
-      ${from ? `AND "paidAt" >= ${new Date(from).toISOString()}` : ''}
-      ${to ? `AND "paidAt" <= ${new Date(to).toISOString()}` : ''}
-      GROUP BY DATE("paidAt")
-      ORDER BY date DESC
-      LIMIT 30
+    const currencyMetrics: Record<string, any> = {};
+    paymentsByCurrency.forEach(item => {
+      if (!currencyMetrics[item.currency]) {
+        currencyMetrics[item.currency] = {
+          collectedTotal: 0,
+          pendingTotal: 0,
+          failedTotal: 0,
+          count: 0,
+          successCount: 0,
+        };
+      }
+      const amount = Number(item._sum.amount || 0);
+      const count = item._count;
+      currencyMetrics[item.currency].count += count;
+
+      if (item.status === 'SUCCESS') {
+        currencyMetrics[item.currency].collectedTotal += amount;
+        currencyMetrics[item.currency].successCount += count;
+      } else if (item.status === 'PENDING') {
+        currencyMetrics[item.currency].pendingTotal += amount;
+      } else if (item.status === 'FAILED') {
+        currencyMetrics[item.currency].failedTotal += amount;
+      }
+    });
+
+    // Calculate success rate and average payment per currency
+    Object.keys(currencyMetrics).forEach(curr => {
+      const metrics = currencyMetrics[curr];
+      metrics.successRate = metrics.count > 0 ? (metrics.successCount / metrics.count) * 100 : 0;
+      metrics.averagePayment = metrics.successCount > 0 ? metrics.collectedTotal / metrics.successCount : 0;
+    });
+
+    // Total NGN equivalent using exchangeRateUsed
+    const successPayments = await prisma.payment.findMany({
+      where: { ...currentWhere, status: 'SUCCESS' },
+      select: { amount: true, currency: true, exchangeRateUsed: true },
+    });
+
+    let totalCollectedNGNEquivalent = 0;
+    successPayments.forEach(p => {
+      const amount = Number(p.amount);
+      if (p.currency === 'NGN') {
+        totalCollectedNGNEquivalent += amount;
+      } else if (p.currency === 'USD' && p.exchangeRateUsed) {
+        totalCollectedNGNEquivalent += amount * Number(p.exchangeRateUsed);
+      }
+    });
+
+    // Previous period total for comparison
+    const prevPayments = await prisma.payment.findMany({
+      where: { ...prevWhere, status: 'SUCCESS' },
+      select: { amount: true, currency: true, exchangeRateUsed: true },
+    });
+
+    let prevTotalNGN = 0;
+    prevPayments.forEach(p => {
+      const amount = Number(p.amount);
+      if (p.currency === 'NGN') {
+        prevTotalNGN += amount;
+      } else if (p.currency === 'USD' && p.exchangeRateUsed) {
+        prevTotalNGN += amount * Number(p.exchangeRateUsed);
+      }
+    });
+
+    const changePercent = prevTotalNGN > 0
+      ? ((totalCollectedNGNEquivalent - prevTotalNGN) / prevTotalNGN) * 100
+      : 0;
+
+    // Time series (daily or monthly)
+    let timeSeries: any[];
+    if (useMonthlySeries) {
+      timeSeries = await prisma.$queryRaw<Array<{ period: string; currency: string; amount: bigint }>>`
+        SELECT TO_CHAR("paidAt", 'YYYY-MM') as period, currency, SUM(amount) as amount
+        FROM "Payment"
+        WHERE status = 'SUCCESS'
+        ${from ? `AND "paidAt" >= ${startDate.toISOString()}` : ''}
+        ${to ? `AND "paidAt" <= ${endDate.toISOString()}` : ''}
+        ${currency ? `AND currency = ${currency}` : ''}
+        GROUP BY TO_CHAR("paidAt", 'YYYY-MM'), currency
+        ORDER BY period DESC
+      `;
+    } else {
+      timeSeries = await prisma.$queryRaw<Array<{ period: string; currency: string; amount: bigint }>>`
+        SELECT DATE("paidAt") as period, currency, SUM(amount) as amount
+        FROM "Payment"
+        WHERE status = 'SUCCESS'
+        ${from ? `AND "paidAt" >= ${startDate.toISOString()}` : ''}
+        ${to ? `AND "paidAt" <= ${endDate.toISOString()}` : ''}
+        ${currency ? `AND currency = ${currency}` : ''}
+        GROUP BY DATE("paidAt"), currency
+        ORDER BY period DESC
+      `;
+    }
+
+    // Group time series by period
+    const seriesByPeriod: Record<string, Record<string, number>> = {};
+    timeSeries.forEach(item => {
+      if (!seriesByPeriod[item.period]) {
+        seriesByPeriod[item.period] = {};
+      }
+      seriesByPeriod[item.period][item.currency] = Number(item.amount);
+    });
+
+    const series = Object.entries(seriesByPeriod).map(([period, amounts]) => ({
+      date: period,
+      collected: amounts,
+    }));
+
+    // By subject (top 10)
+    const bySubject = await prisma.$queryRaw<Array<{ subjectName: string; collected: bigint; count: bigint }>>`
+      SELECT s.name as "subjectName", SUM(p.amount) as collected, COUNT(*) as count
+      FROM "Payment" p
+      JOIN "Enrollment" e ON p."enrollmentId" = e.id
+      JOIN "Subject" s ON e."subjectId" = s.id
+      WHERE p.status = 'SUCCESS'
+      ${from ? `AND p."paidAt" >= ${startDate.toISOString()}` : ''}
+      ${to ? `AND p."paidAt" <= ${endDate.toISOString()}` : ''}
+      GROUP BY s.name
+      ORDER BY collected DESC
+      LIMIT 10
     `;
 
-    const totalRevenue = revenueByCurrency.reduce((sum, item) => {
-      return sum + Number(item._sum.amount || 0);
-    }, 0);
-
-    const totalPayments = countsByStatus.reduce((sum, item) => {
-      return sum + item._count;
-    }, 0);
-
-    const successPayments = countsByStatus.find(item => item.status === 'SUCCESS')?._count || 0;
-    const successRate = totalPayments > 0 ? (successPayments / totalPayments) * 100 : 0;
+    // By status counts
+    const byStatus = await prisma.payment.groupBy({
+      by: ['status'],
+      where: currentWhere,
+      _count: true,
+    });
 
     return {
-      totalRevenue,
-      revenueByCurrency: revenueByCurrency.map(item => ({
-        currency: item.currency,
-        amount: Number(item._sum.amount || 0),
+      byCurrency: currencyMetrics,
+      totalCollectedNGNEquivalent,
+      changePercent: Math.round(changePercent * 100) / 100,
+      series: useMonthlySeries ? { monthlySeries: series } : { dailySeries: series },
+      bySubject: bySubject.map(item => ({
+        subjectName: item.subjectName,
+        collected: Number(item.collected),
+        count: Number(item.count),
       })),
-      countsByStatus: countsByStatus.map(item => ({
+      byStatus: byStatus.map(item => ({
         status: item.status,
         count: item._count,
-      })),
-      successRate: Math.round(successRate * 100) / 100,
-      revenuePerDay: revenuePerDay.map(item => ({
-        date: item.date,
-        amount: Number(item.amount),
       })),
     };
   }

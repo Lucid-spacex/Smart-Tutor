@@ -515,6 +515,8 @@ model Payment {
   providerReference String?
   status            PaymentStatus   @default(PENDING)
   paidAt            DateTime?
+  receiptNumber     String?         @unique
+  exchangeRateUsed  Decimal?        @db.Decimal(10, 4) // NGN per USD at payment time
   deletedAt         DateTime?
   adminNote          String?
   createdAt         DateTime        @default(now())
@@ -525,6 +527,9 @@ model Payment {
   @@index([status])
   @@index([provider])
   @@index([deletedAt])
+  @@index([receiptNumber])
+  @@index([createdAt])
+  @@index([currency])
 }
 
 model ProgressReport {

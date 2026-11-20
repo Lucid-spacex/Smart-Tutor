@@ -490,6 +490,21 @@ export class AssignmentsService {
       data: { status: 'SUBMITTED' },
     });
 
+    // Create ScoredItem for assignment submission
+    await prisma.scoredItem.create({
+      data: {
+        type: 'ASSIGNMENT',
+        studentId: student.id,
+        enrollmentId: assignment.enrollmentId,
+        sourceType: 'AssignmentSubmission',
+        sourceId: submission.id,
+        tutorId: assignment.enrollment.tutorId || null,
+        score: 0, // Not graded yet
+        maxScore: 100, // Default max score
+        comment: 'Assignment submitted - pending grading',
+      },
+    });
+
     // Notify tutor of assignment submission
     if (submission.assignment.enrollment.tutorId) {
       await this.notificationCore.notify({

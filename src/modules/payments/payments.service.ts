@@ -19,6 +19,54 @@ export class PaymentsService {
     this.notificationCore = new NotificationCoreService();
   }
 
+  /**
+   * Generate a unique receipt number in format RCT-YYYYMM-000123
+   * Uses a sequential counter per month
+   */
+  private async generateReceiptNumber(tx: any, paidAt: Date): Promise<string> {
+    const yearMonth = paidAt.toISOString().slice(0, 7).replace('-', ''); // YYYYMM
+
+    // Find the highest receipt number for this month
+    const lastPayment = await tx.payment.findFirst({
+      where: {
+        receiptNumber: {
+          startsWith: `RCT-${yearMonth}-`,
+        },
+      },
+      orderBy: {
+        receiptNumber: 'desc',
+      },
+      select: {
+        receiptNumber: true,
+      },
+    });
+
+    let nextSequence = 1;
+    if (lastPayment && lastPayment.receiptNumber) {
+      const lastSequence = parseInt(lastPayment.receiptNumber.split('-')[2], 10);
+      nextSequence = lastSequence + 1;
+    }
+
+    // Format: RCT-YYYYMM-000123 (6-digit sequence)
+    return `RCT-${yearMonth}-${String(nextSequence).padStart(6, '0')}`;
+  }
+
+  /**
+   * Get current exchange rate for NGN per USD
+   * This is a placeholder - in production, integrate with a real exchange rate API
+   */
+  private async getExchangeRate(currency: string): Promise<number | null> {
+    if (currency === 'NGN') {
+      return 1; // NGN to NGN is 1:1
+    }
+    if (currency === 'USD') {
+      // Placeholder: use a fixed rate or fetch from external API
+      // For now, returning a reasonable default
+      return 1500; // NGN per USD (placeholder)
+    }
+    return null;
+  }
+
   async initiatePayment(parentId: string, data: InitiatePaymentInput) {
     // -------------------------------------------------------------------------
     // Path A: Group Payment (data.enrollmentGroupId provided)
@@ -321,11 +369,22 @@ export class PaymentsService {
 
     // Atomic transaction: update payment status AND activate enrollment(s)
     const updatedPayment = await prisma.$transaction(async (tx) => {
+      const paidAt = isSuccess ? new Date() : null;
+      const exchangeRate = isSuccess ? await this.getExchangeRate(payment.currency) : null;
+
+      // Generate receipt number on first success
+      let receiptNumber = payment.receiptNumber;
+      if (isSuccess && !receiptNumber) {
+        receiptNumber = await this.generateReceiptNumber(tx, paidAt!);
+      }
+
       const p = await tx.payment.update({
         where: { id: payment.id },
         data: {
           status: isSuccess ? 'SUCCESS' : 'FAILED',
-          paidAt: isSuccess ? new Date() : null,
+          paidAt,
+          receiptNumber: receiptNumber || undefined,
+          exchangeRateUsed: exchangeRate || undefined,
         },
       });
 
@@ -418,13 +477,18 @@ export class PaymentsService {
     return updatedPayment;
   }
 
-  async getPaymentsByParent(parentId: string, filters: { status?: string; page?: number; limit?: number } = {}) {
-    const { status, page = 1, limit = 20 } = filters;
+  async getPaymentsByParent(parentId: string, filters: { status?: string; page?: number; limit?: number; from?: string; to?: string } = {}) {
+    const { status, page = 1, limit = 20, from, to } = filters;
     const skip = (page - 1) * limit;
 
     const where: any = { parentId };
     if (status) {
       where.status = status;
+    }
+    if (from || to) {
+      where.createdAt = {};
+      if (from) where.createdAt.gte = new Date(from);
+      if (to) where.createdAt.lte = new Date(to);
     }
 
     const [payments, total] = await Promise.all([
@@ -449,6 +513,7 @@ export class PaymentsService {
     const enrichedPayments = payments.map(payment => ({
       id: payment.id,
       reference: payment.providerReference,
+      receiptNumber: payment.receiptNumber,
       amount: payment.amount,
       currency: payment.currency,
       status: payment.status,
@@ -467,11 +532,21 @@ export class PaymentsService {
       } : null,
     }));
 
+    // Calculate summary totals (SUCCESS only)
+    const successPayments = payments.filter(p => p.status === 'SUCCESS');
+    const totalPaidPerCurrency = successPayments.reduce((acc, p) => {
+      acc[p.currency] = (acc[p.currency] || 0) + Number(p.amount);
+      return acc;
+    }, {} as Record<string, number>);
+
     return {
       data: enrichedPayments,
       page,
       limit,
       total,
+      summary: {
+        totalPaidPerCurrency,
+      },
     };
   }
 
@@ -591,11 +666,22 @@ export class PaymentsService {
         if (verification.status === 'success') {
           // Update payment status in database
           const updatedPayment = await prisma.$transaction(async (tx) => {
+            const paidAt = new Date();
+            const exchangeRate = await this.getExchangeRate(payment.currency);
+
+            // Generate receipt number on first success
+            let receiptNumber = payment.receiptNumber;
+            if (!receiptNumber) {
+              receiptNumber = await this.generateReceiptNumber(tx, paidAt);
+            }
+
             const p = await tx.payment.update({
               where: { id: payment.id },
               data: {
                 status: 'SUCCESS',
-                paidAt: new Date(),
+                paidAt,
+                receiptNumber,
+                exchangeRateUsed: exchangeRate || undefined,
               },
             });
 
@@ -662,5 +748,122 @@ export class PaymentsService {
     }
 
     return payment;
+  }
+
+  /**
+   * Get receipt data for a payment (PARENT owner or ADMIN only)
+   */
+  async getReceipt(paymentId: string, userId: string, userRole: string) {
+    const payment = await prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: {
+        parent: true,
+        enrollment: {
+          include: {
+            student: true,
+            subject: true,
+          },
+        },
+      },
+    });
+
+    if (!payment) {
+      throw new AppError(404, 'Payment not found');
+    }
+
+    // Only parent owner or admin can access
+    if (userRole !== 'ADMIN' && payment.parentId !== userId) {
+      throw new AppError(403, 'Not authorized to view this receipt');
+    }
+
+    // Only SUCCESS payments have receipts
+    if (payment.status !== 'SUCCESS') {
+      throw new AppError(409, 'Receipt only available for successful payments');
+    }
+
+    // Get enrollment group data if group payment
+    let enrollments = [];
+    let subjects = [];
+    let students = [];
+    if (payment.enrollmentGroupId) {
+      enrollments = await prisma.enrollment.findMany({
+        where: { enrollmentGroupId: payment.enrollmentGroupId },
+        include: {
+          student: true,
+          subject: true,
+        },
+      });
+      subjects = [...new Set(enrollments.map(e => e.subject.name))];
+      students = enrollments.map(e => e.student.fullName);
+    } else if (payment.enrollment) {
+      subjects = [payment.enrollment.subject.name];
+      students = [payment.enrollment.student.fullName];
+    }
+
+    return {
+      receiptNumber: payment.receiptNumber,
+      paidAt: payment.paidAt,
+      amount: payment.amount,
+      currency: payment.currency,
+      reference: payment.providerReference,
+      parentName: payment.parent.fullName,
+      parentEmail: payment.parent.email,
+      studentNames: students,
+      subjectNames: subjects,
+      billingFrequency: payment.enrollment?.billingFrequency || null,
+      enrollmentGroupId: payment.enrollmentGroupId,
+      platformName: 'Smart-Tutor',
+    };
+  }
+
+  /**
+   * Generate PDF receipt for a payment
+   */
+  async getReceiptPdf(paymentId: string, userId: string, userRole: string): Promise<Buffer> {
+    const receiptData = await this.getReceipt(paymentId, userId, userRole);
+
+    const PDFDocument = require('pdfkit');
+    const doc = new PDFDocument({ margin: 50 });
+    const chunks: Buffer[] = [];
+
+    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+
+    doc.fontSize(20).text('PAYMENT RECEIPT', { align: 'center' });
+    doc.moveDown();
+    doc.fontSize(12).text(`Receipt Number: ${receiptData.receiptNumber}`, { align: 'center' });
+    doc.text(`Date: ${receiptData.paidAt?.toLocaleDateString()}`, { align: 'center' });
+    doc.moveDown();
+    doc.fontSize(10).text(`Platform: ${receiptData.platformName}`, { align: 'center' });
+    doc.moveDown();
+
+    doc.fontSize(14).text('Parent Information');
+    doc.fontSize(10).text(`Name: ${receiptData.parentName}`);
+    doc.text(`Email: ${receiptData.parentEmail}`);
+    doc.moveDown();
+
+    doc.fontSize(14).text('Student(s)');
+    receiptData.studentNames.forEach(name => doc.fontSize(10).text(`- ${name}`));
+    doc.moveDown();
+
+    doc.fontSize(14).text('Subject(s)');
+    receiptData.subjectNames.forEach(name => doc.fontSize(10).text(`- ${name}`));
+    doc.moveDown();
+
+    doc.fontSize(14).text('Payment Details');
+    doc.fontSize(10).text(`Amount: ${receiptData.currency} ${receiptData.amount}`);
+    doc.text(`Reference: ${receiptData.reference}`);
+    if (receiptData.billingFrequency) {
+      doc.text(`Billing Frequency: ${receiptData.billingFrequency}`);
+    }
+    if (receiptData.enrollmentGroupId) {
+      doc.text(`Enrollment Group: ${receiptData.enrollmentGroupId}`);
+    }
+
+    doc.end();
+
+    return new Promise((resolve, reject) => {
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+    });
   }
 }
