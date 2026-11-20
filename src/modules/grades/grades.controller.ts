@@ -19,7 +19,14 @@ export class GradesController {
         return;
       }
 
-      const grade = await this.gradesService.createDraftGrade(tutorId, req.body);
+      // Convert date strings to Date objects
+      const gradeData = {
+        ...req.body,
+        periodStart: new Date(req.body.periodStart),
+        periodEnd: new Date(req.body.periodEnd),
+      };
+
+      const grade = await this.gradesService.createDraftGrade(tutorId, gradeData);
       res.status(201).json(grade);
     } catch (error) {
       next(error);
@@ -35,7 +42,15 @@ export class GradesController {
       }
 
       const { id } = req.params;
-      const grade = await this.gradesService.updateGrade(id, tutorId, req.body);
+
+      // Convert date strings to Date objects if provided
+      const gradeData = {
+        ...req.body,
+        periodStart: req.body.periodStart ? new Date(req.body.periodStart) : undefined,
+        periodEnd: req.body.periodEnd ? new Date(req.body.periodEnd) : undefined,
+      };
+
+      const grade = await this.gradesService.updateGrade(id, tutorId, gradeData);
       res.status(200).json(grade);
     } catch (error) {
       next(error);
