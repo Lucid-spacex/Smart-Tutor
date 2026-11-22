@@ -36,6 +36,7 @@ export class TutorApplicationService {
           country: '',
           city: '',
           highestQualification: 'OTHER',
+          expectedMonthlySalaryNGN: 10000, // Default minimum value for draft
           levels: [],
           yearsOfExperience: 0,
           whyTeach: '',
@@ -78,6 +79,7 @@ export class TutorApplicationService {
     if (!application.country) missingFields.push('country');
     if (!application.city) missingFields.push('city');
     if (!application.highestQualification) missingFields.push('highestQualification');
+    if (!application.expectedMonthlySalaryNGN || application.expectedMonthlySalaryNGN < 10000 || application.expectedMonthlySalaryNGN > 5000000) missingFields.push('expectedMonthlySalaryNGN');
     if (application.subjects.length === 0) missingFields.push('subjects');
     if (application.levels.length === 0) missingFields.push('levels');
     if (application.yearsOfExperience === undefined || application.yearsOfExperience === null) missingFields.push('yearsOfExperience');
@@ -307,6 +309,7 @@ export class TutorApplicationService {
     if (!application.country) missingFields.push('country');
     if (!application.city) missingFields.push('city');
     if (!application.highestQualification) missingFields.push('highestQualification');
+    if (!application.expectedMonthlySalaryNGN || application.expectedMonthlySalaryNGN < 10000 || application.expectedMonthlySalaryNGN > 5000000) missingFields.push('expectedMonthlySalaryNGN');
     if (application.subjects.length === 0) missingFields.push('subjects');
     if (application.levels.length === 0) missingFields.push('levels');
     if (application.yearsOfExperience === undefined || application.yearsOfExperience === null) missingFields.push('yearsOfExperience');
@@ -408,6 +411,7 @@ export class TutorApplicationService {
           where: { userId },
           data: {
             bio,
+            monthlySalaryNGN: application.expectedMonthlySalaryNGN,
             // subjects are already in TutorSubject from the application
           },
         });
@@ -416,7 +420,7 @@ export class TutorApplicationService {
           data: {
             userId,
             bio,
-            hourlyRate: 0, // Admin will set this later
+            monthlySalaryNGN: application.expectedMonthlySalaryNGN,
             availability: '{}',
             vettingStatus: 'APPROVED',
           },

@@ -70,6 +70,7 @@ export const submitTutorApplicationSchema = z.object({
     'PHD',
     'OTHER',
   ], { required_error: 'Highest qualification is required' }),
+  expectedMonthlySalaryNGN: z.number().int().min(10000, 'Expected monthly salary must be at least ₦10,000').max(5000000, 'Expected monthly salary must be at most ₦5,000,000'),
   subjects: z.array(z.string().uuid()).min(1, 'At least one subject is required'),
   levels: z.array(z.enum([
     'PRESCHOOL_TO_G1',

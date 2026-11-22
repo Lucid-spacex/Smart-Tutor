@@ -27,6 +27,7 @@ export interface RegisterData {
   country?: string;
   city?: string;
   highestQualification?: string;
+  expectedMonthlySalaryNGN?: number;
   subjects?: string[];
   levels?: string[];
   yearsOfExperience?: number;
@@ -43,6 +44,7 @@ export interface VerifyData {
 export interface LoginData {
   email: string;
   password: string;
+  portal?: 'PARENT' | 'TUTOR' | 'ADMIN';
 }
 
 export interface StudentLoginData {

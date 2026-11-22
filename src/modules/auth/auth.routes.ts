@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { AuthController } from './auth.controller';
 import { validate } from '../../middleware/validation.middleware';
 import { authenticate } from '../../middleware/auth.middleware';
-import { tier1AuthRateLimit, studentLoginRateLimit } from '../../middleware/rate-limit.middleware';
+import { tier1AuthRateLimit, studentLoginRateLimit, adminLoginRateLimit } from '../../middleware/rate-limit.middleware';
 import { registerSchema, verifySchema, loginSchema, studentLoginSchema, refreshSchema, resendOtpSchema, changePasswordSchema, changePinSchema, timezoneSchema } from './auth.validation';
 import { uploadProfilePicture, handleUploadError } from '../../middleware/upload.middleware';
 
@@ -10,11 +10,18 @@ const router = Router();
 const authController = new AuthController();
 
 // Tier 1 (Strict) rate limiting applied to all sensitive auth endpoints.
-// 7 requests per 15 minutes, keyed by IP + email.
+// 7 requests per 15 minutes, keyed by IP + email + portal.
 // See SECURITY.md §12 for rationale.
 router.post('/register', tier1AuthRateLimit, validate(registerSchema), authController.register);
 router.post('/verify', tier1AuthRateLimit, validate(verifySchema), authController.verify);
-router.post('/login', tier1AuthRateLimit, validate(loginSchema), authController.login);
+// Login uses different rate limits based on portal
+router.post('/login', (req, res, next) => {
+  const portal = req.body?.portal || 'PARENT';
+  if (portal === 'ADMIN') {
+    return adminLoginRateLimit(req, res, next);
+  }
+  return tier1AuthRateLimit(req, res, next);
+}, validate(loginSchema), authController.login);
 // Student login uses stricter rate limiting (5 req / 15 min) due to smaller PIN search space
 router.post('/student-login', studentLoginRateLimit, validate(studentLoginSchema), authController.studentLogin);
 router.post('/resend-otp', tier1AuthRateLimit, validate(resendOtpSchema), authController.resendOtp);

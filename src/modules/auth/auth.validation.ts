@@ -16,6 +16,7 @@ const tutorApplicationFields = {
     'PHD',
     'OTHER',
   ]),
+  expectedMonthlySalaryNGN: z.number().int().min(10000, 'Expected monthly salary must be at least ₦10,000').max(5000000, 'Expected monthly salary must be at most ₦5,000,000'),
   subjects: z.array(z.string().uuid()).min(1, 'At least one subject is required'),
   levels: z.array(z.enum([
     'PRESCHOOL_TO_G1',
@@ -55,7 +56,7 @@ export const registerSchema = z.object({
     .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
     .regex(/[0-9]/, 'Password must contain at least one number')
     .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character'),
-  role: z.enum(['PARENT', 'TUTOR']),
+  role: z.enum(['PARENT', 'TUTOR']), // ADMIN registration not allowed
   // Tutor application fields (required when role=TUTOR)
   ...tutorApplicationFields,
 }).refine((data) => {
@@ -77,7 +78,8 @@ export const registerSchema = z.object({
   // Tutor application fields are required when role=TUTOR
   if (data.role === 'TUTOR') {
     return !!(data.birthDay && data.birthMonth && data.country && data.city &&
-              data.highestQualification && data.subjects && data.subjects.length > 0 &&
+              data.highestQualification && data.expectedMonthlySalaryNGN &&
+              data.subjects && data.subjects.length > 0 &&
               data.levels && data.levels.length > 0 && data.yearsOfExperience !== undefined &&
               data.whyTeach && data.howHeard && data.aboutYou && data.aboutYou.length > 0);
   }
@@ -95,6 +97,7 @@ export const verifySchema = z.object({
 export const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
   password: z.string().min(1, 'Password is required'),
+  portal: z.enum(['PARENT', 'TUTOR', 'ADMIN']).default('PARENT'),
 });
 
 export const studentLoginSchema = z.object({

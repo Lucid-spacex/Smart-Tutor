@@ -66,6 +66,7 @@ export class AuthService {
           country: data.country || '',
           city: data.city || '',
           highestQualification: (data.highestQualification as any) || 'OTHER',
+          expectedMonthlySalaryNGN: data.expectedMonthlySalaryNGN || 10000,
           levels: (data.levels as any) || [],
           yearsOfExperience: data.yearsOfExperience || 0,
           whyTeach: data.whyTeach || '',
@@ -167,14 +168,41 @@ export class AuthService {
       where: { email: data.email },
     });
 
+    const portal = data.portal || 'PARENT';
+
     if (!user) {
+      // Log failed admin login attempt
+      if (portal === 'ADMIN') {
+        await this.logFailedAdminLogin(data.email);
+      }
       throw new AppError(401, 'Invalid credentials');
     }
 
     const isValidPassword = await comparePassword(data.password, user.passwordHash);
 
     if (!isValidPassword) {
+      // Log failed admin login attempt
+      if (portal === 'ADMIN') {
+        await this.logFailedAdminLogin(data.email);
+      }
       logger.warn({ email: data.email }, 'Failed login attempt - invalid password');
+      throw new AppError(401, 'Invalid credentials');
+    }
+
+    // Portal role matching - return same error as wrong password to prevent role leak
+    const portalRoleMap: Record<string, string[]> = {
+      'PARENT': ['PARENT'],
+      'TUTOR': ['TUTOR'],
+      'ADMIN': ['ADMIN'],
+    };
+
+    const allowedRoles = portalRoleMap[portal] || [];
+    if (!allowedRoles.includes(user.role)) {
+      // Log failed admin login attempt
+      if (portal === 'ADMIN') {
+        await this.logFailedAdminLogin(data.email);
+      }
+      logger.warn({ email: data.email, portal, userRole: user.role }, 'Failed login attempt - portal mismatch');
       throw new AppError(401, 'Invalid credentials');
     }
 
@@ -186,7 +214,8 @@ export class AuthService {
       throw new AppError(403, 'Account is not active');
     }
 
-    if (user.role === 'TUTOR' && user.status === 'PENDING_VETTING') {
+    // Allow PENDING_VETTING tutors to login through TUTOR portal
+    if (user.role === 'TUTOR' && user.status === 'PENDING_VETTING' && portal !== 'TUTOR') {
       throw new AppError(403, 'Your account is pending admin approval');
     }
 
@@ -219,6 +248,26 @@ export class AuthService {
       accessToken,
       refreshToken,
     };
+  }
+
+  private async logFailedAdminLogin(email: string) {
+    try {
+      await prisma.adminActionLog.create({
+        data: {
+          adminId: null,
+          action: 'LOGIN_FAILED',
+          targetType: 'User',
+          targetId: null,
+          details: {
+            email,
+            portal: 'ADMIN',
+            timestamp: new Date().toISOString(),
+          },
+        },
+      });
+    } catch (error) {
+      logger.error({ error }, 'Failed to log admin login attempt');
+    }
   }
 
   async studentLogin(data: StudentLoginData): Promise<AuthResponse> {

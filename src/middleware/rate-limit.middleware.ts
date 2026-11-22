@@ -44,10 +44,38 @@ export const tier1AuthRateLimit = rateLimit({
     error: 'Too many attempts. Please wait 15 minutes before trying again.',
   },
   keyGenerator: (req: Request): string => {
-    // Prefer email, then fall back to IP-only so the limiter always has a key.
+    // Prefer email + portal, then fall back to IP-only so the limiter always has a key.
+    const identifier = req.body?.email || 'unknown';
+    const portal = req.body?.portal || 'PARENT';
+    const ip = req.ip || 'unknown';
+    return `t1:${ip}:${identifier}:${portal}`;
+  },
+  skipSuccessfulRequests: false,
+  validate: { keyGeneratorIpFallback: false },
+});
+
+/**
+ * Tier 1c — ADMIN LOGIN STRICT (5 req / 15 min)
+ *
+ * Applied to:
+ *   POST /auth/login (when portal=ADMIN)
+ *
+ * Key strategy: IP + email (stricter than standard login).
+ *
+ * Purpose: Admin accounts have higher privileges, so use stricter limits.
+ */
+export const adminLoginRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // Production default
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many admin login attempts. Please wait 15 minutes before trying again.',
+  },
+  keyGenerator: (req: Request): string => {
     const identifier = req.body?.email || 'unknown';
     const ip = req.ip || 'unknown';
-    return `t1:${ip}:${identifier}`;
+    return `t1c:${ip}:${identifier}`;
   },
   skipSuccessfulRequests: false,
   validate: { keyGeneratorIpFallback: false },
