@@ -966,7 +966,7 @@ model ScoredItem {
   enrollment    Enrollment    @relation("ScoredItemEnrollment", fields: [enrollmentId], references: [id], onDelete: Cascade)
   type          ScoredItemType
   sourceType    String?       // "QuizAttempt" or "AssignmentSubmission"
-  sourceId      String?       // ID of the source record
+  sourceId      String?       // ID of the source record (no FK constraint for flexibility)
   autoScore     Decimal?     @db.Decimal(10, 2) // Server-computed, immutable once set
   score         Decimal       @db.Decimal(10, 2)
   maxScore      Decimal       @db.Decimal(10, 2)
@@ -981,6 +981,7 @@ model ScoredItem {
   @@index([enrollmentId])
   @@index([gradeId])
   @@index([type])
+  @@index([sourceId])
   @@unique([sourceType, sourceId])
 }
 

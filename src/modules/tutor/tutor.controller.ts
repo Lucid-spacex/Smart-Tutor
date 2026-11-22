@@ -5,6 +5,7 @@ import { SessionsService } from '../sessions/sessions.service';
 import { CreateTutorSessionInput, RescheduleTutorSessionInput } from '../sessions/sessions.validation';
 import { PerformanceService } from '../performance/performance.service';
 import { ScoredItemsService } from '../scored-items/scored-items.service';
+import { AssignmentsService } from '../assignments/assignments.service';
 import { AuthRequest } from '../../types/express';
 
 export class TutorController {
@@ -12,12 +13,14 @@ export class TutorController {
   private sessionsService: SessionsService;
   private performanceService: PerformanceService;
   private scoredItemsService: ScoredItemsService;
+  private assignmentsService: AssignmentsService;
 
   constructor() {
     this.tutorService = new TutorService();
     this.sessionsService = new SessionsService();
     this.performanceService = new PerformanceService();
     this.scoredItemsService = new ScoredItemsService();
+    this.assignmentsService = new AssignmentsService();
   }
 
   createTutorProfile = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -273,6 +276,39 @@ export class TutorController {
       const { id } = req.params;
       await this.scoredItemsService.deleteScoredItem(id, tutorId);
       res.status(200).json({ message: 'Scored item deleted' });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getAssignmentSubmissions = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const tutorId = req.user?.userId;
+      if (!tutorId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id } = req.params;
+      const submissions = await this.assignmentsService.getAssignmentSubmissions(id, tutorId, 'TUTOR');
+      res.status(200).json(submissions);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  scoreSubmission = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const tutorId = req.user?.userId;
+      if (!tutorId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id, submissionId } = req.params;
+      const data = req.body;
+      const scoredItem = await this.assignmentsService.scoreSubmission(id, submissionId, tutorId, data);
+      res.status(201).json(scoredItem);
     } catch (error) {
       next(error);
     }

@@ -29,4 +29,8 @@ router.post('/sessions', authenticate, requireRole('TUTOR'), requireApprovedTuto
 router.patch('/sessions/:id/reschedule', authenticate, requireRole('TUTOR'), requireApprovedTutor, validateUUID('id'), validate(rescheduleTutorSessionSchema), tutorController.rescheduleTutorSession);
 router.delete('/sessions/:id', authenticate, requireRole('TUTOR'), requireApprovedTutor, validateUUID('id'), tutorController.deleteTutorSession);
 
+// /tutor/assignments/:id/submissions - tutor-specific submission management
+router.get('/assignments/:id/submissions', authenticate, requireRole('TUTOR'), requireApprovedTutor, validateUUID('id'), tutorController.getAssignmentSubmissions);
+router.post('/assignments/:id/submissions/:submissionId/score', authenticate, requireRole('TUTOR'), requireApprovedTutor, validateUUID('id'), validateUUID('submissionId'), tutorController.scoreSubmission);
+
 export default router;

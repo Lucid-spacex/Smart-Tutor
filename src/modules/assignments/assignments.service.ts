@@ -490,23 +490,6 @@ export class AssignmentsService {
       data: { status: 'SUBMITTED' },
     });
 
-    // Create ScoredItem for assignment submission (only if tutor is assigned)
-    if (assignment.enrollment.tutorId) {
-      await prisma.scoredItem.create({
-        data: {
-          type: 'ASSIGNMENT',
-          studentId: student.id,
-          enrollmentId: assignment.enrollmentId,
-          sourceType: 'AssignmentSubmission',
-          sourceId: submission.id,
-          tutorId: assignment.enrollment.tutorId,
-          score: 0, // Not graded yet
-          maxScore: 100, // Default max score
-          comment: 'Assignment submitted - pending grading',
-        },
-      });
-    }
-
     // Notify tutor of assignment submission
     if (submission.assignment.enrollment.tutorId) {
       await this.notificationCore.notify({
@@ -640,7 +623,129 @@ export class AssignmentsService {
       orderBy: { submittedAt: 'desc' },
     });
 
-    return submissions;
+    // Get scored items for these submissions
+    const submissionIds = submissions.map(s => s.id);
+    const scoredItems = await prisma.scoredItem.findMany({
+      where: {
+        sourceType: 'AssignmentSubmission',
+        sourceId: { in: submissionIds },
+      },
+      select: {
+        id: true,
+        sourceId: true,
+        score: true,
+        maxScore: true,
+        comment: true,
+        scoredAt: true,
+      },
+    });
+
+    // Create a map for quick lookup
+    const scoredItemMap = new Map(scoredItems.map(si => [si.sourceId, si]));
+
+    // Map to include student name, status, text, attachment, submittedAt, and scoredItem if any
+    return submissions.map(submission => ({
+      id: submission.id,
+      assignmentId: submission.assignmentId,
+      studentId: submission.studentId,
+      studentName: submission.student.fullName,
+      textAnswer: submission.textAnswer,
+      attachmentUrl: submission.attachmentUrl,
+      attachmentName: submission.attachmentName,
+      submittedAt: submission.submittedAt,
+      feedbackText: submission.feedbackText,
+      feedbackAttachmentUrl: submission.feedbackAttachmentUrl,
+      feedbackAttachmentName: submission.feedbackAttachmentName,
+      gradedAt: submission.gradedAt,
+      scoredItem: scoredItemMap.get(submission.id) || null,
+    }));
+  }
+
+  async scoreSubmission(assignmentId: string, submissionId: string, tutorId: string, data: any) {
+    const assignment = await prisma.assignment.findUnique({
+      where: { id: assignmentId },
+      include: {
+        enrollment: true,
+      },
+    });
+
+    if (!assignment) {
+      throw new AppError(404, 'Assignment not found');
+    }
+
+    // Verify the tutor created the assignment
+    if (assignment.createdBy !== tutorId) {
+      throw new AppError(403, 'Not authorized to score this assignment');
+    }
+
+    const submission = await prisma.assignmentSubmission.findUnique({
+      where: { id: submissionId },
+    });
+
+    if (!submission) {
+      throw new AppError(404, 'Submission not found');
+    }
+
+    // Verify the submission belongs to the assignment
+    if (submission.assignmentId !== assignmentId) {
+      throw new AppError(400, 'Submission does not belong to this assignment');
+    }
+
+    // Check if submission already has a scored item
+    const existingScoredItem = await prisma.scoredItem.findFirst({
+      where: {
+        sourceType: 'AssignmentSubmission',
+        sourceId: submissionId,
+      },
+    });
+
+    if (existingScoredItem) {
+      throw new AppError(400, 'Submission has already been scored');
+    }
+
+    // Map assignment type to scored item type
+    const typeMap: Record<string, 'QUIZ' | 'ASSIGNMENT' | 'CLASSWORK' | 'TEST' | 'HOMEWORK' | 'PROJECT' | 'PARTICIPATION'> = {
+      'QUIZ': 'QUIZ',
+      'ASSIGNMENT': 'ASSIGNMENT',
+      'CLASSWORK': 'CLASSWORK',
+      'TEST': 'TEST',
+      'HOMEWORK': 'HOMEWORK',
+      'PROJECT': 'PROJECT',
+    };
+
+    const scoredItemType = typeMap[assignment.type] || 'ASSIGNMENT';
+
+    // Create scored item
+    const scoredItem = await prisma.scoredItem.create({
+      data: {
+        tutorId,
+        studentId: submission.studentId,
+        enrollmentId: assignment.enrollmentId,
+        type: scoredItemType,
+        sourceType: 'AssignmentSubmission',
+        sourceId: submissionId,
+        score: data.score,
+        maxScore: data.maxScore || 100,
+        comment: data.comment || '',
+      },
+    });
+
+    // Update submission to mark as graded
+    await prisma.assignmentSubmission.update({
+      where: { id: submissionId },
+      data: {
+        gradedAt: new Date(),
+        feedbackText: data.comment || '',
+      },
+    });
+
+    // Update assignment status to GRADED
+    await prisma.assignment.update({
+      where: { id: assignmentId },
+      data: { status: 'GRADED' },
+    });
+
+    return scoredItem;
   }
 
   async getSubmission(assignmentId: string, submissionId: string, userId: string, userRole: string) {
