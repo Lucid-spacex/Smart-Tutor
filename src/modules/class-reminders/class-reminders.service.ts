@@ -504,17 +504,136 @@ export class ClassRemindersService {
    */
   async getAdminClassSchedule(filters: {
     tutorId?: string;
+    subjectId?: string;
     status?: string;
     from?: string;
     to?: string;
+    search?: string;
     page?: number;
     limit?: number;
+    mode?: 'sessions' | 'enrollments';
   }) {
-    const { tutorId, status, from, to, page = 1, limit = 20 } = filters;
+    const { tutorId, subjectId, status, from, to, search, page = 1, limit = 20, mode = 'sessions' } = filters;
     const skip = (page - 1) * limit;
 
     const fromDate = from ? new Date(from) : new Date();
     const toDate = to ? new Date(to) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    // Mode: enrollments - list all active paid enrollments with schedule info
+    if (mode === 'enrollments') {
+      const where: any = {
+        status: 'ACTIVE',
+        deletedAt: null,
+        payments: {
+          some: {
+            status: 'SUCCESS',
+          },
+        },
+      };
+
+      if (tutorId) {
+        where.tutorId = tutorId;
+      }
+
+      if (subjectId) {
+        where.subjectId = subjectId;
+      }
+
+      if (search) {
+        where.OR = [
+          { student: { fullName: { contains: search, mode: 'insensitive' } } },
+          { subject: { name: { contains: search, mode: 'insensitive' } } },
+          { tutor: { fullName: { contains: search, mode: 'insensitive' } } },
+        ];
+      }
+
+      const [enrollments, total] = await Promise.all([
+        prisma.enrollment.findMany({
+          where,
+          include: {
+            student: {
+              select: {
+                id: true,
+                fullName: true,
+              },
+            },
+            subject: true,
+            tutor: {
+              select: {
+                id: true,
+                fullName: true,
+              },
+            },
+            sessionParticipants: {
+              select: {
+                session: {
+                  select: {
+                    id: true,
+                    scheduledAt: true,
+                    status: true,
+                  },
+                },
+              },
+              where: {
+                session: {
+                  status: { not: 'CANCELLED' },
+                },
+              },
+              take: 20,
+            },
+          },
+          orderBy: {
+            startDate: 'asc',
+          },
+          skip,
+          take: Math.min(limit, 100),
+        }),
+        prisma.enrollment.count({ where }),
+      ]);
+
+      const now = new Date();
+
+      return {
+        data: enrollments.map(enrollment => {
+          const sessions = enrollment.sessionParticipants.map(sp => sp.session);
+          const upcomingSessions = sessions
+            .filter(s => s.scheduledAt > now)
+            .sort((a, b) => a.scheduledAt.getTime() - b.scheduledAt.getTime());
+          const nextExpectedClass = upcomingSessions.length > 0 ? upcomingSessions[0] : null;
+          const sessionsScheduledCount = sessions.length;
+
+          // Determine status
+          let enrollmentStatus = 'NOT_STARTED';
+          if (nextExpectedClass) {
+            enrollmentStatus = 'SCHEDULED';
+          } else if (sessions.length > 0) {
+            enrollmentStatus = 'MISSED';
+          } else if (new Date(enrollment.startDate) <= now) {
+            enrollmentStatus = 'UNSCHEDULED';
+          }
+
+          return {
+            id: enrollment.id,
+            student: enrollment.student,
+            tutor: enrollment.tutor,
+            subject: enrollment.subject,
+            startDate: enrollment.startDate,
+            endDate: enrollment.endDate,
+            availableDays: enrollment.availableDays,
+            preferredStartHour: enrollment.preferredStartHour,
+            preferredEndHour: enrollment.preferredEndHour,
+            scheduleTimezone: enrollment.scheduleTimezone,
+            sessionFrequency: enrollment.sessionFrequency,
+            status: enrollmentStatus,
+            nextExpectedClass,
+            sessionsScheduledCount,
+          };
+        }),
+        page,
+        limit,
+        total,
+      };
+    }
 
     // If requesting UNSCHEDULED status, return computed unscheduled classes
     if (status === 'UNSCHEDULED') {

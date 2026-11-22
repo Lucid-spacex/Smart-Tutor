@@ -37,11 +37,14 @@ export class ClassRemindersController {
     try {
       const filters = {
         tutorId: req.query.tutorId as string,
+        subjectId: req.query.subjectId as string,
         status: req.query.status as string,
         from: req.query.from as string,
         to: req.query.to as string,
+        search: req.query.search as string,
         page: req.query.page ? parseInt(req.query.page as string) : 1,
         limit: req.query.limit ? parseInt(req.query.limit as string) : 20,
+        mode: req.query.mode as 'sessions' | 'enrollments',
       };
 
       const result = await this.classRemindersService.getAdminClassSchedule(filters);

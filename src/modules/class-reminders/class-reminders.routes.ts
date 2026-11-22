@@ -16,11 +16,14 @@ const upcomingClassesQuerySchema = z.object({
 
 const classScheduleQuerySchema = z.object({
   tutorId: z.string().uuid('Invalid tutor ID').optional(),
-  status: z.string().optional(),
+  subjectId: z.string().uuid('Invalid subject ID').optional(),
+  status: z.enum(['SCHEDULED', 'UNSCHEDULED', 'MISSED', 'NOT_STARTED']).optional(),
   from: z.string().optional(),
   to: z.string().optional(),
+  search: z.string().optional(),
   page: z.coerce.number().int().positive().optional(),
   limit: z.coerce.number().int().positive().max(100).optional(),
+  mode: z.enum(['sessions', 'enrollments']).optional(),
 });
 
 // Tutor endpoint

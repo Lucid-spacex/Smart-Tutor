@@ -432,6 +432,8 @@ model Enrollment {
   // the parent's User.timezone to avoid stale values across DST changes.
   preferredStartHour Int?
   preferredEndHour   Int?
+  // Timezone in which the hours were entered (parent's timezone)
+  scheduleTimezone   String?
   billingFrequency   BillingFrequency @default(YEARLY)
   yearlyPrice        Decimal?         @db.Decimal(10, 2) // Legacy field, made optional
   yearlyPriceNGN     Decimal?         @db.Decimal(10, 2) // Override price in NGN
@@ -637,6 +639,7 @@ model AssignmentSubmission {
   assignment             Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
   studentId              String
   student                Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  status                 String     @default("SUBMITTED")
   textAnswer             String?
   attachmentUrl          String?
   attachmentName         String?
@@ -790,6 +793,7 @@ enum NotificationType {
   ENROLLMENT_CHANGE_SUBMITTED
   ENROLLMENT_CHANGE_APPROVED
   ENROLLMENT_CHANGE_REJECTED
+  SALARY_UPDATED
 }
 
 model Complaint {
@@ -931,10 +935,10 @@ enum QuizAttemptStatus {
 
 model AdminActionLog {
   id         String   @id @default(uuid())
-  adminId    String
+  adminId    String?
   action     String
   targetType String
-  targetId   String
+  targetId   String?
   details    Json
   createdAt  DateTime @default(now())
 
