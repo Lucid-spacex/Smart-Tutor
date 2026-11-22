@@ -7,6 +7,7 @@ import { validateUUID } from '../../middleware/uuid-validation.middleware';
 import { createTutorProfileSchema, updateAvailabilitySchema } from './tutor.validation';
 import { createTutorSessionSchema, rescheduleTutorSessionSchema } from '../sessions/sessions.validation';
 import { createScoredItemSchema, updateScoredItemSchema } from '../scored-items/scored-items.validation';
+import { scoreSubmissionSchema } from '../assignments/assignments.validation';
 
 const router = Router();
 const tutorController = new TutorController();
@@ -31,6 +32,6 @@ router.delete('/sessions/:id', authenticate, requireRole('TUTOR'), requireApprov
 
 // /tutor/assignments/:id/submissions - tutor-specific submission management
 router.get('/assignments/:id/submissions', authenticate, requireRole('TUTOR'), requireApprovedTutor, validateUUID('id'), tutorController.getAssignmentSubmissions);
-router.post('/assignments/:id/submissions/:submissionId/score', authenticate, requireRole('TUTOR'), requireApprovedTutor, validateUUID('id'), validateUUID('submissionId'), tutorController.scoreSubmission);
+router.post('/assignments/:id/submissions/:submissionId/score', authenticate, requireRole('TUTOR'), requireApprovedTutor, validateUUID('id'), validateUUID('submissionId'), validate(scoreSubmissionSchema), tutorController.scoreSubmission);
 
 export default router;

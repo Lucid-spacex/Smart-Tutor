@@ -26,7 +26,7 @@ export class TutorService {
         subjects: data.subjects,
         bio: data.bio,
         credentialsUrl: data.credentialsUrl,
-        hourlyRate: data.hourlyRate,
+        // hourlyRate deprecated - do not set
         availability: data.availability,
       },
     });
@@ -117,6 +117,7 @@ export class TutorService {
         availableDays: true,
         preferredStartHour: true,
         preferredEndHour: true,
+        scheduleTimezone: true,
         startDate: true,
         endDate: true,
         createdAt: true,
@@ -133,23 +134,67 @@ export class TutorService {
           },
         },
         subject: true,
+        sessionParticipants: {
+          select: {
+            session: {
+              select: {
+                id: true,
+                scheduledAt: true,
+                status: true,
+              },
+            },
+          },
+          where: {
+            session: {
+              status: { not: 'CANCELLED' },
+            },
+          },
+          take: 20,
+        },
       },
     });
 
-    return enrollments.map(enrollment => ({
-      student: {
-        id: enrollment.studentId,
-        // Other student fields would need to be fetched separately if needed
-      },
-      enrollment: {
-        id: enrollment.id,
-        subjectId: enrollment.subjectId,
-        sessionFrequency: enrollment.sessionFrequency,
-        startDate: enrollment.startDate,
-        endDate: enrollment.endDate,
-        status: enrollment.status,
-      },
-    }));
+    return enrollments.map(enrollment => {
+      // Compute next expected class and sessions scheduled count
+      const now = new Date();
+      const sessions = enrollment.sessionParticipants.map(sp => sp.session);
+      const upcomingSessions = sessions
+        .filter(s => s.scheduledAt > now)
+        .sort((a, b) => a.scheduledAt.getTime() - b.scheduledAt.getTime());
+      const nextExpectedClass = upcomingSessions.length > 0 ? upcomingSessions[0] : null;
+      const sessionsScheduledCount = sessions.length;
+
+      // Compute startTimeUtc (simplified - would need proper timezone conversion in production)
+      const startTimeUtc = enrollment.startDate ? new Date(enrollment.startDate).toISOString() : null;
+
+      return {
+        student: {
+          id: enrollment.studentId,
+          fullName: enrollment.student.fullName,
+          gradeLevel: enrollment.student.gradeLevel,
+          school: enrollment.student.school,
+        },
+        enrollment: {
+          id: enrollment.id,
+          subjectId: enrollment.subjectId,
+          sessionFrequency: enrollment.sessionFrequency,
+          availableDays: enrollment.availableDays,
+          preferredStartHour: enrollment.preferredStartHour,
+          preferredEndHour: enrollment.preferredEndHour,
+          scheduleTimezone: enrollment.scheduleTimezone,
+          startDate: enrollment.startDate,
+          endDate: enrollment.endDate,
+          startTimeUtc,
+          status: enrollment.status,
+          nextExpectedClass,
+          sessionsScheduledCount,
+        },
+        subject: {
+          id: enrollment.subject.id,
+          name: enrollment.subject.name,
+        },
+      };
+    });
   }
 
   async getTutorSessions(tutorId: string) {
@@ -199,7 +244,13 @@ export class TutorService {
       throw new AppError(404, 'Tutor profile not found');
     }
 
-    return profile;
+    // Return profile with monthlySalaryNGN but exclude deprecated hourlyRate
+    return {
+      ...profile,
+      // hourlyRate is deprecated and should not be exposed
+      hourlyRate: undefined,
+      monthlySalaryNGN: profile.monthlySalaryNGN,
+    };
   }
 
   async getStudentDetail(tutorId: string, studentId: string) {

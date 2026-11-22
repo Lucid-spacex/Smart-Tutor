@@ -649,6 +649,7 @@ export class AssignmentsService {
       assignmentId: submission.assignmentId,
       studentId: submission.studentId,
       studentName: submission.student.fullName,
+      status: submission.status,
       textAnswer: submission.textAnswer,
       attachmentUrl: submission.attachmentUrl,
       attachmentName: submission.attachmentName,
@@ -734,6 +735,7 @@ export class AssignmentsService {
     await prisma.assignmentSubmission.update({
       where: { id: submissionId },
       data: {
+        status: 'GRADED',
         gradedAt: new Date(),
         feedbackText: data.comment || '',
       },

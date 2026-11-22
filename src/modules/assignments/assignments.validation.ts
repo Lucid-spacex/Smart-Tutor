@@ -48,6 +48,12 @@ export const provideFeedbackSchema = z.object({
   feedbackAttachmentName: z.string().optional(),
 });
 
+export const scoreSubmissionSchema = z.object({
+  score: z.number().nonnegative('Score must be non-negative'),
+  maxScore: z.number().positive('Max score must be positive').default(100),
+  comment: z.string().optional(),
+});
+
 export const getAssignmentsQuerySchema = z.object({
   enrollmentId: z.string().uuid('Invalid enrollment ID').optional(),
   status: z.enum(['PENDING', 'COMPLETED', 'SUBMITTED', 'GRADED', 'CANCELLED']).optional(),
@@ -58,4 +64,5 @@ export type UpdateAssignmentInput = z.infer<typeof updateAssignmentSchema>;
 export type UpdateAssignmentStatusInput = z.infer<typeof updateAssignmentStatusSchema>;
 export type SubmitAssignmentInput = z.infer<typeof submitAssignmentSchema>;
 export type ProvideFeedbackInput = z.infer<typeof provideFeedbackSchema>;
+export type ScoreSubmissionInput = z.infer<typeof scoreSubmissionSchema>;
 export type GetAssignmentsQuery = z.infer<typeof getAssignmentsQuerySchema>;
