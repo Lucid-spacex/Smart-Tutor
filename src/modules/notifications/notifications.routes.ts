@@ -11,6 +11,7 @@ const notificationSSEController = new NotificationSSEController();
 
 // Notification endpoints (exempt from Tier 3 limiter - handled in app.ts)
 router.get('/unread-count', authenticate, notificationController.getUnreadCount);
+router.get('/badge-counts', authenticate, notificationController.getBadgeCounts);
 router.get('/', authenticate, notificationController.getNotifications);
 router.patch('/:id/read', authenticate, notificationController.markAsRead);
 router.patch('/read-all', authenticate, notificationController.markAllAsRead);

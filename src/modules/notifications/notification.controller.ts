@@ -1,13 +1,16 @@
 import { Response, NextFunction } from 'express';
 import { NotificationCoreService } from './notification-core.service';
+import { BadgeCountsService } from './badge-counts.service';
 import { AuthRequest } from '../../types/express';
 import { NotificationCategory } from '@prisma/client';
 
 export class NotificationController {
   private notificationService: NotificationCoreService;
+  private badgeCountsService: BadgeCountsService;
 
   constructor() {
     this.notificationService = new NotificationCoreService();
+    this.badgeCountsService = new BadgeCountsService();
   }
 
   getUnreadCount = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
@@ -99,6 +102,22 @@ export class NotificationController {
       const { entityType, entityId } = req.body;
       await this.notificationService.markByEntityAsRead(userId, entityType, entityId);
       res.status(200).json({ message: 'Notifications marked as read' });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getBadgeCounts = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const userId = req.user?.userId;
+      const userRole = req.user?.role;
+      if (!userId || !userRole) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const counts = await this.badgeCountsService.getBadgeCounts(userId, userRole);
+      res.status(200).json(counts);
     } catch (error) {
       next(error);
     }
