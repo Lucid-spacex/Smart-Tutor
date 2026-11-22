@@ -46,6 +46,101 @@ export class ClassRemindersService {
         console.error(`Error processing reminders for enrollment ${enrollment.id}:`, error);
       }
     }
+
+    // Process attendance reminders separately
+    await this.processAttendanceReminders(now);
+  }
+
+  /**
+   * Process attendance reminders for sessions
+   */
+  private async processAttendanceReminders(now: DateTime) {
+    // Get sessions that have ended but attendance not marked
+    const sessions = await prisma.session.findMany({
+      where: {
+        status: { in: ['SCHEDULED', 'COMPLETED'] },
+        scheduledAt: {
+          lt: now.toJSDate(), // Session has started
+        },
+        participants: {
+          some: {
+            attended: null, // Attendance not marked
+          },
+        },
+      },
+      include: {
+        tutor: true,
+        participants: {
+          include: {
+            enrollment: {
+              include: {
+                student: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    for (const session of sessions) {
+      try {
+        await this.processSessionAttendanceReminder(session, now);
+      } catch (error) {
+        console.error(`Error processing attendance reminder for session ${session.id}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Process attendance reminder for a single session
+   */
+  private async processSessionAttendanceReminder(session: any, now: DateTime) {
+    const sessionEnd = DateTime.fromJSDate(session.scheduledAt).plus({ minutes: session.durationMinutes });
+    const sessionEndUtc = sessionEnd.toUTC();
+    const timeSinceEnd = now.diff(sessionEndUtc).as('hours');
+    const sessionEndKey = sessionEndUtc.toISO() || '';
+
+    // 30 minutes after session ends - remind tutor to mark attendance
+    if (timeSinceEnd >= 0.5 && timeSinceEnd < 0.6) {
+      await this.notificationCore.notify({
+        recipientIds: [session.tutorId],
+        type: 'ATTENDANCE_UNMARKED_30M' as NotificationType,
+        category: 'SESSIONS' as NotificationCategory,
+        title: 'Mark Attendance - Session Ended',
+        body: `Session ended ${Math.round(timeSinceEnd * 60)} minutes ago. Please mark attendance.`,
+        entityType: 'SESSION',
+        entityId: session.id,
+        dedupeKey: `attendance-unmarked-30m-${session.id}-${sessionEndKey}`,
+      });
+    }
+
+    // 24 hours after session ends - second reminder to tutor
+    if (timeSinceEnd >= 24 && timeSinceEnd < 24.1) {
+      await this.notificationCore.notify({
+        recipientIds: [session.tutorId],
+        type: 'ATTENDANCE_UNMARKED_24H' as NotificationType,
+        category: 'SESSIONS' as NotificationCategory,
+        title: 'Mark Attendance - 24 Hours Overdue',
+        body: `Session ended 24 hours ago. Attendance still not marked. Please mark attendance.`,
+        entityType: 'SESSION',
+        entityId: session.id,
+        dedupeKey: `attendance-unmarked-24h-${session.id}-${sessionEndKey}`,
+      });
+    }
+
+    // 48 hours after session ends - admin alert
+    if (timeSinceEnd >= 48 && timeSinceEnd < 48.1) {
+      await this.notificationCore.notify({
+        recipientRole: 'ADMIN',
+        type: 'ATTENDANCE_UNMARKED_48H' as NotificationType,
+        category: 'SESSIONS' as NotificationCategory,
+        title: 'Attendance Unmarked - 48 Hours Overdue',
+        body: `Session for ${session.tutor.fullName} ended 48 hours ago with unmarked attendance.`,
+        entityType: 'SESSION',
+        entityId: session.id,
+        dedupeKey: `attendance-unmarked-48h-${session.id}-${sessionEndKey}`,
+      });
+    }
   }
 
   /**
@@ -152,7 +247,55 @@ export class ClassRemindersService {
         });
       }
     } else {
-      // Scenario 2: Session exists - notify tutor 30 minutes before
+      // Scenario 2: Session exists - send reminders to student and parent
+      const sessionRecipients = [
+        enrollment.student.userId,
+        enrollment.student.parentId,
+      ].filter(Boolean) as string[];
+
+      // 24 hours before - remind student and parent
+      if (timeUntilSlot <= 24 && timeUntilSlot > 23) {
+        await this.notificationCore.notify({
+          recipientIds: sessionRecipients,
+          type: 'SESSION_REMINDER_24H' as NotificationType,
+          category: 'SESSIONS' as NotificationCategory,
+          title: 'Session Reminder - 24 Hours',
+          body: `You have a session in 24 hours with ${enrollment.tutor.fullName} for ${enrollment.subject.name}`,
+          entityType: 'SESSION',
+          entityId: existingSession.id,
+          dedupeKey: `${existingSession.id}-reminder-24h`,
+        });
+      }
+
+      // 1 hour before - remind student and parent
+      if (timeUntilSlot <= 1 && timeUntilSlot > 0.9) {
+        await this.notificationCore.notify({
+          recipientIds: sessionRecipients,
+          type: 'SESSION_REMINDER_1H' as NotificationType,
+          category: 'SESSIONS' as NotificationCategory,
+          title: 'Session Reminder - 1 Hour',
+          body: `You have a session in 1 hour with ${enrollment.tutor.fullName} for ${enrollment.subject.name}`,
+          entityType: 'SESSION',
+          entityId: existingSession.id,
+          dedupeKey: `${existingSession.id}-reminder-1h`,
+        });
+      }
+
+      // 15 minutes before - remind student and parent
+      if (timeUntilSlot <= 0.25 && timeUntilSlot > 0.15) {
+        await this.notificationCore.notify({
+          recipientIds: sessionRecipients,
+          type: 'SESSION_REMINDER_15M' as NotificationType,
+          category: 'SESSIONS' as NotificationCategory,
+          title: 'Session Reminder - 15 Minutes',
+          body: `You have a session in 15 minutes with ${enrollment.tutor.fullName} for ${enrollment.subject.name}`,
+          entityType: 'SESSION',
+          entityId: existingSession.id,
+          dedupeKey: `${existingSession.id}-reminder-15m`,
+        });
+      }
+
+      // 30 minutes before - remind tutor
       if (timeUntilSlot <= 0.5 && timeUntilSlot > 0.4) {
         await this.notificationCore.notify({
           recipientIds: [enrollment.tutor.userId],

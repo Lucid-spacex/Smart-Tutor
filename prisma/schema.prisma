@@ -169,6 +169,8 @@ model User {
   gradeEvents         GradeEvent[]    @relation("GradeEventUser")
   requestedChangeRequests  EnrollmentChangeRequest[] @relation("ChangeRequestRequestedBy")
   reviewedChangeRequests   EnrollmentChangeRequest[] @relation("ChangeRequestReviewedBy")
+  salaryChangesAsTutor TutorSalaryHistory[] @relation("SalaryChangeTutor")
+  salaryChangesAsChanger TutorSalaryHistory[] @relation("SalaryChangeChanger")
 
   @@index([email])
   @@index([role])
@@ -185,7 +187,8 @@ model TutorProfile {
   bio                String?
   credentialsUrl     String?
   vettingStatus      VettingStatus         @default(PENDING)
-  hourlyRate         Decimal               @db.Decimal(10, 2)
+  hourlyRate         Decimal?              @db.Decimal(10, 2) // DEPRECATED - kept nullable for backward compatibility
+  monthlySalaryNGN   Int?                  // Monthly salary in naira (nullable until set by admin)
   availability       Json
   availabilityStatus  TutorAvailabilityStatus @default(AVAILABLE)
   maxStudents        Int?
@@ -255,6 +258,7 @@ model TutorApplication {
   country         String
   city            String
   highestQualification Qualification
+  expectedMonthlySalaryNGN Int             // Expected monthly salary in naira
 
   subjects        TutorApplicationSubject[]
   levels          QualificationLevel[]
@@ -753,6 +757,12 @@ enum NotificationType {
   SESSION_RESCHEDULED
   SESSION_CANCELLED
   SESSION_REMINDER
+  SESSION_REMINDER_24H
+  SESSION_REMINDER_1H
+  SESSION_REMINDER_15M
+  ATTENDANCE_UNMARKED_30M
+  ATTENDANCE_UNMARKED_24H
+  ATTENDANCE_UNMARKED_48H
   ASSIGNMENT_POSTED
   ASSIGNMENT_SUBMITTED
   ASSIGNMENT_REVIEWED
@@ -939,7 +949,10 @@ model AdminActionLog {
 enum ScoredItemType {
   QUIZ
   ASSIGNMENT
+  CLASSWORK
   TEST
+  HOMEWORK
+  PROJECT
   PARTICIPATION
 }
 
@@ -1034,4 +1047,20 @@ model EnrollmentChangeRequest {
   @@index([status])
   @@index([createdAt])
   // Partial unique index added in migration: only one PENDING request per enrollment
+}
+
+model TutorSalaryHistory {
+  id         String   @id @default(uuid())
+  tutorId    String
+  tutor      User     @relation("SalaryChangeTutor", fields: [tutorId], references: [id], onDelete: Cascade)
+  oldValue   Int?     // Previous monthly salary in naira
+  newValue   Int      // New monthly salary in naira
+  changedBy  String
+  changer    User     @relation("SalaryChangeChanger", fields: [changedBy], references: [id], onDelete: SetNull)
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  @@index([tutorId])
+  @@index([changedBy])
+  @@index([createdAt])
 }

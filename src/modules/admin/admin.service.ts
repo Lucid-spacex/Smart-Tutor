@@ -266,6 +266,7 @@ export class AdminService {
       failedPayments,
       outstandingEnrollments,
       unreadMessages,
+      attendanceUnmarkedSessions,
     ] = await Promise.all([
       // Tutor applications with SUBMITTED status
       prisma.tutorApplication.count({
@@ -330,6 +331,20 @@ export class AdminService {
           readAt: null,
         },
       }),
+      // Sessions with unmarked attendance (ended but not completed)
+      prisma.session.count({
+        where: {
+          status: { in: ['SCHEDULED', 'COMPLETED'] },
+          scheduledAt: {
+            lt: new Date(),
+          },
+          participants: {
+            some: {
+              attended: null,
+            },
+          },
+        },
+      }),
     ]);
 
     // Get unread new parents and new tutors from notifications per admin
@@ -362,6 +377,7 @@ export class AdminService {
       failedPayments,
       outstandingEnrollments,
       unreadMessages,
+      attendanceUnmarkedSessions,
       unreadNewParents,
       unreadNewTutors,
     };
