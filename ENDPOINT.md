@@ -121,14 +121,22 @@
 
 ### POST /auth/login
 **Auth:** None  
-**Rate Limit:** Tier 1 (7 req / 15 min)  
+**Rate Limit:** Tier 1 (7 req / 15 min) for PARENT/TUTOR, Tier 1c (5 req / 15 min) for ADMIN  
 **Body:**
 ```typescript
 {
   email: string (email),
-  password: string (min 1)
+  password: string (min 1),
+  portal?: 'PARENT' | 'TUTOR' | 'ADMIN' // Defaults to 'PARENT' if omitted
 }
 ```
+**Portal Behavior:**
+- Portal mismatch returns same 401 "Invalid credentials" as wrong password (no role leak)
+- Rate limit key: IP + email + portal
+- PENDING_VETTING tutors can login through TUTOR portal
+- Admin portal has stricter rate limit (5 req / 15 min per IP + email)
+- Failed admin login attempts are logged to AdminActionLog
+
 **Response (200):**
 ```json
 {
@@ -1007,7 +1015,7 @@
   "subjects": ["Mathematics", "Physics"],
   "bio": "string",
   "credentialsUrl": "string",
-  "hourlyRate": 50,
+  "monthlySalaryNGN": 50000,
   "availability": {},
   "availabilityStatus": "AVAILABLE",
   "maxStudents": null,
@@ -1024,6 +1032,7 @@
   }
 }
 ```
+**Note:** monthlySalaryNGN is read-only for tutors. Any write attempt is rejected. hourlyRate is deprecated and not returned.
 **Error Codes:** 401 (Not authenticated), 404 (Tutor profile not found)
 
 ### GET /students
@@ -1033,20 +1042,38 @@
 [
   {
     "student": {
-      "id": "uuid"
+      "id": "uuid",
+      "fullName": "string",
+      "gradeLevel": "G5_TO_G8",
+      "school": "string"
     },
     "enrollment": {
       "id": "uuid",
       "subjectId": "uuid",
       "sessionFrequency": "WEEKLY",
+      "availableDays": ["MON", "WED", "FRI"],
+      "preferredStartHour": 14,
+      "preferredEndHour": 15,
+      "scheduleTimezone": "Africa/Lagos",
       "startDate": "ISO date",
       "endDate": "ISO date",
-      "status": "ACTIVE"
+      "startTimeUtc": "ISO date",
+      "status": "ACTIVE",
+      "nextExpectedClass": {
+        "id": "uuid",
+        "scheduledAt": "ISO date",
+        "status": "SCHEDULED"
+      },
+      "sessionsScheduledCount": 5
+    },
+    "subject": {
+      "id": "uuid",
+      "name": "Mathematics"
     }
   }
 ]
 ```
-**Security:** Pricing fields (yearlyPriceNGN, yearlyPriceUSD) excluded. Parent contact info excluded.  
+**Security:** Pricing fields (yearlyPriceNGN, yearlyPriceUSD) excluded. Parent contact info excluded. Schedule fields included for tutor visibility.
 **Error Codes:** 401 (Not authenticated)
 
 ### GET /students/:studentId
@@ -1565,6 +1592,46 @@
 ```
 **Response (200):** Updated tutor status
 
+### PATCH /admin/tutors/:id/salary
+**Auth:** Required (ADMIN)  
+**Body:**
+```typescript
+{
+  monthlySalaryNGN: number (positive integer, required),
+  reason?: string
+}
+```
+**Response (200):**
+```json
+{
+  "id": "uuid",
+  "monthlySalaryNGN": number,
+  "oldValue": number | null,
+  "newValue": number,
+  "changedBy": "uuid",
+  "reason": "string | null",
+  "createdAt": "ISO date"
+}
+```
+**Note:** Salary can be edited but never deleted (null or zero rejected). Every change is recorded in TutorSalaryHistory and AdminActionLog. Tutor is notified with SALARY_UPDATED (no old value leaked).
+
+### GET /admin/tutors/:id/salary-history
+**Auth:** Required (ADMIN)  
+**Response (200):**
+```json
+[
+  {
+    "id": "uuid",
+    "tutorId": "uuid",
+    "oldValue": number | null,
+    "newValue": number,
+    "changedBy": "uuid",
+    "reason": "string | null",
+    "createdAt": "ISO date"
+  }
+]
+```
+
 ### GET /admin/enrollments/unmatched
 **Auth:** Required (ADMIN)  
 **Query:** `includeUnpaid` (boolean)  
@@ -1657,6 +1724,101 @@
 **Auth:** Required (ADMIN)  
 **Response (200):** Current exchange rate
 
+### GET /badge-counts
+**Auth:** Required (any role)
+**Response (200) - varies by role:**
+
+**For PARENT:**
+```json
+{
+  "unreadNotifications": {
+    "ENROLLMENTS": number,
+    "PAYMENTS": number,
+    "SESSIONS": number,
+    "MESSAGES": number,
+    "GRADES": number,
+    "ASSIGNMENTS": number,
+    "QUIZZES": number,
+    "PROGRESS": number,
+    "SCHEDULE": number,
+    "PRICING": number,
+    "COMPLAINTS": number,
+    "OTHER": number
+  },
+  "unpaidEnrollments": number,
+  "upcomingSessions24h": number,
+  "unreadMessages": number
+}
+```
+
+**For TUTOR:**
+```json
+{
+  "unreadNotifications": {
+    "SESSIONS": number,
+    "MESSAGES": number,
+    "ASSIGNMENTS": number,
+    "GRADES": number,
+    "COMPLAINTS": number,
+    "OTHER": number
+  },
+  "sessionsNeedingScheduling": number,
+  "classesWithin24h": number,
+  "draftOrRejectedGrades": number,
+  "unmarkedAttendance": number,
+  "unreadMessages": number,
+  "submissionsToScore": number
+}
+```
+
+**For STUDENT:**
+```json
+{
+  "unreadNotifications": {
+    "ASSIGNMENTS": number,
+    "SESSIONS": number,
+    "MESSAGES": number,
+    "GRADES": number,
+    "QUIZZES": number,
+    "OTHER": number
+  },
+  "pendingAssignments": number,
+  "classesWithin24h": number
+}
+```
+
+**For ADMIN:**
+```json
+{
+  "unreadNotifications": {
+    "USERS": number,
+    "SESSIONS": number,
+    "MESSAGES": number,
+    "COMPLAINTS": number,
+    "ENROLLMENT": number,
+    "PAYMENTS": number,
+    "GRADES": number,
+    "PRICING": number,
+    "SCHEDULE": number,
+    "QUIZZES": number,
+    "ASSIGNMENTS": number,
+    "OTHER": number
+  },
+  "pendingTutorApplications": number,
+  "pendingGrades": number,
+  "openComplaints": number,
+  "unmatchedPaidEnrollments": number,
+  "pendingChangeRequests": number,
+  "unscheduledWithin24h": number,
+  "failedPayments": number,
+  "outstandingEnrollments": number,
+  "unreadMessages": number,
+  "attendanceUnmarkedSessions": number
+}
+```
+
+**Note:** All counts are computed strictly from the authenticated user's own data. Cross-role leaks are prevented by filtering notifications by userId and computing counts from user-specific relations.
+
 ### GET /admin/badge-counts
 **Auth:** Required (ADMIN)
 **Response (200):**
@@ -1672,10 +1834,11 @@
   "outstandingEnrollments": number,
   "unreadMessages": number,
   "unreadNewParents": number,
-  "unreadNewTutors": number
+  "unreadNewTutors": number,
+  "attendanceUnmarkedSessions": number
 }
 ```
-**Note:** Counts that stay correct regardless of read state. `failedPayments` counts FAILED payments in the last 14 days. `outstandingEnrollments` counts PENDING_PAYMENT enrollments older than 24 hours. `unreadNewParents` and `unreadNewTutors` are computed from unread notifications per admin with entityType=PARENT/TUTOR and type=USER_VERIFIED.
+**Note:** Counts that stay correct regardless of read state. `failedPayments` counts FAILED payments in the last 14 days. `outstandingEnrollments` counts PENDING_PAYMENT enrollments older than 24 hours. `unreadNewParents` and `unreadNewTutors` are computed from unread notifications per admin with entityType=PARENT/TUTOR and type=USER_VERIFIED. `attendanceUnmarkedSessions` counts sessions that ended more than 48 hours ago with unmarked attendance.
 
 ### GET /admin/payments
 **Auth:** Required (ADMIN)
@@ -2228,8 +2391,81 @@
 
 ### GET /admin/class-schedule
 **Auth:** Required (ADMIN)  
-**Query:** `date` (ISO date)  
-**Response (200):** Class schedule view for date
+**Query:**
+- `mode`: 'sessions' (default) | 'enrollments'
+- `tutorId`: uuid (optional)
+- `subjectId`: uuid (optional)
+- `status`: 'SCHEDULED' | 'UNSCHEDULED' | 'MISSED' | 'NOT_STARTED' (optional, for enrollments mode)
+- `from`: ISO date (optional)
+- `to`: ISO date (optional)
+- `search`: string (optional, searches student/tutor/subject name)
+- `page`: number (optional)
+- `limit`: number (optional, max 100)
+
+**Response (200) - mode=sessions:**
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "scheduledAt": "ISO date",
+      "status": "SCHEDULED",
+      "durationMinutes": 60,
+      "googleMeetLink": "string",
+      "enrollment": {
+        "id": "uuid",
+        "student": { "id": "uuid", "fullName": "string" },
+        "subject": { "id": "uuid", "name": "string" },
+        "tutor": { "id": "uuid", "fullName": "string" }
+      },
+      "participants": [
+        {
+          "id": "uuid",
+          "attended": null,
+          "enrollmentId": "uuid"
+        }
+      ]
+    }
+  ],
+  "page": 1,
+  "limit": 20,
+  "total": 100,
+  "unscheduledWithin24hCount": 5
+}
+```
+
+**Response (200) - mode=enrollments:**
+```json
+{
+  "data": [
+    {
+      "id": "uuid",
+      "student": { "id": "uuid", "fullName": "string" },
+      "tutor": { "id": "uuid", "fullName": "string" },
+      "subject": { "id": "uuid", "name": "string" },
+      "startDate": "ISO date",
+      "endDate": "ISO date",
+      "availableDays": ["MON", "WED", "FRI"],
+      "preferredStartHour": 14,
+      "preferredEndHour": 15,
+      "scheduleTimezone": "Africa/Lagos",
+      "sessionFrequency": "WEEKLY",
+      "status": "SCHEDULED",
+      "nextExpectedClass": {
+        "id": "uuid",
+        "scheduledAt": "ISO date",
+        "status": "SCHEDULED"
+      },
+      "sessionsScheduledCount": 5
+    }
+  ],
+  "page": 1,
+  "limit": 20,
+  "total": 50
+}
+```
+
+**Note:** mode=enrollments lists every active paid enrollment with schedule info. Status values: SCHEDULED (has upcoming session), UNSCHEDULED (started but no session), MISSED (had sessions but none upcoming), NOT_STARTED (future start date). Tutors don't receive parent contact details or prices. Admins don't receive studentCode.
 
 ---
 
@@ -2574,6 +2810,8 @@
     "id": "uuid",
     "assignmentId": "uuid",
     "studentId": "uuid",
+    "studentName": "string",
+    "status": "SUBMITTED | GRADED",
     "textAnswer": "string | null",
     "attachmentUrl": "string | null",
     "attachmentName": "string | null",
@@ -2582,6 +2820,13 @@
     "feedbackAttachmentUrl": "string | null",
     "feedbackAttachmentName": "string | null",
     "gradedAt": "ISO date | null",
+    "scoredItem": {
+      "id": "uuid",
+      "score": number,
+      "maxScore": number,
+      "comment": "string",
+      "scoredAt": "ISO date"
+    } | null,
     "student": {
       "id": "uuid",
       "fullName": "string",
@@ -2597,6 +2842,36 @@
 ### GET /assignments/:id/submissions/:submissionId
 **Auth:** Required (TUTOR for own assignments, STUDENT for own submissions, PARENT for children's submissions)  
 **Response (200):** Specific submission with full details
+
+### POST /tutor/assignments/:id/submissions/:submissionId/score
+**Auth:** Required (TUTOR, APPROVED)  
+**Body:**
+```typescript
+{
+  score: number (non-negative),
+  maxScore?: number (positive, default 100),
+  comment?: string
+}
+```
+**Response (201):** Created ScoredItem
+```json
+{
+  "id": "uuid",
+  "tutorId": "uuid",
+  "studentId": "uuid",
+  "enrollmentId": "uuid",
+  "type": "QUIZ | ASSIGNMENT | CLASSWORK | TEST | HOMEWORK | PROJECT | PARTICIPATION",
+  "sourceType": "AssignmentSubmission",
+  "sourceId": "uuid",
+  "score": number,
+  "maxScore": number,
+  "comment": "string",
+  "scoredAt": "ISO date",
+  "createdAt": "ISO date",
+  "updatedAt": "ISO date"
+}
+```
+**Note:** Creates a ScoredItem from the submission, marks submission as GRADED, and updates assignment status to GRADED. One scored item per submission enforced. Type is mapped from assignment type (QUIZ→QUIZ, ASSIGNMENT→ASSIGNMENT, CLASSWORK→CLASSWORK, TEST→TEST, HOMEWORK→HOMEWORK, PROJECT→PROJECT).
 
 ### PATCH /assignments/:id/submissions/:submissionId/feedback
 **Auth:** Required (TUTOR, APPROVED)  
