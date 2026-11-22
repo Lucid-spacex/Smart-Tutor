@@ -114,6 +114,11 @@ export const addPaymentNoteSchema = z.object({
   note: z.string().min(1, 'Note is required'),
 });
 
+export const updateTutorSalarySchema = z.object({
+  monthlySalaryNGN: z.number().int().positive('Monthly salary must be a positive number'),
+  reason: z.string().optional(),
+});
+
 export const getSessionsQuerySchema = z.object({
   status: z.enum(['SCHEDULED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'MISSED']).optional(),
   tutorId: z.string().uuid('Invalid tutor ID').optional(),
@@ -143,4 +148,5 @@ export type GetStudentsQuery = z.infer<typeof getStudentsQuerySchema>;
 export type GetUnmatchedEnrollmentsQuery = z.infer<typeof getUnmatchedEnrollmentsQuerySchema>;
 export type SuspendUserInput = z.infer<typeof suspendUserSchema>;
 export type AddPaymentNoteInput = z.infer<typeof addPaymentNoteSchema>;
+export type UpdateTutorSalaryInput = z.infer<typeof updateTutorSalarySchema>;
 export type GetSessionsQuery = z.infer<typeof getSessionsQuerySchema>;

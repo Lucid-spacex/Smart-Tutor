@@ -5,7 +5,7 @@ import { ComplaintsController } from '../complaints/complaints.controller';
 import { validate, validateQuery } from '../../middleware/validation.middleware';
 import { authenticate, requireRole } from '../../middleware/auth.middleware';
 import { validateUUID } from '../../middleware/uuid-validation.middleware';
-import { updateTutorVettingSchema, assignTutorSchema, getTutorsQuerySchema, getStudentsQuerySchema, updateEnrollmentPricingSchema, updateEnrollmentPricingOverrideSchema, createSessionSchema, rescheduleSessionSchema, getUnmatchedEnrollmentsQuerySchema, createSubjectSchema, updateSubjectSchema, upsertSubjectPriceSchema, suspendUserSchema, addPaymentNoteSchema, getSessionsQuerySchema } from './admin.validation';
+import { updateTutorVettingSchema, assignTutorSchema, getTutorsQuerySchema, getStudentsQuerySchema, updateEnrollmentPricingSchema, updateEnrollmentPricingOverrideSchema, createSessionSchema, rescheduleSessionSchema, getUnmatchedEnrollmentsQuerySchema, createSubjectSchema, updateSubjectSchema, upsertSubjectPriceSchema, suspendUserSchema, addPaymentNoteSchema, updateTutorSalarySchema, getSessionsQuerySchema } from './admin.validation';
 import { resolveComplaintSchema } from '../complaints/complaints.validation';
 import { rejectGradeSchema } from '../grades/grades.validation';
 
@@ -23,6 +23,8 @@ router.get('/tutors/:id/sessions', authenticate, requireRole('ADMIN'), validateU
 router.get('/tutors/:id/grades', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.getTutorGrades);
 router.get('/tutors/:id/progress-reports', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.getTutorProgressReports);
 router.patch('/tutors/:id/vetting', authenticate, requireRole('ADMIN'), validateUUID('id'), validate(updateTutorVettingSchema), adminController.updateTutorVetting);
+router.patch('/tutors/:id/salary', authenticate, requireRole('ADMIN'), validateUUID('id'), validate(updateTutorSalarySchema), adminController.updateTutorSalary);
+router.get('/tutors/:id/salary-history', authenticate, requireRole('ADMIN'), validateUUID('id'), adminController.getTutorSalaryHistory);
 
 // Enrollments & Pricing - static routes before parameter routes
 router.get('/enrollments/unmatched', authenticate, requireRole('ADMIN'), validateQuery(getUnmatchedEnrollmentsQuerySchema), adminController.getUnmatchedEnrollments);

@@ -40,6 +40,39 @@ export class AdminController {
     }
   };
 
+  updateTutorSalary = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const adminId = req.user?.userId;
+      if (!adminId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id } = req.params;
+      const data = req.body;
+      const result = await this.adminService.updateTutorSalary(id, data, adminId);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getTutorSalaryHistory = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const adminId = req.user?.userId;
+      if (!adminId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id } = req.params;
+      const history = await this.adminService.getTutorSalaryHistory(id);
+      res.status(200).json(history);
+    } catch (error) {
+      next(error);
+    }
+  };
+
   getUnmatchedEnrollments = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const query: GetUnmatchedEnrollmentsQuery = req.query as any;

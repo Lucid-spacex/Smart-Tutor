@@ -168,6 +168,11 @@ export class AdminService {
             currentStudentCount,
             applicationStatus: tutor.tutorApplication ? tutor.tutorApplication.status : 'NONE',
             submittedAt: tutor.tutorApplication?.submittedAt || null,
+            tutorProfile: tutor.tutorProfile ? {
+              ...tutor.tutorProfile,
+              monthlySalaryNGN: tutor.tutorProfile.monthlySalaryNGN,
+              salaryNotSet: tutor.tutorProfile.monthlySalaryNGN === null,
+            } : null,
           };
         })
       );
@@ -236,6 +241,11 @@ export class AdminService {
           currentStudentCount,
           applicationStatus: tutor.tutorApplication ? tutor.tutorApplication.status : 'NONE',
           submittedAt: tutor.tutorApplication?.submittedAt || null,
+          tutorProfile: tutor.tutorProfile ? {
+            ...tutor.tutorProfile,
+            monthlySalaryNGN: tutor.tutorProfile.monthlySalaryNGN,
+            salaryNotSet: tutor.tutorProfile.monthlySalaryNGN === null,
+          } : null,
         };
       })
     );
@@ -488,6 +498,7 @@ export class AdminService {
         country: tutor.tutorApplication.country,
         city: tutor.tutorApplication.city,
         highestQualification: tutor.tutorApplication.highestQualification,
+        expectedMonthlySalaryNGN: tutor.tutorApplication.expectedMonthlySalaryNGN,
         subjects: tutor.tutorApplication.subjects.map(s => ({
           id: s.subject.id,
           name: s.subject.name,
@@ -513,7 +524,8 @@ export class AdminService {
       } : null,
       profile: tutor.tutorProfile ? {
         bio: tutor.tutorProfile.bio,
-        hourlyRate: Number(tutor.tutorProfile.hourlyRate),
+        monthlySalaryNGN: tutor.tutorProfile.monthlySalaryNGN,
+        salaryNotSet: tutor.tutorProfile.monthlySalaryNGN === null,
         availability: tutor.tutorProfile.availability,
         availabilityStatus: tutor.tutorProfile.availabilityStatus,
         maxStudents: tutor.tutorProfile.maxStudents,
@@ -835,6 +847,103 @@ export class AdminService {
     }
 
     return user;
+  }
+
+  async updateTutorSalary(tutorId: string, data: { monthlySalaryNGN: number; reason?: string }, adminId: string) {
+    const tutor = await prisma.user.findUnique({
+      where: { id: tutorId, role: 'TUTOR' },
+      include: { tutorProfile: true },
+    });
+
+    if (!tutor) {
+      throw new Error('Tutor not found');
+    }
+
+    if (!tutor.tutorProfile) {
+      throw new Error('Tutor profile not found');
+    }
+
+    // Validate salary
+    if (!data.monthlySalaryNGN || data.monthlySalaryNGN <= 0) {
+      throw new Error('Monthly salary must be a positive number');
+    }
+
+    const oldValue = tutor.tutorProfile.monthlySalaryNGN;
+
+    // Update TutorProfile
+    await prisma.tutorProfile.update({
+      where: { userId: tutorId },
+      data: {
+        monthlySalaryNGN: data.monthlySalaryNGN,
+      },
+    });
+
+    // Record in TutorSalaryHistory
+    await prisma.tutorSalaryHistory.create({
+      data: {
+        tutorId,
+        oldValue,
+        newValue: data.monthlySalaryNGN,
+        changedBy: adminId,
+        reason: data.reason,
+      },
+    });
+
+    // Record in AdminActionLog
+    await prisma.adminActionLog.create({
+      data: {
+        adminId,
+        action: 'TUTOR_SALARY_UPDATE',
+        targetType: 'TUTOR',
+        targetId: tutorId,
+        details: {
+          oldValue,
+          newValue: data.monthlySalaryNGN,
+          reason: data.reason,
+        },
+      },
+    });
+
+    // Notify tutor
+    await this.notificationCore.notify({
+      recipientIds: [tutorId],
+      type: 'SALARY_UPDATED',
+      category: 'USERS',
+      title: 'Salary Updated',
+      body: `Your monthly salary has been updated to ₦${data.monthlySalaryNGN.toLocaleString()}`,
+      entityType: 'TutorProfile',
+      entityId: tutor.tutorProfile.id,
+      dedupeKey: `salary-updated-${tutorId}-${Date.now()}`,
+    });
+
+    return {
+      monthlySalaryNGN: data.monthlySalaryNGN,
+      oldValue,
+      newValue: data.monthlySalaryNGN,
+    };
+  }
+
+  async getTutorSalaryHistory(tutorId: string) {
+    const tutor = await prisma.user.findUnique({
+      where: { id: tutorId, role: 'TUTOR' },
+    });
+
+    if (!tutor) {
+      throw new Error('Tutor not found');
+    }
+
+    return prisma.tutorSalaryHistory.findMany({
+      where: { tutorId },
+      include: {
+        changer: {
+          select: {
+            id: true,
+            fullName: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   async getUnmatchedEnrollments(includeUnpaid: boolean = false) {
