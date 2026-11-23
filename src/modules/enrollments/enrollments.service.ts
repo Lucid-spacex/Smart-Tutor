@@ -15,10 +15,16 @@ export class EnrollmentsService {
     this.notificationCore = new NotificationCoreService();
   }
   async createEnrollment(parentId: string, data: CreateEnrollmentInput) {
-    // 1. Verify student belongs to parent
-    const student = await prisma.student.findUnique({
-      where: { id: data.studentId },
-    });
+    // 1. Verify student belongs to parent and get parent's timezone
+    const [student, parent] = await Promise.all([
+      prisma.student.findUnique({
+        where: { id: data.studentId },
+      }),
+      prisma.user.findUnique({
+        where: { id: parentId },
+        select: { timezone: true },
+      }),
+    ]);
 
     if (!student) {
       throw new AppError(404, 'Student not found');
@@ -74,6 +80,7 @@ export class EnrollmentsService {
             availableDays: data.availableDays,
             preferredStartHour: data.preferredStartHour,
             preferredEndHour: data.preferredEndHour,
+            scheduleTimezone: parent?.timezone || 'Africa/Lagos', // Use parent's timezone or default
             billingFrequency: data.billingFrequency,
             yearlyPrice: 0, // Default, admin will set actual price or pricing tier applies
             startDate: new Date(data.startDate),
@@ -92,7 +99,7 @@ export class EnrollmentsService {
     await this.notificationCore.notify({
       recipientRole: 'ADMIN',
       type: 'ENROLLMENT_CREATED' as NotificationType,
-      category: 'ENROLLMENTS' as NotificationCategory,
+      category: 'ENROLLMENT' as NotificationCategory,
       title: 'New Enrollment Created',
       body: `New enrollment for ${enrollments[0].student.fullName} - payment pending`,
       entityType: 'Enrollment',

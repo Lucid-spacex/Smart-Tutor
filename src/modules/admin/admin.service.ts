@@ -277,6 +277,8 @@ export class AdminService {
       outstandingEnrollments,
       unreadMessages,
       attendanceUnmarkedSessions,
+      pendingVettingTutors,
+      activeParents,
     ] = await Promise.all([
       // Tutor applications with SUBMITTED status
       prisma.tutorApplication.count({
@@ -355,27 +357,41 @@ export class AdminService {
           },
         },
       }),
+      // Tutors with PENDING_VETTING status (newly registered, awaiting vetting)
+      prisma.user.count({
+        where: {
+          role: 'TUTOR',
+          status: 'PENDING_VETTING',
+        },
+      }),
+      // Active parents (ACTIVE status)
+      prisma.user.count({
+        where: {
+          role: 'PARENT',
+          status: 'ACTIVE',
+        },
+      }),
     ]);
 
-    // Get unread new parents and new tutors from notifications per admin
-    // Use USER_VERIFIED type and filter by entityType
-    const unreadNewParents = await prisma.notification.count({
-      where: {
-        userId: adminId,
-        isRead: false,
-        entityType: 'PARENT',
-        type: 'USER_VERIFIED',
-      },
-    });
-
-    const unreadNewTutors = await prisma.notification.count({
-      where: {
-        userId: adminId,
-        isRead: false,
-        entityType: 'TUTOR',
-        type: 'USER_VERIFIED',
-      },
-    });
+    // Get unread notifications for this admin
+    const [unreadNewParents, unreadNewTutors] = await Promise.all([
+      prisma.notification.count({
+        where: {
+          userId: adminId,
+          isRead: false,
+          entityType: 'PARENT',
+          type: 'USER_VERIFIED',
+        },
+      }),
+      prisma.notification.count({
+        where: {
+          userId: adminId,
+          isRead: false,
+          entityType: 'TUTOR',
+          type: 'USER_VERIFIED',
+        },
+      }),
+    ]);
 
     return {
       pendingTutorApplications,
@@ -390,6 +406,8 @@ export class AdminService {
       attendanceUnmarkedSessions,
       unreadNewParents,
       unreadNewTutors,
+      pendingVettingTutors,
+      activeParents,
     };
   }
 
