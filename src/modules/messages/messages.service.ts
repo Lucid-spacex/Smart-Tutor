@@ -437,10 +437,20 @@ export class MessagesService {
         id: true,
         fullName: true,
       },
+      orderBy: {
+        createdAt: 'asc',
+      },
     });
 
     if (!admin) {
       throw new AppError(404, 'No active admin user found');
+    }
+
+    // Validate that the ID is a valid UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(admin.id)) {
+      logger.error({ adminId: admin.id }, 'Admin ID is not a valid UUID format');
+      throw new AppError(500, 'Invalid admin ID format in database');
     }
 
     return {

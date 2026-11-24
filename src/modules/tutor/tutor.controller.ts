@@ -79,7 +79,10 @@ export class TutorController {
         return;
       }
 
-      const students = await this.tutorService.getAssignedStudents(tutorId);
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 20;
+
+      const students = await this.tutorService.getAssignedStudents(tutorId, page, limit);
       res.status(200).json(students);
     } catch (error) {
       next(error);

@@ -99,62 +99,83 @@ export class TutorService {
     });
   }
 
-  async getAssignedStudents(tutorId: string) {
-    const enrollments = await prisma.enrollment.findMany({
-      where: {
-        tutorId,
-        status: 'ACTIVE',
-      },
-      select: {
-        // SECURITY: Exclude all pricing fields
-        id: true,
-        studentId: true,
-        subjectId: true,
-        tutorId: true,
-        enrollmentGroupId: true,
-        status: true,
-        sessionFrequency: true,
-        availableDays: true,
-        preferredStartHour: true,
-        preferredEndHour: true,
-        scheduleTimezone: true,
-        startDate: true,
-        endDate: true,
-        createdAt: true,
-        student: {
-          select: {
-            id: true,
-            fullName: true,
-            dateOfBirth: true,
-            gradeLevel: true,
-            school: true,
-            notes: true,
-            createdAt: true,
-            // SECURITY: Parent info is explicitly omitted
-          },
+  async getAssignedStudents(tutorId: string, page: number = 1, limit: number = 20) {
+    const skip = (page - 1) * limit;
+
+    const [enrollments, total] = await Promise.all([
+      prisma.enrollment.findMany({
+        where: {
+          tutorId,
+          status: 'ACTIVE',
         },
-        subject: true,
-        sessionParticipants: {
-          select: {
-            session: {
-              select: {
-                id: true,
-                scheduledAt: true,
-                status: true,
+        select: {
+          // SECURITY: Exclude all pricing fields
+          id: true,
+          studentId: true,
+          subjectId: true,
+          tutorId: true,
+          enrollmentGroupId: true,
+          status: true,
+          sessionFrequency: true,
+          availableDays: true,
+          preferredStartHour: true,
+          preferredEndHour: true,
+          scheduleTimezone: true,
+          startDate: true,
+          endDate: true,
+          createdAt: true,
+          student: {
+            select: {
+              id: true,
+              fullName: true,
+              dateOfBirth: true,
+              gradeLevel: true,
+              gradeBandTier: true,
+              school: true,
+              notes: true,
+              createdAt: true,
+              user: {
+                select: {
+                  profilePicture: true,
+                },
+              },
+              // SECURITY: Parent info is explicitly omitted
+            },
+          },
+          subject: true,
+          sessionParticipants: {
+            select: {
+              session: {
+                select: {
+                  id: true,
+                  scheduledAt: true,
+                  status: true,
+                },
               },
             },
-          },
-          where: {
-            session: {
-              status: { not: 'CANCELLED' },
+            where: {
+              session: {
+                status: { not: 'CANCELLED' },
+              },
             },
+            take: 20,
           },
-          take: 20,
         },
-      },
-    });
+        skip,
+        take: limit,
+        orderBy: {
+          createdAt: 'desc',
+        },
+      }),
+      prisma.enrollment.count({
+        where: {
+          tutorId,
+          status: 'ACTIVE',
+        },
+      }),
+    ]);
 
-    return enrollments.map(enrollment => {
+    const data = enrollments.map(enrollment => {
       // Compute next expected class and sessions scheduled count
       const now = new Date();
       const sessions = enrollment.sessionParticipants.map(sp => sp.session);
@@ -168,33 +189,33 @@ export class TutorService {
       const startTimeUtc = enrollment.startDate ? new Date(enrollment.startDate).toISOString() : null;
 
       return {
+        enrollmentId: enrollment.id,
         student: {
           id: enrollment.studentId,
           fullName: enrollment.student.fullName,
           gradeLevel: enrollment.student.gradeLevel,
+          gradeBandTier: enrollment.student.gradeBandTier,
+          dateOfBirth: enrollment.student.dateOfBirth,
           school: enrollment.student.school,
-        },
-        enrollment: {
-          id: enrollment.id,
-          subjectId: enrollment.subjectId,
-          sessionFrequency: enrollment.sessionFrequency,
-          availableDays: enrollment.availableDays,
-          preferredStartHour: enrollment.preferredStartHour,
-          preferredEndHour: enrollment.preferredEndHour,
-          scheduleTimezone: enrollment.scheduleTimezone,
-          startDate: enrollment.startDate,
-          endDate: enrollment.endDate,
-          startTimeUtc,
-          status: enrollment.status,
-          nextExpectedClass,
-          sessionsScheduledCount,
+          profilePictureUrl: enrollment.student.user?.profilePicture || null,
         },
         subject: {
           id: enrollment.subject.id,
           name: enrollment.subject.name,
+          category: enrollment.subject.category,
         },
+        sessionFrequency: enrollment.sessionFrequency,
+        startDate: enrollment.startDate,
+        status: enrollment.status,
       };
     });
+
+    return {
+      data,
+      page,
+      limit,
+      total,
+    };
   }
 
   async getTutorSessions(tutorId: string) {

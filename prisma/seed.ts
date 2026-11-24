@@ -11,12 +11,14 @@ async function main() {
   const adminEmail = process.env.ADMIN_SEED_EMAIL || 'admin@smarttutor.com';
   const adminPassword = process.env.ADMIN_SEED_PASSWORD
     ? await bcrypt.hash(process.env.ADMIN_SEED_PASSWORD, 12)
-    : await bcrypt.hash('admin123456!', 12);
+    : await bcrypt.hash('Admin123456!', 12);
 
-  // Create Admin user
+  // Create or update Admin user
   const admin = await prisma.user.upsert({
     where: { email: adminEmail },
-    update: {},
+    update: {
+      passwordHash: adminPassword,
+    },
     create: {
       fullName: 'Admin User',
       email: adminEmail,
@@ -28,31 +30,6 @@ async function main() {
     },
   });
   console.log('✅ Admin user created:', admin.email);
-
-  // One-time backfill: Create DRAFT TutorApplication for any tutor user who lacks one
-  console.log('\n🔄 Running backfill for missing tutor applications...');
-  const tutorsWithoutApplications = await prisma.user.findMany({
-    where: {
-      role: 'TUTOR',
-      tutorApplication: null,
-    },
-  });
-
-  for (const tutor of tutorsWithoutApplications) {
-    await prisma.tutorApplication.create({
-      data: {
-        userId: tutor.id,
-        status: 'DRAFT',
-      },
-    });
-    console.log(`✅ Created DRAFT application for tutor: ${tutor.email}`);
-  }
-
-  if (tutorsWithoutApplications.length === 0) {
-    console.log('ℹ️  No tutors without applications found.');
-  } else {
-    console.log(`✅ Backfill completed: ${tutorsWithoutApplications.length} tutor applications created.`);
-  }
 
   console.log('\n🎉 Database seed completed successfully!');
 
