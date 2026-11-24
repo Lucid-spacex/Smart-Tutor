@@ -309,6 +309,13 @@ export class MessagesService {
                   role: true,
                 },
               },
+              recipient: {
+                select: {
+                  id: true,
+                  fullName: true,
+                  role: true,
+                },
+              },
             },
             orderBy: { createdAt: 'desc' },
             take: 1,
@@ -323,10 +330,27 @@ export class MessagesService {
       const lastMessage = thread.messages[0];
       const unreadCount = lastMessage?.readAt === null ? 1 : 0;
 
+      // Get the actual admin user ID from the last message (sender or recipient)
+      // If no messages exist, get any active admin
+      let adminId: string;
+      if (lastMessage) {
+        adminId = lastMessage.sender.role === 'ADMIN' ? lastMessage.sender.id : lastMessage.recipient.id;
+      } else {
+        const admin = await prisma.user.findFirst({
+          where: {
+            role: 'ADMIN',
+            status: 'ACTIVE',
+          },
+          select: { id: true },
+          orderBy: { createdAt: 'asc' },
+        });
+        adminId = admin?.id || 'admin';
+      }
+
       return [{
         threadId: thread.id,
         otherParticipant: {
-          id: 'admin',
+          id: adminId,
           fullName: 'Admin',
           role: 'ADMIN',
         },
