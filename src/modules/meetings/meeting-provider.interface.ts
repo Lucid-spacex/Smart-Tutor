@@ -8,7 +8,7 @@ export interface MeetingProvider {
    * @returns Meeting URL and event ID
    */
   createMeeting(startTime: string, duration: number, title: string, description?: string): Promise<{
-    meetingUrl: string;
+    meetingUrl: string | null;
     eventId: string;
   }>;
 
