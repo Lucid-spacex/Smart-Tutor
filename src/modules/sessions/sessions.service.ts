@@ -36,7 +36,7 @@ export class SessionsService {
 
     // Create session with single participant
     const session = await prisma.$transaction(async (tx) => {
-      // Auto-create Google Meet meeting (with fallback for test environment)
+      // Auto-create Google Calendar event (with Google Meet if available)
       let googleMeetLink: string | null = null;
       let googleEventId: string | null = null;
 
@@ -50,12 +50,8 @@ export class SessionsService {
         googleMeetLink = meeting.meetingUrl;
         googleEventId = meeting.eventId;
       } catch (error) {
-        // In test environment, allow session creation without Google Meet
-        if (process.env.NODE_ENV === 'test') {
-          logger.warn({ error }, 'Google Meet creation failed in test environment, proceeding without Google Meet');
-        } else {
-          throw error;
-        }
+        // Log warning but allow session creation without Google Calendar/Meet
+        logger.warn({ error }, 'Google Calendar event creation failed, proceeding without calendar integration');
       }
 
       const newSession = await tx.session.create({
@@ -232,7 +228,7 @@ export class SessionsService {
 
     // Create session and participants in a transaction
     const session = await prisma.$transaction(async (tx) => {
-      // Auto-create Google Meet meeting (with fallback for test environment)
+      // Auto-create Google Calendar event (with Google Meet if available)
       let googleMeetLink: string | null = null;
       let googleEventId: string | null = null;
 
@@ -246,12 +242,8 @@ export class SessionsService {
         googleMeetLink = meeting.meetingUrl;
         googleEventId = meeting.eventId;
       } catch (error) {
-        // In test environment, allow session creation without Google Meet
-        if (process.env.NODE_ENV === 'test') {
-          logger.warn({ error }, 'Google Meet creation failed in test environment, proceeding without Google Meet');
-        } else {
-          throw error;
-        }
+        // Log warning but allow session creation without Google Calendar/Meet
+        logger.warn({ error }, 'Google Calendar event creation failed, proceeding without calendar integration');
       }
 
       const newSession = await tx.session.create({

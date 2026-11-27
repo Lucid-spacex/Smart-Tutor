@@ -181,8 +181,9 @@ export class StudentsService {
       gender: student.gender,
       email: student.email,
       preferredStartDate: student.preferredStartDate,
+      studentCode,
+      studentPin: plainPin,
       emailSent,
-      // Never return studentCode or PIN in response - PIN goes to parent by email
     };
   }
 
@@ -238,6 +239,36 @@ export class StudentsService {
     }
 
     return student;
+  }
+
+  async getStudentCredentials(studentId: string, parentId: string) {
+    const student = await prisma.student.findUnique({
+      where: { id: studentId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            studentCode: true,
+            status: true,
+          },
+        },
+      },
+    });
+
+    if (!student) {
+      throw new Error('Student not found');
+    }
+
+    if (student.parentId !== parentId) {
+      throw new Error('Access denied');
+    }
+
+    return {
+      studentId: student.id,
+      fullName: student.fullName,
+      studentCode: student.user.studentCode,
+      message: 'PIN is not displayed for security. Use the regenerate PIN endpoint to receive a new PIN via email.',
+    };
   }
 
   async updateStudent(id: string, parentId: string, data: UpdateStudentInput) {
@@ -379,6 +410,16 @@ export class StudentsService {
     }
 
     logger.info({ studentId, requestorId, isAdmin, emailSent }, 'Student PIN regenerated');
+
+    // Return PIN in response for parents (but not for admins)
+    if (!isAdmin) {
+      return {
+        message: 'PIN regenerated successfully.',
+        studentCode: student.user.studentCode,
+        newPin: plainPin,
+        emailSent,
+      };
+    }
 
     return {
       message: 'PIN regenerated successfully. New credentials sent to parent email.',

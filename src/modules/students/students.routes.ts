@@ -14,6 +14,7 @@ const attendanceController = new AttendanceController();
 router.post('/', authenticate, requireRole('PARENT'), validate(createStudentSchema), studentsController.createStudent);
 router.get('/', authenticate, requireRole('PARENT'), studentsController.getStudents);
 router.get('/:id', authenticate, requireRole('PARENT'), validateUUID('id'), studentsController.getStudentById);
+router.get('/:id/credentials', authenticate, requireRole('PARENT'), validateUUID('id'), studentsController.getStudentCredentials);
 router.patch('/:id', authenticate, requireRole('PARENT'), validateUUID('id'), validate(updateStudentSchema), studentsController.updateStudent);
 router.delete('/:id', authenticate, requireRole('PARENT'), validateUUID('id'), studentsController.deleteStudent);
 router.get('/:id/activity', authenticate, requireRole('PARENT'), validateUUID('id'), studentsController.getStudentActivity);

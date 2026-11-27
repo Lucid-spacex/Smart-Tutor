@@ -57,6 +57,22 @@ export class StudentsController {
     }
   };
 
+  getStudentCredentials = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const parentId = req.user?.userId;
+      if (!parentId) {
+        res.status(401).json({ error: 'Not authenticated' });
+        return;
+      }
+
+      const { id } = req.params;
+      const credentials = await this.studentsService.getStudentCredentials(id, parentId);
+      res.status(200).json(credentials);
+    } catch (error) {
+      next(error);
+    }
+  };
+
   updateStudent = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     try {
       const parentId = req.user?.userId;

@@ -12,7 +12,7 @@ export class GoogleCalendarProvider implements MeetingProvider {
       email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
       key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
       scopes: ['https://www.googleapis.com/auth/calendar', 'https://www.googleapis.com/auth/drive.readonly'],
-      subject: process.env.GOOGLE_ORGANIZER_EMAIL,
+      subject: process.env.GOOGLE_ORGANIZER_EMAIL || undefined, // Only use subject if provided (for domain-wide delegation)
     });
 
     this.calendar = google.calendar({ version: 'v3', auth });
@@ -20,7 +20,7 @@ export class GoogleCalendarProvider implements MeetingProvider {
   }
 
   async createMeeting(startTime: string, duration: number, title: string, description?: string): Promise<{
-    meetingUrl: string;
+    meetingUrl: string | null;
     eventId: string;
   }> {
     try {
@@ -54,11 +54,11 @@ export class GoogleCalendarProvider implements MeetingProvider {
         conferenceDataVersion: 1,
       });
 
-      const meetingUrl = response.data.conferenceData?.entryPoints?.[0]?.uri;
+      const meetingUrl = response.data.conferenceData?.entryPoints?.[0]?.uri || null;
       const eventId = response.data.id;
 
       if (!meetingUrl) {
-        throw new Error('Failed to create Google Meet link');
+        logger.warn('Google Meet link not created, event created without video conference');
       }
 
       return {
@@ -66,6 +66,41 @@ export class GoogleCalendarProvider implements MeetingProvider {
         eventId,
       };
     } catch (error: any) {
+      // If Google Meet creation fails, try creating event without conference data
+      if (error.message?.includes('conference') || error.code === 400) {
+        logger.warn({ error }, 'Google Meet creation failed, creating event without video conference');
+        try {
+          const startDate = new Date(startTime);
+          const endDate = new Date(startDate.getTime() + duration * 60000);
+
+          const event = {
+            summary: title,
+            description: description || '',
+            start: {
+              dateTime: startDate.toISOString(),
+              timeZone: 'UTC',
+            },
+            end: {
+              dateTime: endDate.toISOString(),
+              timeZone: 'UTC',
+            },
+          };
+
+          const response = await this.calendar.events.insert({
+            calendarId: process.env.GOOGLE_CALENDAR_ID || 'primary',
+            resource: event,
+          });
+
+          return {
+            meetingUrl: null,
+            eventId: response.data.id,
+          };
+        } catch (fallbackError: any) {
+          logger.error({ error: fallbackError }, 'Error creating Google Calendar event without conference');
+          throw new Error(`Failed to create meeting: ${fallbackError.message}`);
+        }
+      }
+
       logger.error({ error }, 'Error creating Google Calendar event');
       throw new Error(`Failed to create meeting: ${error.message}`);
     }
